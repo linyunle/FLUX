@@ -20,6 +20,9 @@ def conns():
         c("a", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "youtube.com", 1),
         c("b", "fd00::10", ["HK-01", "Proxy"], "RuleSet", "netflix.com", 2),     # 同一台设备的 IPv6
         c("c", "192.168.1.20", ["直连", "国内"], "GeoIP", "baidu.com", 1),   # 直连出口不叫 DIRECT
+        c("e", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "r1.googlevideo.com", 1),
+        c("f", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "r2.googlevideo.com", 1),
+        c("g", "192.168.1.20", ["直连", "国内"], "GeoIP", "dl.drive.quark.cn", 2),
         c("p", "127.0.0.1", ["JP-01", "egress-probe"], "Match", "api.ip.sb", 9, inbound="egress-probe-in"),  # 必须被排除
     ]
 
@@ -40,6 +43,15 @@ class API(BaseHTTPRequestHandler):
         if not self._auth(): return
         p = unquote(self.path)
         if p == "/version": return self._j(200, {"version": "v1.19.0-mock"})
+        if p == "/traffic":   # 流式:每 0.3 秒一行,发几行就断开(读取方应自动重连)
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+            import time as _t
+            try:
+                for i in range(6):
+                    self.wfile.write((json.dumps({"up": 1000 + i, "down": 5000 + i}) + "\n").encode()); self.wfile.flush(); _t.sleep(0.3)
+            except OSError:
+                pass
+            return
         if p == "/connections":
             STATE["tick"] += 1
             return self._j(200, {"connections": conns()})

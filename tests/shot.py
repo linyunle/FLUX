@@ -25,7 +25,7 @@ try:
             pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
             pg.on("pageerror", lambda e: errs.append(str(e)))
             pg.goto(B + "/"); pg.wait_for_timeout(1500)
-            for tab in ("overview", "egress", "devices", "rules"):
+            for tab in ("overview", "egress", "devices", "domains", "rules"):
                 pg.click(f'.tab[data-k="{tab}"]'); pg.wait_for_timeout(1200)
                 pg.screenshot(path=f"{out}/{scheme}-{w}-{tab}.png", full_page=True)
             if w > 500 and scheme == "light":

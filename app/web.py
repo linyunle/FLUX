@@ -1,4 +1,5 @@
 """网页和 JSON 接口。"""
+import ipaddress
 import json
 import mimetypes
 import os
@@ -8,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import collector, config, db, devices, egress, update
+from . import collector, config, db, devices, egress, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -138,6 +139,13 @@ def q_summary(p):
         n_all = con.execute(f"SELECT COUNT(DISTINCT {expr}) FROM traffic WHERE {where}", args).fetchone()[0]
         macips = devices.ips_by_dev(con) if by == "client" else {}
         stored = devices.stored_names(con) if by == "client" else {}
+        nodes_by = {}
+        if by in ("group", "rule") and rows:  # 每个策略组/规则最终走了哪些节点
+            keys = [r[0] for r in rows]
+            for k, n, b in con.execute(
+                    f"SELECT {expr}, node, SUM(up)+SUM(down) FROM traffic WHERE {where} AND {expr} IN {_in(keys)} "
+                    f"GROUP BY {expr}, node", args + keys):
+                nodes_by.setdefault(k, []).append((n, b))
     finally:
         con.close()
     lv = live()
@@ -150,6 +158,8 @@ def q_summary(p):
                      live=lv["clients"].get(key))
         elif by == "node":
             r["live"] = lv["nodes"].get(key)
+        elif by in ("group", "rule"):
+            r["nodes"] = [{"node": n, "bytes": b} for n, b in sorted(nodes_by.get(key, []), key=lambda x: -x[1])[:3]]
         out.append(r)
     return 200, {"from": d1, "to": d2, "by": by, "total": {"up": tot[0], "down": tot[1]}, "count": n_all, "rows": out}
 
@@ -201,6 +211,107 @@ def q_days(p):
         t += 86400
         t = time.mktime(time.strptime(time.strftime("%Y-%m-%d", time.localtime(t + 3600)), "%Y-%m-%d"))
     return 200, {"from": d1, "to": d2, "days": out}
+
+
+CC_SLD = {"com", "net", "org", "gov", "edu", "ac", "co"}
+
+
+def reg_domain(h):
+    """a.b.example.com -> example.com;com.cn / co.uk 这类按三段算。IP 和单段名不动。"""
+    h = (h or "").strip().lower().rstrip(".")
+    if not h or "." not in h:
+        return h
+    try:
+        ipaddress.ip_address(h)
+        return h
+    except ValueError:
+        pass
+    parts = h.split(".")
+    if len(parts) <= 2:
+        return h
+    n = 3 if len(parts[-1]) == 2 and parts[-2] in CC_SLD else 2
+    return ".".join(parts[-n:])
+
+
+def q_domains(p):
+    """每个域名:总量、去向(直连/代理)、哪些设备访问、最近哪天。可合并子域名。"""
+    d1, d2 = day_range(p)
+    try:
+        limit = max(1, min(2000, int(one(p, "limit", "300"))))
+    except ValueError:
+        limit = 300
+    merge = one(p, "merge", "1") != "0"
+    fw, fa = filters(p, T_COLS)
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    d, _r = kind_names()
+    con = ro()
+    try:
+        rows = con.execute(
+            f"SELECT host, {DEVX} k, SUM(up), SUM(down), COUNT(DISTINCT day), MAX(day), "
+            f"SUM(CASE WHEN node IN {_in(d)} THEN up+down ELSE 0 END) "
+            f"FROM traffic WHERE {where} GROUP BY host, k LIMIT 200000", list(d) + [d1, d2] + fa).fetchall()
+        macips = devices.ips_by_dev(con)
+        stored = devices.stored_names(con)
+    finally:
+        con.close()
+    label_cache = {}
+
+    def label(k):
+        if k not in label_cache:
+            ips = macips.get(k, [] if is_mac(k) else [k])
+            label_cache[k] = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
+        return label_cache[k]
+
+    agg = {}
+    for host, k, up, down, days, last, direct in rows:
+        key = reg_domain(host) if merge else host
+        a = agg.setdefault(key, {"key": key, "up": 0, "down": 0, "direct": 0, "days": 0, "last": "", "devs": {}, "subs": set()})
+        a["up"] += up
+        a["down"] += down
+        a["direct"] += direct
+        a["days"] = max(a["days"], days)
+        a["last"] = max(a["last"], last or "")
+        a["devs"][k] = a["devs"].get(k, 0) + up + down
+        if merge and host != key:
+            a["subs"].add(host)
+    out = []
+    for a in sorted(agg.values(), key=lambda a: -(a["up"] + a["down"]))[:limit]:
+        top = sorted(a["devs"].items(), key=lambda kv: -kv[1])
+        out.append({"key": a["key"], "up": a["up"], "down": a["down"], "direct": a["direct"], "days": a["days"],
+                    "last": a["last"], "ndev": len(top), "subs": len(a["subs"]),
+                    "devs": [{"key": k, "name": label(k), "bytes": b} for k, b in top[:3]]})
+    return 200, {"from": d1, "to": d2, "merge": merge, "count": len(agg), "rows": out}
+
+
+def q_realtime(p):
+    try:
+        secs = max(10, min(600, int(one(p, "seconds", "120"))))
+    except ValueError:
+        secs = 120
+    now = time.time()
+    samples = [[round(ts, 1), u, d] for ts, u, d in list(realtime.SAMPLES) if ts >= now - secs]
+    lv = live()
+    con = ro()
+    try:
+        stored = devices.stored_names(con)
+        macips = devices.ips_by_dev(con)
+    finally:
+        con.close()
+
+    def rate(v):
+        return v["up_rate"] + v["down_rate"]
+    devs = []
+    for k, v in sorted(lv["clients"].items(), key=lambda kv: -rate(kv[1])):
+        if rate(v) <= 0 or len(devs) >= 6:
+            continue
+        ips = macips.get(k, [] if is_mac(k) else [k])
+        name = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
+        devs.append({"key": k, "name": name, **v})
+    nodes = [{"node": k, **v} for k, v in sorted(lv["nodes"].items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:6]
+    last = samples[-1] if samples else None
+    return 200, {"ok": realtime.STATE["ok"], "error": realtime.STATE["error"], "samples": samples,
+                 "now": {"up": last[1], "down": last[2]} if last else {"up": 0, "down": 0},
+                 "devices": devs, "nodes": nodes, "at": lv["at"]}
 
 
 def q_hours(p):
@@ -290,7 +401,7 @@ def q_live(p):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/devices": q_devices, "/api/egress": q_egress, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/egress": q_egress, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST

@@ -75,6 +75,23 @@ try:
     ok(get("/api/summary?by=client&mode=direct")["rows"][0]["key"] == "aa:bb:cc:dd:ee:02", "模式筛选")
     h = get("/api/hours?hours=3&dev=aa:bb:cc:dd:ee:01")["hours"]; ok(len(h) == 3 and sum(x["down"] for x in h) > 0, "小时趋势 + 设备筛选")
     dd = get("/api/days?days=3")["days"]; ok(len(dd) == 3 and dd[-1]["down"] > 0, "按天趋势补零")
+    # 实时速度 + 节点
+    rt = get("/api/realtime"); ok(rt["ok"] and len(rt["samples"]) >= 3 and rt["now"]["down"] >= 5000, f"实时速度流 {len(rt['samples'])} 个点")
+    ok(any(d["key"] == "aa:bb:cc:dd:ee:01" for d in rt["devices"]), "实时:活跃设备")
+    gr = {r["key"]: r for r in get("/api/summary?by=group")["rows"]}
+    ok(gr["Proxy"]["nodes"][0]["node"] == "HK-01" and gr["国内"]["nodes"][0]["node"] == "直连", "策略组实际走的节点")
+    rr = get("/api/summary?by=rule&group=Proxy")["rows"]; ok(rr[0]["nodes"][0]["node"] == "HK-01", "规则实际走的节点")
+    # 域名清单
+    dm = {r["key"]: r for r in get("/api/domains")["rows"]}
+    ok({"googlevideo.com", "quark.cn", "youtube.com", "netflix.com", "baidu.com"} <= set(dm), f"域名合并子域名 {sorted(dm)}")
+    ok(dm["googlevideo.com"]["subs"] == 2 and dm["googlevideo.com"]["direct"] == 0, "googlevideo 两个子域名合并,去向是代理")
+    ok(dm["quark.cn"]["direct"] == dm["quark.cn"]["up"] + dm["quark.cn"]["down"] > 0, "quark.cn 走「直连」节点 → 去向直连")
+    raw = {r["key"] for r in get("/api/domains?merge=0")["rows"]}
+    ok({"r1.googlevideo.com", "r2.googlevideo.com", "dl.drive.quark.cn"} <= raw, "不合并时显示完整主机名")
+    d2 = get("/api/domains?dev=aa:bb:cc:dd:ee:02")["rows"]
+    ok({r["key"] for r in d2} == {"baidu.com", "quark.cn"} and all(r["ndev"] == 1 for r in d2), "域名清单按设备筛选")
+    ok(all(r["key"] == "quark.cn" for r in get("/api/domains?q=quark")["rows"]), "域名清单搜索")
+    ok(dm["youtube.com"]["devs"][0]["key"] == "aa:bb:cc:dd:ee:01", "域名的访问设备")
     # 命名
     ok(post("/api/device", {"dev": "aa:bb:cc:dd:ee:01", "name": "小林的手机"})[0] == 200, "改名")
     ok(post("/api/devices/import", {"text": "dhcp.@host[0]=host\ndhcp.@host[0].name='nas'\ndhcp.@host[0].mac='aa:bb:cc:dd:ee:02'"})[0] == 200, "导入 uci 静态绑定")
