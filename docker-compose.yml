@@ -1,0 +1,12 @@
+services:
+  nikki-traffic:
+    image: ghcr.io/linyunle/nikki-traffic:latest
+    container_name: nikki-traffic
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    environment:
+      TZ: CST-8
+    volumes:
+      - ./data:/data
+    mem_limit: 128m
