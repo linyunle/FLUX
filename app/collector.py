@@ -109,11 +109,18 @@ class Collector:
             lc = live_c.setdefault(client, [0, 0, 0])
             ln[0] += 1
             lc[0] += 1
-            if node not in ("DIRECT", "UNKNOWN") and not node.startswith("REJECT"):
-                remote = host_of(str(m.get("remoteDestination") or ""))
-                if remote and self.nodeinfo.get(node, (None, ""))[1] != remote:
-                    self.nodeinfo[node] = (self.ptype.get(node, ""), remote)
-                    self.ndirty.add(node)
+            if node != "UNKNOWN":
+                ptl = self.ptype.get(node, "").lower()
+                if ptl in ("direct", "reject", "rejectdrop") or node in ("DIRECT",) or node.startswith("REJECT"):
+                    # 内置出口:只记类型(用来判断直连/拒绝),不记目标地址
+                    if node not in self.nodeinfo:
+                        self.nodeinfo[node] = (self.ptype.get(node, "") or ("Direct" if node == "DIRECT" else "Reject"), "")
+                        self.ndirty.add(node)
+                else:
+                    remote = host_of(str(m.get("remoteDestination") or ""))
+                    if remote and self.nodeinfo.get(node, (None, ""))[1] != remote:
+                        self.nodeinfo[node] = (self.ptype.get(node, ""), remote)
+                        self.ndirty.add(node)
             up, down = int(c.get("upload") or 0), int(c.get("download") or 0)
             last = self.seen.get(cid)
             self.seen[cid] = (up, down)

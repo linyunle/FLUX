@@ -19,7 +19,7 @@ def conns():
     return [
         c("a", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "youtube.com", 1),
         c("b", "fd00::10", ["HK-01", "Proxy"], "RuleSet", "netflix.com", 2),     # 同一台设备的 IPv6
-        c("c", "192.168.1.20", ["DIRECT"], "GeoIP", "baidu.com", 1),
+        c("c", "192.168.1.20", ["直连", "国内"], "GeoIP", "baidu.com", 1),   # 直连出口不叫 DIRECT
         c("p", "127.0.0.1", ["JP-01", "egress-probe"], "Match", "api.ip.sb", 9, inbound="egress-probe-in"),  # 必须被排除
     ]
 
@@ -46,6 +46,7 @@ class API(BaseHTTPRequestHandler):
         if p == "/proxies":
             return self._j(200, {"proxies": {
                 "DIRECT": {"type": "Direct"},
+                "直连": {"type": "Direct"},
                 "HK-01": {"type": "Vless", "history": [{"delay": 88}]},
                 "JP-01": {"type": "Trojan", "history": [{"delay": 0}]},
                 "Proxy": {"type": "Selector", "now": "HK-01", "all": ["HK-01", "JP-01"]},

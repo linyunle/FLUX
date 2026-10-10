@@ -69,6 +69,9 @@ try:
     g = get("/api/summary?by=group")["rows"]; ok("Proxy" in {r["key"] for r in g}, "策略组维度")
     ru = get("/api/summary?by=rule&group=Proxy")["rows"]; ok(ru and ru[0]["key"] == "RuleSet", "规则维度 + 策略组钻取")
     m = get("/api/modes")["modes"]; ok(m["proxy"]["down"] > 0 and m["direct"]["down"] > 0, "代理/直连分流")
+    ok(not any(r["key"] == "aa:bb:cc:dd:ee:02" for r in get("/api/summary?by=client&mode=proxy")["rows"]), "走代理里不含「直连」节点的流量")
+    nr = sqlite3.connect(os.path.join(data, "traffic.db")).execute("SELECT type, remote FROM nodeinfo WHERE node='直连'").fetchone()
+    ok(nr and nr[0].lower() == "direct" and not nr[1], "直连节点只记类型,不记目标地址")
     ok(get("/api/summary?by=client&mode=direct")["rows"][0]["key"] == "aa:bb:cc:dd:ee:02", "模式筛选")
     h = get("/api/hours?hours=3&dev=aa:bb:cc:dd:ee:01")["hours"]; ok(len(h) == 3 and sum(x["down"] for x in h) > 0, "小时趋势 + 设备筛选")
     dd = get("/api/days?days=3")["days"]; ok(len(dd) == 3 and dd[-1]["down"] > 0, "按天趋势补零")
@@ -80,7 +83,8 @@ try:
     ok(post("/api/devices/import", {"text": "garbage"})[0] == 400, "无效导入给出错误")
     # 出口
     e = get("/api/egress"); ok(e["ready"]["ok"], "探测前提检查通过")
-    ok({r["node"]: r["delay"] for r in e["rows"]} == {"HK-01": 88, "JP-01": 0}, "节点延迟(0=超时)")
+    ok({r["node"]: r["delay"] for r in e["rows"] if r["kind"] == "proxy"} == {"HK-01": 88, "JP-01": 0}, "节点延迟(0=超时)")
+    ok({r["node"]: r["kind"] for r in e["rows"]}.get("直连") == "direct", "名叫「直连」的 Direct 节点被识别为直连")
     c, r = post("/api/egress/probe", {}); ok(c == 200 and r["ok"], "开始探测")
     time.sleep(3)
     e = get("/api/egress"); eg = {r["node"]: r.get("egress") for r in e["rows"]}

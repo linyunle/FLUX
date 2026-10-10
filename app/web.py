@@ -14,9 +14,49 @@ from .util import api_call, is_mac, log, stop
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RAW_COL = {"node": "node", "group": "grp", "rule": "rule", "host": "host"}
-MODE_SQL = {"direct": "node = 'DIRECT'", "reject": "node LIKE 'REJECT%'",
-            "proxy": "node != 'DIRECT' AND node NOT LIKE 'REJECT%'"}
-MODE_CASE = "CASE WHEN node='DIRECT' THEN 'direct' WHEN node LIKE 'REJECT%' THEN 'reject' ELSE 'proxy' END"
+MODES = ("direct", "reject", "proxy")
+_kind_cache = {"at": 0.0, "d": ["DIRECT"], "r": []}
+
+
+def kind_names():
+    """按节点「类型」判断直连/拒绝,而不是按名字(你的直连出口可能叫「直连」而不是 DIRECT)。"""
+    if time.time() - _kind_cache["at"] < 20:
+        return _kind_cache["d"], _kind_cache["r"]
+    d, r = {"DIRECT"}, set()
+    c = collector.COLLECTOR
+    pt = dict(c.ptype) if c else {}
+    try:
+        con = ro()
+        try:
+            for n, typ in con.execute("SELECT node, type FROM nodeinfo"):
+                pt.setdefault(n, typ or "")
+        finally:
+            con.close()
+    except Exception:
+        pass
+    for n, typ in pt.items():
+        tl = (typ or "").lower()
+        if tl == "direct":
+            d.add(n)
+        elif tl in ("reject", "rejectdrop"):
+            r.add(n)
+    _kind_cache.update(at=time.time(), d=sorted(d), r=sorted(r))
+    return _kind_cache["d"], _kind_cache["r"]
+
+
+def _in(names):
+    return "(" + ",".join("?" * len(names)) + ")"
+
+
+def mode_clause(mode):
+    """返回 (sql, args)。"""
+    d, r = kind_names()
+    rej = f"(node IN {_in(r)} OR node LIKE 'REJECT%')" if r else "node LIKE 'REJECT%'"
+    if mode == "direct":
+        return f"node IN {_in(d)}", list(d)
+    if mode == "reject":
+        return rej, list(r)
+    return f"(node NOT IN {_in(d)} AND NOT {rej})", list(d) + list(r)
 DEVX = "COALESCE((SELECT mac FROM ipmap WHERE ip = client), client)"  # 旧数据里的 IP 也并到设备上
 
 
@@ -56,8 +96,10 @@ def filters(p, cols, skip_mode=False):
         where.append("host LIKE ? ESCAPE '\\'")
         args.append("%" + kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
     mode = one(p, "mode")
-    if mode in MODE_SQL and not skip_mode:
-        where.append(MODE_SQL[mode])
+    if mode in MODES and not skip_mode:
+        sql, a = mode_clause(mode)
+        where.append(sql)
+        args += a
     return where, args
 
 
@@ -104,7 +146,7 @@ def q_summary(p):
         r = {"key": key, "up": up, "down": down}
         if by == "client":
             ips = macips.get(key, [] if is_mac(key) else [key])
-            r.update(name=devices.NAMES.label(key, ips, stored), ips=ips[:4], is_mac=is_mac(key),
+            r.update(name=devices.NAMES.label(key, ips, stored), ips=ips[:8], is_mac=is_mac(key),
                      live=lv["clients"].get(key))
         elif by == "node":
             r["live"] = lv["nodes"].get(key)
@@ -118,7 +160,11 @@ def q_modes(p):
     where = " AND ".join(["day >= ?", "day <= ?"] + fw)
     con = ro()
     try:
-        rows = con.execute(f"SELECT {MODE_CASE}, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY 1", [d1, d2] + fa).fetchall()
+        d, r = kind_names()
+        case = (f"CASE WHEN node IN {_in(d)} THEN 'direct' "
+                f"WHEN {('node IN ' + _in(r) + ' OR ') if r else ''}node LIKE 'REJECT%' THEN 'reject' ELSE 'proxy' END")
+        rows = con.execute(f"SELECT {case}, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY 1",
+                           list(d) + list(r) + [d1, d2] + fa).fetchall()
         wan = con.execute("SELECT COALESCE(SUM(up),0), COALESCE(SUM(down),0), COUNT(*) FROM wan WHERE day >= ? AND day <= ?",
                           (d1, d2)).fetchone()
     finally:
@@ -190,7 +236,7 @@ def q_devices(p):
     out = []
     for k, total in rows:
         ips = macips.get(k, [] if is_mac(k) else [k])
-        out.append({"key": k, "name": devices.NAMES.label(k, ips, stored), "ips": ips[:4]})
+        out.append({"key": k, "name": devices.NAMES.label(k, ips, stored), "ips": ips[:8]})
     return 200, {"devices": out}
 
 
@@ -206,12 +252,14 @@ def q_egress(p):
         con.close()
     c = collector.COLLECTOR
     cur = c.nodes if c else {}
-    names = set(cur) | set(eg) | {n for n in tr if n not in ("DIRECT", "UNKNOWN") and not n.startswith("REJECT")}
+    names = set(cur) | set(eg) | {n for n in tr if n != "UNKNOWN"}
     rows = []
     lv = live()["nodes"]
     for n in names:
         e = eg.get(n)
-        r = {"node": n, "type": (cur.get(n) or {}).get("type") or (ni.get(n) or ("",))[0] or "",
+        dn, rn = kind_names()
+        r = {"node": n, "kind": "direct" if n in dn else "reject" if (n in rn or n.startswith("REJECT")) else "proxy",
+             "type": (cur.get(n) or {}).get("type") or (ni.get(n) or ("",))[0] or "",
              "delay": (cur.get(n) or {}).get("delay"), "present": n in cur,
              "server": (ni.get(n) or ("", ""))[1] if n in ni else "",
              "up": tr.get(n, (0, 0))[0], "down": tr.get(n, (0, 0))[1], "live": lv.get(n)}

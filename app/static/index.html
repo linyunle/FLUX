@@ -66,7 +66,7 @@ svg text{fill:var(--muted);font-size:11px}
 .dd{position:relative}
 .ddp{position:absolute;top:100%;left:0;margin-top:4px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px;width:280px;max-height:340px;overflow:auto;z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.18)}
 .ddp.open{display:block}
-.ddp label{display:flex;gap:6px;align-items:flex-start;padding:4px 2px;cursor:pointer}
+.ddp label{display:flex;gap:6px;align-items:flex-start;padding:4px 2px;cursor:pointer}.ddp label span{min-width:0;overflow-wrap:anywhere}.ddp{overflow-x:hidden}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .modal.open{display:flex}
 .modal .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
@@ -206,10 +206,13 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";re
 function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
-function devLabel(d){return d.name||d.ips[0]||d.key}
+function devLabel(d){return d.name||d.ips.find(i=>!i.includes(":"))||d.ips[0]||d.key}
+function ipTxt(ips,key){const v4=ips.filter(i=>!i.includes(":")),v6=ips.filter(i=>i.includes(":"));
+  const a=v4.slice();if(!a.length&&v6.length)a.push(v6[0]);const rest=v6.length-(v4.length?0:1);
+  return a.join(" · ")+(rest>0?(a.length?" · ":"")+"+"+rest+" 个 IPv6":"")||key}
 function renderDevList(){const kw=$("#devQ").value.trim().toLowerCase();
   const rows=S.devices.filter(d=>!kw||(d.name+" "+d.ips.join(" ")+" "+d.key).toLowerCase().includes(kw));
-  $("#devList").innerHTML=rows.map(d=>`<label><input type="checkbox" value="${esc(d.key)}" ${S.devs.has(d.key)?"checked":""}><span>${esc(devLabel(d))}<br><span class="sub">${esc(d.ips.join(" · ")||d.key)}</span></span></label>`).join("")||'<div class="empty">没有设备</div>'}
+  $("#devList").innerHTML=rows.map(d=>`<label><input type="checkbox" value="${esc(d.key)}" ${S.devs.has(d.key)?"checked":""}><span>${esc(devLabel(d))}<br><span class="sub">${esc(ipTxt(d.ips,d.key))}</span></span></label>`).join("")||'<div class="empty">没有设备</div>'}
 $("#devList").onchange=e=>{const c=e.target;if(c.checked)S.devs.add(c.value);else S.devs.delete(c.value);renderChrome();refresh()};
 $("#devQ").oninput=renderDevList;
 $("#devBtn").onclick=e=>{e.stopPropagation();$("#devPanel").classList.toggle("open")};
@@ -277,16 +280,16 @@ function rowsTable(el,j,cols,onclick){
   el.innerHTML=`<table><thead><tr>${cols.map(c=>`<th class="${c.n?"n":""} ${c.s?"hide-s":""}">${c.h}</th>`).join("")}</tr></thead><tbody>${j.rows.map((r,i)=>{
     const sh=Math.round((r.up+r.down)/tot*100);
     return `<tr class="${onclick?"click":""}" data-i="${i}">${cols.map(c=>`<td class="${c.n?"n":""} ${c.k?"k":""} ${c.s?"hide-s":""}" ${c.k?`title="${esc(r.key)}"`:""}>${c.f(r,sh)}</td>`).join("")}</tr>`}).join("")}</tbody></table>`;
-  if(onclick)el.querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(tr&&!e.target.closest("button,a"))onclick(j.rows[+tr.dataset.i])}
+  if(onclick)el.querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(tr&&!e.target.closest("button,a")&&j.rows[+tr.dataset.i].key!=="")onclick(j.rows[+tr.dataset.i])}
 }
 const cTotal={h:"合计",n:1,f:(r,sh)=>`${fmt(r.up+r.down)}<div class="share"><i style="width:${sh}%"></i></div>`};
 const cDown={h:"下行",n:1,s:1,f:r=>fmt(r.down)},cUp={h:"上行",n:1,s:1,f:r=>fmt(r.up)};
-const cKey=h=>({h,k:1,f:r=>esc(r.key)});
+const cKey=h=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':esc(r.key)});
 
 function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:30},j=>rowsTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal]))}
 function loadDevicesTab(){load("devtab","/api/summary",{...base(),by:"client",limit:200},j=>{
   rowsTable($("#devTbl"),j,[
-    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button><div class="sub">${esc(r.ips.join(" · ")||"")} ${r.is_mac?esc(r.key):""}</div>`},
+    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button><div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
     {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s`:"–"},cDown,cUp,cTotal],
     r=>{const i=S.devs;if(i.size===1&&i.has(r.key))i.clear();else{i.clear();i.add(r.key)}renderDevList();renderChrome();refresh()});
   $("#devTbl").querySelectorAll(".ren").forEach(b=>b.onclick=async e=>{e.stopPropagation();const n=prompt("设备名(留空 = 恢复自动名)",b.dataset.n);if(n===null)return;
@@ -305,11 +308,11 @@ function loadEgress(){load("egress","/api/egress",{from:dates().from,to:dates().
   $("#egressTbl").innerHTML=`<table><thead><tr><th>节点</th><th>出口 IP / 位置</th><th class="hide-s">运营商</th><th class="n">延迟</th><th class="n">流量</th><th></th></tr></thead><tbody>${j.rows.map(n=>{
     const e=n.egress,loc=e?[e.country,e.region,e.city].filter((x,i,a)=>x&&a.indexOf(x)===i).join(" "):"";
     const d=n.delay==null?"–":n.delay===0?'<span class="warn">超时</span>':n.delay+" ms";
-    return `<tr><td class="k" title="${esc(n.node)}">${esc(n.node)}<div class="sub">${esc(n.type)}${n.present?"":" · 已不在配置里"}${n.server?" · 服务器 "+esc(n.server):""}</div></td>
-    <td>${e&&e.ip?`${esc(e.ip)}<div class="sub">${esc(loc)}</div>`:(e&&e.error?`<span class="warn">探测失败</span><div class="sub" title="${esc(e.error)}">${esc(e.error.slice(0,40))}</div>`:'<span class="sub">未探测</span>')}</td>
+    return `<tr><td class="k" title="${esc(n.node)}">${esc(n.node)}<div class="sub">${n.kind==="direct"?"直连(不经过代理,不计入 VPS 流量)":n.kind==="reject"?"拒绝":esc(n.type)+(n.present?"":" · 已不在当前配置里")+(n.server?" · 服务器 "+esc(n.server):"")}</div></td>
+    <td>${n.kind!=="proxy"?'<span class="sub">–</span>':e&&e.ip?`${esc(e.ip)}<div class="sub">${esc(loc)}</div>`:(e&&e.error?`<span class="warn">探测失败</span><div class="sub" title="${esc(e.error)}">${esc(e.error.slice(0,40))}</div>`:'<span class="sub">未探测</span>')}</td>
     <td class="hide-s">${e&&e.org?esc(e.org)+(e.asn?`<div class="sub">AS${esc(String(e.asn).replace(/^AS/i,""))}</div>`:""):"–"}</td>
     <td class="n">${d}</td><td class="n">${fmt(n.up+n.down)}<div class="sub">↓${fmt(n.down)}</div></td>
-    <td><button data-n="${esc(n.node)}" class="p1" ${p.running||!r.ok?"disabled":""}>探测</button></td></tr>`}).join("")}</tbody></table>`;
+    <td>${n.kind==="proxy"?`<button data-n="${esc(n.node)}" class="p1" ${p.running||!r.ok?"disabled":""}>探测</button>`:""}</td></tr>`}).join("")}</tbody></table>`;
   $("#egressTbl").querySelectorAll(".p1").forEach(b=>b.onclick=()=>probe(b.dataset.n));
   if(p.running)setTimeout(()=>S.tab==="egress"&&loadEgress(),2000)})}
 async function probe(node){try{const j=await post("/api/egress/probe",{node:node||""});if(!j.ok)alert(j.message);loadEgress()}catch(e){alert(e.message)}}

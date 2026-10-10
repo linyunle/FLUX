@@ -9,4 +9,11 @@ services:
       TZ: CST-8
     volumes:
       - ./data:/data
+      # 只读挂载 DHCP 租约,用来给动态分配地址的设备显示主机名(文件不存在也不会被 docker 创建)
+      - type: bind
+        source: /tmp/dhcp.leases
+        target: /host/tmp/dhcp.leases
+        read_only: true
+        bind:
+          create_host_path: false
     mem_limit: 128m
