@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import collector, config, db, devices, egress, realtime, update
+from . import collector, config, db, devices, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -351,38 +351,6 @@ def q_devices(p):
     return 200, {"devices": out}
 
 
-def q_egress(p):
-    d1, d2 = day_range(p)
-    con = ro()
-    try:
-        tr = {n: (u, d) for n, u, d in con.execute(
-            "SELECT node, SUM(up), SUM(down) FROM traffic WHERE day >= ? AND day <= ? GROUP BY node", (d1, d2))}
-        eg = {r[0]: r[1:] for r in con.execute("SELECT node, ip, country, region, city, org, asn, probed_at, error FROM egress")}
-        ni = {r[0]: r[1:] for r in con.execute("SELECT node, type, remote FROM nodeinfo")}
-    finally:
-        con.close()
-    c = collector.COLLECTOR
-    cur = c.nodes if c else {}
-    names = set(cur) | set(eg) | {n for n in tr if n != "UNKNOWN"}
-    rows = []
-    lv = live()["nodes"]
-    for n in names:
-        e = eg.get(n)
-        dn, rn = kind_names()
-        r = {"node": n, "kind": "direct" if n in dn else "reject" if (n in rn or n.startswith("REJECT")) else "proxy",
-             "type": (cur.get(n) or {}).get("type") or (ni.get(n) or ("",))[0] or "",
-             "delay": (cur.get(n) or {}).get("delay"), "present": n in cur,
-             "server": (ni.get(n) or ("", ""))[1] if n in ni else "",
-             "up": tr.get(n, (0, 0))[0], "down": tr.get(n, (0, 0))[1], "live": lv.get(n)}
-        if e:
-            r["egress"] = {"ip": e[0] or "", "country": e[1] or "", "region": e[2] or "", "city": e[3] or "",
-                           "org": e[4] or "", "asn": e[5] or "", "at": e[6] or 0, "error": e[7] or ""}
-        rows.append(r)
-    rows.sort(key=lambda r: (-(r["up"] + r["down"]), r["node"]))
-    return 200, {"from": d1, "to": d2, "rows": rows, "probe": dict(egress.PROGRESS), "ready": egress.ready(),
-                 "snippet": egress.SNIPPET, "group": config.PROBE_GROUP}
-
-
 def q_status(p):
     c = collector.COLLECTOR
     cf = config.get()
@@ -401,7 +369,7 @@ def q_live(p):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/egress": q_egress, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -422,15 +390,6 @@ def p_config(body):
     st = config.save(api, secret)
     log(f"连接设置已更新:{st['api']}")
     return {"ok": True, "version": (v or {}).get("version", "")}
-
-
-def p_probe(body):
-    node = str(body.get("node") or "")
-    nodes = [node] if node else egress.current_nodes()
-    if not nodes:
-        return {"ok": False, "message": "没有可探测的节点"}
-    ok, msg = egress.run_probe(nodes)
-    return {"ok": ok, "message": msg}
 
 
 def p_device(body):
@@ -457,7 +416,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/config": p_config, "/api/egress/probe": p_probe, "/api/device": p_device,
+POST_ROUTES = {"/api/config": p_config, "/api/device": p_device,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

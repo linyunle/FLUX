@@ -1,7 +1,7 @@
 import signal
 import threading
 
-from . import collector, config, db, egress, realtime, web
+from . import collector, config, db, realtime, web
 from .util import log, stop
 
 
@@ -12,7 +12,6 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     web.serve()
-    threading.Thread(target=egress.auto_worker, name="egress-auto", daemon=True).start()
     threading.Thread(target=realtime.run, name="realtime", daemon=True).start()
     cf = config.get()
     log(f"采集开始 {config.VERSION}  API={cf['api']}({cf['source']})  页面 :{config.LISTEN_PORT}"

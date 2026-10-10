@@ -77,11 +77,6 @@ class Collector:
             name = nxt
         return name or "UNKNOWN"
 
-    @staticmethod
-    def is_probe(m):
-        return (str(m.get("inboundName") or "") == config.PROBE_LISTENER
-                or str(m.get("inboundPort") or "") == str(config.PROBE_PORT))
-
     # ---- 一次采样
     def poll(self):
         t0 = time.time()
@@ -99,8 +94,6 @@ class Collector:
             if not cid:
                 continue
             m = c.get("metadata") or {}
-            if self.is_probe(m):  # 出口探测自己的连接不计入
-                continue
             alive.add(cid)
             chains = c.get("chains") or []
             node = self.leaf(chains)

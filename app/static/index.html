@@ -4,22 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>nikki 流量面板</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a6fdb'/%3E%3Cpath d='M11 24V9m0 0-4 4m4-4 4 4' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M21 8v15m0 0-4-4m4 4 4-4' fill='none' stroke='%23f2a45c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" id="fav" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%232a6fdb' d='m16 1.586l-5.707 5.707l1.414 1.414L15 5.414V15H5.414l3.293-3.293l-1.414-1.414L1.586 16l5.707 5.707l1.414-1.414L5.414 17H15v9.586l-3.293-3.293l-1.414 1.414L16 30.414l5.707-5.707l-1.414-1.414L17 26.586V17h9.586l-3.293 3.293l1.414 1.414L30.414 16l-5.707-5.707l-1.414 1.414L26.586 15H17V5.414l3.293 3.293l1.414-1.414z'/%3E%3C/svg%3E">
 <style>
 :root{
   --bg:#f6f6f4;--surface:#fcfcfb;--ink:#1d1d1b;--ink2:#55554f;--muted:#8a8a82;--line:#e3e3de;--hover:#f0f0ec;
   --up:#2a6fdb;--down:#d9730d;--accent:#2a6fdb;--good:#1f8a4c;--bad:#c23a2e;--warn:#a86a00;--on-accent:#fff;
+  --fs:14px;--r:8px;--rs:6px;--cp:12px;--cy:6px;--gap:12px;--w:1100px;
+  color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root{
+:root[data-mode=dark]{
   --bg:#121211;--surface:#1a1a19;--ink:#ecece8;--ink2:#b5b5ae;--muted:#85857e;--line:#2c2c2a;--hover:#242422;
   --up:#4d8be8;--down:#d37a30;--accent:#6aa5f5;--good:#4cc27f;--bad:#ef6b5e;--warn:#e0a032;--on-accent:#0e1621;
-}}
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-html{color-scheme:light dark}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-svg.logo{flex:none}
+body{margin:0;background:var(--bg);color:var(--ink);font:var(--fs)/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:var(--w);margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:var(--gap)}
+svg.logo{flex:none;color:var(--accent)}
 h1{font-size:18px;margin:0;font-weight:600}
 .sp{flex:1}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:6px}
@@ -27,34 +29,36 @@ h1{font-size:18px;margin:0;font-weight:600}
 .badge{font-size:12px;padding:2px 8px;border-radius:10px;border:1px solid var(--line);color:var(--ink2)}
 .badge.new{border-color:var(--accent);color:var(--accent);cursor:pointer}
 button,select,input,textarea{font:inherit;color:inherit}
-button{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+button{background:var(--surface);border:1px solid var(--line);border-radius:var(--rs);padding:5px 12px;cursor:pointer}
 button:hover{background:var(--hover)}
 button.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button:disabled{opacity:.5;cursor:default}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
-.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:var(--rs);padding:5px 8px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:var(--gap)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--rs);overflow:hidden;background:var(--surface)}
 .seg button{border:0;border-radius:0;background:transparent;padding:5px 11px}
 .seg button[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
 .chip{display:inline-flex;gap:4px;align-items:center;padding:2px 8px;border-radius:10px;background:var(--hover);border:1px solid var(--line);font-size:12px}
 .chip b{cursor:pointer;color:var(--muted)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
-.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:calc(var(--gap) - 2px);margin-bottom:var(--gap)}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:calc(var(--cp) - 2px) var(--cp)}
 .tile .l{color:var(--muted);font-size:12px}
 .tile .v{font-size:20px;font-weight:600}
 .tile .s{color:var(--ink2);font-size:12px}
-.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:12px;overflow-x:auto}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:var(--gap);overflow-x:auto}
 .tab{padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent;color:var(--ink2);background:none;border-top:0;border-left:0;border-right:0;border-radius:0;white-space:nowrap}
 .tab svg{vertical-align:-3px;margin-right:6px}
 .tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:8px;border:1px solid var(--line);color:var(--ink2)}
 .tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--cp);margin-bottom:var(--gap)}
+#tab-overview{display:flex;flex-direction:column}
+.gone{display:none!important}
 .card h2{font-size:14px;margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .legend{display:inline-flex;gap:12px;font-weight:400;color:var(--ink2);font-size:12px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 table{border-collapse:collapse;width:100%}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th,td{text-align:left;padding:var(--cy) 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 th{color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 tr.click{cursor:pointer}tr.click:hover{background:var(--hover)}
@@ -73,25 +77,38 @@ svg text{fill:var(--muted);font-size:11px}
 .ddp label{display:flex;gap:6px;align-items:flex-start;padding:4px 2px;cursor:pointer}.ddp label span{min-width:0;overflow-wrap:anywhere}.ddp{overflow-x:hidden}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .modal.open{display:flex}
-.modal .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
+.modal .box{background:var(--surface);border:1px solid var(--line);border-radius:calc(var(--r) + 2px);padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
 .modal h3{margin:0 0 10px;font-size:16px}
 .fld{margin-bottom:10px}.fld label{display:block;color:var(--ink2);font-size:12px;margin-bottom:3px}
 .fld input,.fld textarea{width:100%}
 pre{background:var(--hover);border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto;font-size:12px;margin:6px 0}
 .msg{font-size:12px;margin:6px 0}.msg.err{color:var(--bad)}.msg.ok{color:var(--good)}
 .warn{color:var(--warn)}
+.sw{display:flex;flex-wrap:wrap;gap:8px}
+.sw button{display:flex;align-items:center;gap:6px;padding:5px 10px}
+.sw button[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.sw i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid rgba(128,128,128,.35)}
+.row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.row2>.lb{width:64px;color:var(--ink2);font-size:12px;flex:none}
+input[type=color]{padding:0;width:36px;height:28px;cursor:pointer}
+.crow{display:flex;align-items:center;gap:6px}
+.ord{display:flex;align-items:center;gap:6px;padding:3px 0}.ord span{flex:1}.ord button{padding:1px 8px}
 @media(max-width:600px){.wrap{padding:12px}td.k{max-width:160px}.hide-s{display:none}}
 </style>
+<script>
+try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
+document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(prefers-color-scheme:dark)").matches)?"dark":"light"}catch(e){}
+</script>
 </head>
 <body>
 <div class="wrap">
 <header>
-  <svg class="logo" width="30" height="30" viewBox="0 0 32 32" role="img" aria-label="nikki 流量面板"><rect width="32" height="32" rx="8" fill="#2a6fdb"/><path d="M11 24V9m0 0-4 4m4-4 4 4" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 8v15m0 0-4-4m4 4 4-4" fill="none" stroke="#f2a45c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="logo" width="30" height="30" viewBox="0 0 32 32" role="img" aria-label="nikki 流量面板"><path fill="currentColor" d="m16 1.586l-5.707 5.707l1.414 1.414L15 5.414V15H5.414l3.293-3.293l-1.414-1.414L1.586 16l5.707 5.707l1.414-1.414L5.414 17H15v9.586l-3.293-3.293l-1.414 1.414L16 30.414l5.707-5.707l-1.414-1.414L17 26.586V17h9.586l-3.293 3.293l1.414 1.414L30.414 16l-5.707-5.707l-1.414 1.414L26.586 15H17V5.414l3.293 3.293l1.414-1.414z"/></svg>
   <h1>nikki 流量面板</h1>
   <span class="badge" id="ver"></span>
   <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span>
   <span class="sp"></span>
   <span id="conn" class="sub"></span>
+  <button id="btnLook">外观</button>
   <button id="btnSet">连接设置</button>
 </header>
 
@@ -131,7 +148,7 @@ pre{background:var(--hover);border:1px solid var(--line);border-radius:6px;paddi
       <div><div class="sub" style="margin-bottom:2px">此刻最活跃的节点</div><div id="rtNode"></div></div>
     </div>
   </div>
-  <div class="card">
+  <div class="card" id="trendCard">
     <h2>流量趋势
       <span class="seg" id="grain" role="group"></span>
       <span class="legend"><span><i style="background:var(--down)"></i>下行(收)</span><span><i style="background:var(--up)"></i>上行(发)</span></span>
@@ -141,15 +158,7 @@ pre{background:var(--hover);border:1px solid var(--line);border-radius:6px;paddi
     <div class="chartbox" id="chart"></div>
     <div class="scroll" id="chartTable" style="display:none"></div>
   </div>
-  <div class="card"><h2>访问目标 Top</h2><div class="scroll" id="hostsTbl"></div></div>
-</section>
-
-<section id="tab-egress" style="display:none">
-  <div class="card">
-    <h2>出口详情 <span class="sp"></span><span id="probeInfo" class="sub"></span><button id="probeAll" class="pri">探测全部出口</button></h2>
-    <div id="egressHelp"></div>
-    <div class="scroll" id="egressTbl"></div>
-  </div>
+  <div class="card" id="hostsCard"><h2>访问目标 Top</h2><div class="scroll" id="hostsTbl"></div></div>
 </section>
 
 <section id="tab-devices" style="display:none">
@@ -186,6 +195,26 @@ pre{background:var(--hover);border:1px solid var(--line);border-radius:6px;paddi
   <div id="updBox"></div>
 </div></div>
 
+<div class="modal" id="mLook"><div class="box">
+  <h3>外观</h3>
+  <div class="row2"><span class="lb">模式</span><div class="seg" id="lkMode"></div></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
+  <div class="row2"><span class="lb">自定义色</span>
+    <span class="crow"><input type="color" id="cAcc" aria-label="强调色"> <span class="sub">强调色</span></span>
+    <span class="crow"><input type="color" id="cDown" aria-label="下行色"> <span class="sub">下行(收)</span></span>
+    <span class="crow"><input type="color" id="cUp" aria-label="上行色"> <span class="sub">上行(发)</span></span>
+    <button id="cClear">清除自定义</button></div>
+  <div class="msg" id="cMsg" style="margin:-2px 0 8px 74px"></div>
+  <div class="row2"><span class="lb">密度</span><div class="seg" id="lkDens"></div></div>
+  <div class="row2"><span class="lb">页面宽度</span><div class="seg" id="lkWidth"></div></div>
+  <div class="row2"><span class="lb">圆角</span><div class="seg" id="lkRad"></div></div>
+  <div class="row2"><span class="lb">字号</span><div class="seg" id="lkFont"></div></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">概览布局</span><div style="flex:1;min-width:200px"><div id="lkCards"></div>
+    <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片</span></label></div></div>
+  <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:12px">
+    <button id="lkReset">恢复默认</button><button id="lkClose" class="pri">完成</button></div>
+</div></div>
+
 <div class="modal" id="mImp"><div class="box">
   <h3>导入设备名</h3>
   <div class="sub" style="margin-bottom:8px">在路由器上执行 <code>uci show dhcp</code>,把输出粘贴到下面(也可以粘贴 /etc/config/dhcp 全文)。只读取静态绑定里的 名字 / MAC / IP。</div>
@@ -210,10 +239,9 @@ const S={merge:true,domRows:[],range:"today",from:"",to:"",devs:new Set(),mode:"
 const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["custom","自定义"]];
 const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
-const TABS=[["overview","概览"],["egress","出口"],["devices","设备"],["domains","域名"],["rules","规则策略"]];
+const TABS=[["overview","概览"],["devices","设备"],["domains","域名"],["rules","规则策略"]];
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
- egress:'<path d="M4 12h13M13 6l6 6-6 6"/><path d="M4 5v14"/>',
  devices:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
  domains:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
  rules:'<path d="M4 6h16M4 12h10M4 18h6"/><path d="M17 15l2 2 3-4"/>'};
@@ -387,25 +415,94 @@ function loadRules(){
   load("grp","/api/summary",{...base(),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
   load("rule","/api/summary",{...base(),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
 
-/* ---------- 出口 ---------- */
-function loadEgress(){load("egress","/api/egress",{from:dates().from,to:dates().to},j=>{
-  const p=j.probe,r=j.ready;
-  $("#probeInfo").textContent=p.running?`探测中 ${p.done}/${p.total} · ${p.current}`:(p.finished?"上次探测 "+new Date(p.finished*1000).toLocaleTimeString():"");
-  $("#probeAll").disabled=p.running||!r.ok;
-  $("#egressHelp").innerHTML=r.ok?"":`<div class="msg warn">还没开启出口探测(${!r.group_ok_type?"nikki 里没有 <b>"+esc(j.group)+"</b> 组":"本机探测端口没在监听"})。现在只显示延迟和节点服务器地址。<details><summary>怎么开启</summary><div class="sub">在路由器上先备份再追加,重启 nikki 后刷新本页。<b>重启 nikki 会让网络短暂中断。</b></div><pre>${esc(j.snippet)}</pre></details></div>`;
-  if(!j.rows.length){$("#egressTbl").innerHTML='<div class="empty">还没有节点数据</div>';return}
-  $("#egressTbl").innerHTML=`<table><thead><tr><th>节点</th><th>出口 IP / 位置</th><th class="hide-s">运营商</th><th class="n">延迟</th><th class="n">流量</th><th></th></tr></thead><tbody>${j.rows.map(n=>{
-    const e=n.egress,loc=e?[e.country,e.region,e.city].filter((x,i,a)=>x&&a.indexOf(x)===i).join(" "):"";
-    const d=n.delay==null?"–":n.delay===0?'<span class="warn">超时</span>':n.delay+" ms";
-    return `<tr><td class="k" title="${esc(n.node)}">${esc(n.node)}<div class="sub">${n.kind==="direct"?"直连(不经过代理,不计入 VPS 流量)":n.kind==="reject"?"拒绝":esc(n.type)+(n.present?"":" · 已不在当前配置里")+(n.server?" · 服务器 "+esc(n.server):"")}</div></td>
-    <td>${n.kind!=="proxy"?'<span class="sub">–</span>':e&&e.ip?`${esc(e.ip)}<div class="sub">${esc(loc)}</div>`:(e&&e.error?`<span class="warn">探测失败</span><div class="sub" title="${esc(e.error)}">${esc(e.error.slice(0,40))}</div>`:'<span class="sub">未探测</span>')}</td>
-    <td class="hide-s">${e&&e.org?esc(e.org)+(e.asn?`<div class="sub">AS${esc(String(e.asn).replace(/^AS/i,""))}</div>`:""):"–"}</td>
-    <td class="n">${d}</td><td class="n">${fmt(n.up+n.down)}<div class="sub">↓${fmt(n.down)}</div></td>
-    <td>${n.kind==="proxy"?`<button data-n="${esc(n.node)}" class="p1" ${p.running||!r.ok?"disabled":""}>探测</button>`:""}</td></tr>`}).join("")}</tbody></table>`;
-  $("#egressTbl").querySelectorAll(".p1").forEach(b=>b.onclick=()=>probe(b.dataset.n));
-  if(p.running)setTimeout(()=>S.tab==="egress"&&loadEgress(),2000)})}
-async function probe(node){try{const j=await post("/api/egress/probe",{node:node||""});if(!j.ok)alert(j.message);loadEgress()}catch(e){alert(e.message)}}
-$("#probeAll").onclick=()=>probe("");
+/* ---------- 外观:主题 / 颜色 / 排版(只存在这个浏览器里) ---------- */
+const PRESETS={
+ default:{n:"默认",
+  light:{},dark:{}},
+ ocean:{n:"海洋",
+  light:{up:"#0a7fb0",down:"#e0602f",accent:"#0a7fb0",bg:"#f2f7f9",surface:"#fbfdfd",line:"#d9e5ea",hover:"#e9f1f4"},
+  dark:{up:"#2f9bcc",down:"#d9683a",accent:"#5ab8e0",bg:"#0f1517",surface:"#141a1c",line:"#25323a",hover:"#1c262a"}},
+ violet:{n:"紫罗兰",
+  light:{up:"#6d4fd8",down:"#c97a0f",accent:"#6d4fd8",bg:"#f6f4fb",surface:"#fcfbfe",line:"#e4e0ef",hover:"#eeebf6"},
+  dark:{up:"#8a74e6",down:"#c4832a",accent:"#a590f2",bg:"#131118",surface:"#18161d",line:"#2b2736",hover:"#221f2a"}},
+ graphite:{n:"石墨",
+  light:{up:"#3b5bb5",down:"#c9792a",accent:"#3b5bb5",bg:"#f3f3f3",surface:"#fbfbfb",line:"#dcdcdc",hover:"#ececec"},
+  dark:{up:"#6a8ae0",down:"#c0803c",accent:"#86a0ea",bg:"#101010",surface:"#171717",line:"#2a2a2a",hover:"#202020"}},
+ rose:{n:"玫瑰",
+  light:{up:"#c8326a",down:"#2a6fdb",accent:"#c8326a",bg:"#f9f4f5",surface:"#fdfbfb",line:"#ecdfe2",hover:"#f4eaed"},
+  dark:{up:"#d8588a",down:"#4d8be8",accent:"#e87aa3",bg:"#151012",surface:"#1c1618",line:"#33272c",hover:"#261d21"}},
+ forest:{n:"森林",
+  light:{up:"#1a8a4a",down:"#6a55d0",accent:"#1a8a4a",bg:"#f3f6f2",surface:"#fbfdfb",line:"#dce5da",hover:"#eaf0e8"},
+  dark:{up:"#3aa862",down:"#8a78e0",accent:"#52c47c",bg:"#111512",surface:"#151a18",line:"#26312b",hover:"#1d2420"}}};
+const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:["标准",{"--cp":"12px","--cy":"6px","--gap":"12px"}],loose:["宽松",{"--cp":"16px","--cy":"10px","--gap":"16px"}]};
+const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
+const RADS={s:["小",["4px","3px"]],m:["中",["8px","6px"]],l:["大",["14px","10px"]]};
+const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
+const CARDS={rt:["#rtCard","实时速度"],trend:["#trendCard","流量趋势"],hosts:["#hostsCard","访问目标 Top"]};
+const THEME0={mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",order:["rt","trend","hosts"],hide:[],tiles:true};
+let TH=loadTheme();
+function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}");const r={...THEME0,...t,custom:{...(t.custom||{})}};
+  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k))ord.push(k);r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
+  if(!PRESETS[r.preset])r.preset="default";return r}catch(e){return {...THEME0,custom:{}}}}
+function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
+const mq=matchMedia("(prefers-color-scheme:dark)");
+const effMode=()=>TH.mode==="dark"||(TH.mode==="auto"&&mq.matches)?"dark":"light";
+const hexOk=h=>/^#[0-9a-f]{6}$/i.test(h||"");
+function lum(h){const c=[1,3,5].map(i=>parseInt(h.substr(i,2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]}
+const contrast=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+function oklab(h){const c=[1,3,5].map(i=>parseInt(h.substr(i,2),16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));
+  const l=Math.cbrt(.4122214708*c[0]+.5363325363*c[1]+.0514459929*c[2]),m=Math.cbrt(.2119034982*c[0]+.6806995451*c[1]+.1073969566*c[2]),s=Math.cbrt(.0883024619*c[0]+.2817188376*c[1]+.6299787005*c[2]);
+  return [.2104542553*l+.793617785*m-.0040720468*s,1.9779984951*l-2.428592205*m+.4505937099*s,.0259040371*l+.7827717662*m-.808675766*s]}
+const dE=(a,b)=>{const p=oklab(a),q=oklab(b);return 100*Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2])};
+function tokens(mode){const t={...PRESETS[TH.preset][mode]},c=TH.custom;
+  for(const k of ["accent","up","down"])if(hexOk(c[k]))t[k]=c[k];return t}
+function applyTheme(){
+  const R=document.documentElement,mode=effMode(),t=tokens(mode);R.dataset.mode=mode;
+  for(const k of ["bg","surface","line","hover","up","down","accent","on-accent"])R.style.removeProperty("--"+k);
+  for(const k in t)R.style.setProperty("--"+k,t[k]);
+  const acc=getComputedStyle(R).getPropertyValue("--accent").trim();
+  if(hexOk(acc)){R.style.setProperty("--on-accent",contrast(acc,"#ffffff")>=contrast(acc,"#0e1621")?"#ffffff":"#0e1621");
+    $("#fav").href="data:image/svg+xml,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path fill='${acc}' d='m16 1.586l-5.707 5.707l1.414 1.414L15 5.414V15H5.414l3.293-3.293l-1.414-1.414L1.586 16l5.707 5.707l1.414-1.414L5.414 17H15v9.586l-3.293-3.293l-1.414 1.414L16 30.414l5.707-5.707l-1.414-1.414L17 26.586V17h9.586l-3.293 3.293l1.414 1.414L30.414 16l-5.707-5.707l-1.414 1.414L26.586 15H17V5.414l3.293 3.293l1.414-1.414z'/></svg>`)}
+  const d=DENS[TH.dens]||DENS.normal;for(const k in d[1])R.style.setProperty(k,d[1][k]);
+  R.style.setProperty("--w",(WIDTHS[TH.width]||WIDTHS.m)[1]);
+  const r=(RADS[TH.rad]||RADS.m)[1];R.style.setProperty("--r",r[0]);R.style.setProperty("--rs",r[1]);
+  R.style.setProperty("--fs",(FONTS[TH.font]||FONTS.m)[1]);
+  TH.order.forEach((k,i)=>{const el=$(CARDS[k][0]);if(el){el.style.order=i;el.classList.toggle("gone",TH.hide.includes(k))}});
+  $("#tiles").classList.toggle("gone",!TH.tiles);
+}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){loadTrend();loadRealtime()}}
+function renderLook(){
+  const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
+  sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
+  $("#lkPreset").innerHTML=Object.entries(PRESETS).map(([k,v])=>{const t=v[mode],css=getComputedStyle(document.documentElement);
+    const up=t.up||(mode==="dark"?"#4d8be8":"#2a6fdb"),dn=t.down||(mode==="dark"?"#d37a30":"#d9730d");
+    return `<button data-k="${k}" aria-pressed="${k===TH.preset}"><i style="background:${up}"></i><i style="background:${dn}"></i>${v.n}</button>`}).join("");
+  $("#lkPreset").onclick=e=>{const b=e.target.closest("button");if(b){TH.preset=b.dataset.k;TH.custom={};themeChanged()}};
+  const t=tokens(mode),css=getComputedStyle(document.documentElement);
+  const cur=k=>hexOk(TH.custom[k])?TH.custom[k]:(hexOk(t[k])?t[k]:css.getPropertyValue("--"+k).trim());
+  for(const [id,k] of [["#cAcc","accent"],["#cDown","down"],["#cUp","up"]]){const v=cur(k);if(hexOk(v)&&document.activeElement!==$(id))$(id).value=v}
+  const up=cur("up"),dn=cur("down"),m=$("#cMsg");m.className="msg";m.textContent="";
+  if(hexOk(up)&&hexOk(dn)&&dE(up,dn)<15){m.className="msg warn";m.textContent="上行和下行颜色太接近,图表里不好区分(色盲用户尤其明显)"}
+  sg("#lkDens",Object.entries(DENS).map(([k,v])=>[k,v[0]]),TH.dens,k=>{TH.dens=k;themeChanged(true)});
+  sg("#lkWidth",Object.entries(WIDTHS).map(([k,v])=>[k,v[0]]),TH.width,k=>{TH.width=k;themeChanged(true)});
+  sg("#lkRad",Object.entries(RADS).map(([k,v])=>[k,v[0]]),TH.rad,k=>{TH.rad=k;themeChanged()});
+  sg("#lkFont",Object.entries(FONTS).map(([k,v])=>[k,v[0]]),TH.font,k=>{TH.font=k;themeChanged(true)});
+  $("#lkCards").innerHTML=TH.order.map((k,i)=>`<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span><button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`).join("");
+  $("#lkTiles").checked=TH.tiles;
+}
+$("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k,i=TH.order.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=TH.order.length)return;
+  TH.order.splice(i,1);TH.order.splice(j,0,k);themeChanged()};
+$("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);themeChanged()};
+$("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
+for(const [id,k] of [["#cAcc","accent"],["#cDown","down"],["#cUp","up"]])$(id).oninput=e=>{TH.custom[k]=e.target.value;saveTheme();applyTheme();
+  const up=TH.custom.up||tokens(effMode()).up,dn=TH.custom.down||tokens(effMode()).down,m=$("#cMsg");m.className="msg";m.textContent="";
+  if(hexOk(up)&&hexOk(dn)&&dE(up,dn)<15){m.className="msg warn";m.textContent="上行和下行颜色太接近,图表里不好区分(色盲用户尤其明显)"}};
+$("#cClear").onclick=()=>{TH.custom={};themeChanged()};
+$("#lkReset").onclick=()=>{TH={...THEME0,custom:{},order:THEME0.order.slice(),hide:[]};themeChanged(true)};
+$("#lkClose").onclick=()=>closeM("#mLook");
+$("#btnLook").onclick=()=>{renderLook();openM("#mLook")};
+mq.addEventListener&&mq.addEventListener("change",()=>{if(TH.mode==="auto"){applyTheme();if(document.querySelector("#mLook.open"))renderLook()}});
+applyTheme();
 
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
@@ -436,7 +533,6 @@ async function status(){try{const s=await get("/api/status");
 function refresh(){
   loadTiles();
   if(S.tab==="overview"){loadTrend();loadHosts();loadRealtime()}
-  else if(S.tab==="egress")loadEgress();
   else if(S.tab==="devices")loadDevicesTab();
   else if(S.tab==="domains")loadDomains();
   else if(S.tab==="rules")loadRules();

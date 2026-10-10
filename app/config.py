@@ -20,14 +20,6 @@ LISTEN_HOST = os.environ.get("LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8099"))
 PAGE_TOKEN = os.environ.get("PAGE_TOKEN", "")  # 非空则网页和接口都要带 ?t=<token>
 
-# 出口探测:nikki 里需要有一个 select 组和一个指向它的本地监听口(页面里有现成的配置片段)
-PROBE_GROUP = os.environ.get("PROBE_GROUP", "egress-probe")
-PROBE_LISTENER = os.environ.get("PROBE_LISTENER", "egress-probe-in")
-PROBE_PORT = int(os.environ.get("PROBE_PORT", "18999"))
-EGRESS_INTERVAL_H = float(os.environ.get("EGRESS_INTERVAL_H", "12"))  # 0 = 只手动探测
-ECHO_URLS = [u for u in os.environ.get(
-    "EGRESS_ECHO_URL", "https://api.ip.sb/geoip,https://ipwho.is/").split(",") if u.strip()]
-
 _lock = threading.Lock()
 _state = {"api": "", "secret": "", "rev": 0, "source": "env"}
 

@@ -19,8 +19,7 @@ con.execute("INSERT INTO ipmap VALUES('192.168.1.10','aa:bb:cc:dd:ee:01',?)", (i
 con.commit(); con.close()
 
 env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2",
-           LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, PROBE_PORT=str(PROBE_P), EGRESS_INTERVAL_H="0",
-           EGRESS_ECHO_URL="http://echo.test/ip", APP_VERSION="v0.2.0", GITHUB_REPO="")
+           LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, APP_VERSION="v0.2.0", GITHUB_REPO="")
 proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 B = f"http://127.0.0.1:{WEB_P}"
 
@@ -64,7 +63,6 @@ try:
     d1 = keys["aa:bb:cc:dd:ee:01"]
     ok(d1["up"] > 111 and sorted(i for i in d1["ips"]) == ["192.168.1.10", "fd00::10"], f"设备流量累加,IP 列表正确 {d1['ips']}")
     ok(get("/api/summary?by=host&q=netflix")["rows"][0]["key"] == "netflix.com", "目标搜索")
-    ok(all("api.ip.sb" != r["key"] for r in get("/api/summary?by=host")["rows"]), "探测连接不计入统计")
     ok(get("/api/summary?by=client&dev=aa:bb:cc:dd:ee:02")["rows"][0]["key"] == "aa:bb:cc:dd:ee:02", "按设备筛选")
     g = get("/api/summary?by=group")["rows"]; ok("Proxy" in {r["key"] for r in g}, "策略组维度")
     ru = get("/api/summary?by=rule&group=Proxy")["rows"]; ok(ru and ru[0]["key"] == "RuleSet", "规则维度 + 策略组钻取")
@@ -98,16 +96,11 @@ try:
     names = {r["key"]: r["name"] for r in get("/api/summary?by=client")["rows"]}
     ok(names["aa:bb:cc:dd:ee:01"] == "小林的手机" and names["aa:bb:cc:dd:ee:02"] == "nas", "名字生效")
     ok(post("/api/devices/import", {"text": "garbage"})[0] == 400, "无效导入给出错误")
-    # 出口
-    e = get("/api/egress"); ok(e["ready"]["ok"], "探测前提检查通过")
-    ok({r["node"]: r["delay"] for r in e["rows"] if r["kind"] == "proxy"} == {"HK-01": 88, "JP-01": 0}, "节点延迟(0=超时)")
-    ok({r["node"]: r["kind"] for r in e["rows"]}.get("直连") == "direct", "名叫「直连」的 Direct 节点被识别为直连")
-    c, r = post("/api/egress/probe", {}); ok(c == 200 and r["ok"], "开始探测")
-    time.sleep(3)
-    e = get("/api/egress"); eg = {r["node"]: r.get("egress") for r in e["rows"]}
-    ok(eg["HK-01"]["ip"] == "203.0.113.5" and eg["HK-01"]["org"] == "HKT", "HK 出口 IP/运营商(ip.sb 格式)")
-    ok(eg["JP-01"]["ip"] == "198.51.100.7" and eg["JP-01"]["org"] == "IIJ" and eg["JP-01"]["asn"] == "2497", "JP 出口(ipwho 格式)")
-    ok(mock_mihomo.STATE["probe_sel"] == "HK-01", "探测完还原探测组原选择")
+    try:
+        get("/api/egress"); ok(False, "出口接口应已移除")
+    except urllib.error.HTTPError as e:
+        ok(e.code == 404, "出口接口已移除(404)")
+    ok("tab-egress" not in urllib.request.urlopen(B + "/").read().decode(), "页面里没有出口标签")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")
