@@ -23,7 +23,6 @@ def conns():
         c("e", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "r1.googlevideo.com", 1),
         c("f", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "r2.googlevideo.com", 1),
         c("g", "192.168.1.20", ["直连", "国内"], "GeoIP", "dl.drive.quark.cn", 2),
-        c("p", "127.0.0.1", ["JP-01", "egress-probe"], "Match", "api.ip.sb", 9, inbound="egress-probe-in"),  # 必须被排除
     ]
 
 

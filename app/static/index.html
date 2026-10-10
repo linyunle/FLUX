@@ -61,7 +61,7 @@ table{border-collapse:collapse;width:100%}
 th,td{text-align:left;padding:var(--cy) 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 th{color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-tr.click{cursor:pointer}tr.click:hover{background:var(--hover)}
+tr.click{cursor:pointer}tr.click:hover,tr.sel{background:var(--hover)}tr.sel td:first-child{box-shadow:inset 3px 0 var(--accent)}
 td.k{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub{color:var(--muted);font-size:12px}
 .share{height:4px;background:var(--hover);border-radius:2px;margin-top:3px;overflow:hidden}
@@ -123,6 +123,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div style="margin-top:6px;display:flex;gap:6px"><button id="devClear">清除选择</button><button id="devImport">导入设备名</button></div>
     </div>
   </div>
+  <select id="apSel" aria-label="机场" style="display:none"></select>
   <div class="seg" id="mode" role="group" aria-label="流向"></div>
   <input id="hostQ" placeholder="搜索访问目标" style="width:150px">
   <span id="chips"></span>
@@ -159,6 +160,21 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="scroll" id="chartTable" style="display:none"></div>
   </div>
   <div class="card" id="hostsCard"><h2>访问目标 Top</h2><div class="scroll" id="hostsTbl"></div></div>
+</section>
+
+<section id="tab-airports" style="display:none">
+  <div class="card">
+    <h2>机场流量 <span class="sub">点一行 = 只看这个机场(顶部筛选条会同步)</span><span class="sp"></span><button id="apRules">归类规则</button></h2>
+    <div class="sub" id="apNote" style="margin-bottom:6px"></div>
+    <div class="scroll" id="apTbl"></div>
+  </div>
+</section>
+
+<section id="tab-nodes" style="display:none">
+  <div class="card">
+    <h2>节点流量 <span class="sub">点一行 = 只看这个节点</span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"></h2>
+    <div class="scroll" id="nodeTbl"></div>
+  </div>
 </section>
 
 <section id="tab-devices" style="display:none">
@@ -215,6 +231,14 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <button id="lkReset">恢复默认</button><button id="lkClose" class="pri">完成</button></div>
 </div></div>
 
+<div class="modal" id="mAp"><div class="box">
+  <h3>机场归类规则</h3>
+  <div class="sub" style="margin-bottom:8px">默认按节点名里竖线(| 或 ｜)前面的部分当机场名,比如「CF | 香港 01」归到 CF。名字里没有竖线的节点,或者想合并、改名,在这里写规则,每行一条:<code>关键字=机场名</code>,节点名包含关键字就归到该机场。规则优先于默认。</div>
+  <textarea id="apTxt" rows="7" placeholder="备用=自建机场&#10;GIA=某某机场"></textarea>
+  <div class="msg" id="apMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="apClose">关闭</button><button id="apSave" class="pri">保存</button></div>
+</div></div>
+
 <div class="modal" id="mImp"><div class="box">
   <h3>导入设备名</h3>
   <div class="sub" style="margin-bottom:8px">在路由器上执行 <code>uci show dhcp</code>,把输出粘贴到下面(也可以粘贴 /etc/config/dhcp 全文)。只读取静态绑定里的 名字 / MAC / IP。</div>
@@ -235,13 +259,15 @@ function qs(o){const p=new URLSearchParams();for(const k in o){if(o[k]!==""&&o[k
 async function get(path,o={}){const r=await fetch(path+"?"+qs(o));const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
 async function post(path,body){const r=await fetch(path+(TOKEN?"?t="+encodeURIComponent(TOKEN):""),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
 
-const S={merge:true,domRows:[],range:"today",from:"",to:"",devs:new Set(),mode:"",q:"",group:"",rule:"",node:"",tab:"overview",grain:"h24",table:false,devices:[],seq:{}};
-const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["custom","自定义"]];
+const S={airport:"",apRules:"",merge:true,domRows:[],range:"today",from:"",to:"",devs:new Set(),mode:"",q:"",group:"",rule:"",node:"",tab:"overview",grain:"h24",table:false,devices:[],seq:{}};
+const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["month","本月"],["custom","自定义"]];
 const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
-const TABS=[["overview","概览"],["devices","设备"],["domains","域名"],["rules","规则策略"]];
+const TABS=[["overview","概览"],["airports","机场"],["nodes","节点"],["devices","设备"],["domains","域名"],["rules","规则策略"]];
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
+ airports:'<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>',
+ nodes:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l3 9M16 7l-3 9M8.5 6h7"/>',
  devices:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
  domains:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
  rules:'<path d="M4 6h16M4 12h10M4 18h6"/><path d="M17 15l2 2 3-4"/>'};
@@ -252,9 +278,10 @@ function dates(){const t=new Date();let f=ymd(t),to=f;
   if(S.range==="yday"){const y=new Date(t-864e5);f=to=ymd(y)}
   else if(S.range==="7d")f=ymd(new Date(t-6*864e5));
   else if(S.range==="30d")f=ymd(new Date(t-29*864e5));
+  else if(S.range==="month")f=ymd(new Date(t.getFullYear(),t.getMonth(),1));
   else if(S.range==="custom"){f=$("#d1").value||f;to=$("#d2").value||to}
   return {from:f,to}}
-function base(extra={}){const d=dates();return {from:d.from,to:d.to,dev:[...S.devs].join(","),mode:S.mode,q:S.q,group:S.group,rule:S.rule,node:S.node,...extra}}
+function base(extra={}){const d=dates();return {from:d.from,to:d.to,dev:[...S.devs].join(","),mode:S.mode,q:S.q,group:S.group,rule:S.rule,node:S.node,airport:S.airport,...extra}}
 // 防止旧请求覆盖新结果;请求期间保留上一次的渲染
 async function load(name,path,o,render){const id=(S.seq[name]=(S.seq[name]||0)+1);try{const j=await get(path,o);if(S.seq[name]===id)render(j)}catch(e){if(S.seq[name]===id)console.warn(path,e)}}
 
@@ -265,10 +292,10 @@ function renderChrome(){
   $("#tabs").innerHTML=TABS.map(([k,l])=>`<button class="tab" role="tab" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}${l}</button>`).join("");
   $("#tabs").onclick=e=>{const b=e.target.closest(".tab");if(b){S.tab=b.dataset.k;showTab();refresh()}};
   const n=S.devs.size;$("#devBtn").textContent="设备:"+(n?n+" 台":"全部")+" ▾";
-  const ch=[];if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);
+  const ch=[];if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);if(S.airport)ch.push(["airport","机场 "+S.airport]);
   $("#chips").innerHTML=ch.map(([k,t])=>`<span class="chip">${esc(t)} <b data-k="${k}" title="取消" role="button" tabindex="0">×</b></span>`).join(" ");
 }
-$("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";renderChrome();refresh()}};
+$("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";renderChrome();syncAp();refresh()}};
 function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
@@ -340,12 +367,12 @@ function loadTrend(){
 $("#tblToggle").onclick=()=>{S.table=!S.table;loadTrend()};
 
 /* ---------- 表格 ---------- */
-function rowsTable(el,j,cols,onclick){
+function rowsTable(el,j,cols,onclick,selKey){
   if(!j.rows.length){el.innerHTML='<div class="empty">这个范围内没有数据</div>';return}
   const tot=(j.total.up+j.total.down)||1;
   el.innerHTML=`<table><thead><tr>${cols.map(c=>`<th class="${c.n?"n":""} ${c.s?"hide-s":""}">${c.h}</th>`).join("")}</tr></thead><tbody>${j.rows.map((r,i)=>{
     const sh=Math.round((r.up+r.down)/tot*100);
-    return `<tr class="${onclick?"click":""}" data-i="${i}">${cols.map(c=>`<td class="${c.n?"n":""} ${c.k?"k":""} ${c.s?"hide-s":""}" ${c.k?`title="${esc(r.key)}"`:""}>${c.f(r,sh)}</td>`).join("")}</tr>`}).join("")}</tbody></table>`;
+    return `<tr class="${onclick?"click":""} ${selKey&&r.key===selKey?"sel":""}" data-i="${i}">${cols.map(c=>`<td class="${c.n?"n":""} ${c.k?"k":""} ${c.s?"hide-s":""}" ${c.k?`title="${esc(r.key)}"`:""}>${c.f(r,sh)}</td>`).join("")}</tr>`}).join("")}</tbody></table>`;
   if(onclick)el.querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(tr&&!e.target.closest("button,a")&&j.rows[+tr.dataset.i].key!=="")onclick(j.rows[+tr.dataset.i])}
 }
 const cTotal={h:"合计",n:1,f:(r,sh)=>`${fmt(r.up+r.down)}<div class="share"><i style="width:${sh}%"></i></div>`};
@@ -504,6 +531,35 @@ $("#btnLook").onclick=()=>{renderLook();openM("#mLook")};
 mq.addEventListener&&mq.addEventListener("change",()=>{if(TH.mode==="auto"){applyTheme();if(document.querySelector("#mLook.open"))renderLook()}});
 applyTheme();
 
+/* ---------- 机场 / 节点 ---------- */
+let apNames=[];
+function syncAp(){const sel=$("#apSel"),names=apNames.slice();if(S.airport&&!names.includes(S.airport))names.push(S.airport);
+  const sig=names.join("\u0001");if(sel.dataset.sig!==sig){sel.dataset.sig=sig;sel.innerHTML='<option value="">机场:全部</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}
+  sel.value=S.airport;sel.style.display=names.length?"":"none"}
+$("#apSel").onchange=e=>{S.airport=e.target.value;renderChrome();refresh()};
+function spark(a){if(!a||a.length<2)return"";const w=84,h=22,m=Math.max(...a,1);
+  const pts=a.map((v,i)=>`${(i/(a.length-1)*(w-2)+1).toFixed(1)},${(h-2-(h-4)*v/m).toFixed(1)}`).join(" ");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" style="vertical-align:middle"><polyline fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" points="${pts}"/></svg>`}
+function loadAirports(){load("airports","/api/airports",base({node:"",airport:"",mode:""}),j=>{
+  apNames=j.names;S.apRules=j.rules;syncAp();
+  const sp=j.special||{},b=k=>sp[k]?fmt(sp[k].up+sp[k].down):"";
+  $("#apNote").textContent=`${j.from===j.to?j.from:j.from+" ~ "+j.to} · ${j.rows.length} 个机场`+(sp["直连"]?` · 直连 ${b("直连")} 不消耗机场流量`:"")+" · 这是经过 nikki 统计到的流量,和机场后台显示的用量会有些差距(很短的连接统计不到)";
+  rowsTable($("#apTbl"),j,[
+    {h:"机场",k:1,f:r=>`${esc(r.key)}<div class="sub">${r.nodes} 个节点${r.top.length?" · 最多 "+esc(r.top[0].node):""}</div>`},
+    {h:"趋势",s:1,f:r=>spark(r.series)},cDown,cUp,cTotal],r=>{S.airport=S.airport===r.key?"":r.key;renderChrome();syncAp();refresh()},S.airport)})}
+function loadNodes(){load("nodes","/api/summary",base({node:"",by:"node",limit:500}),j=>{S.nodeRows=j;drawNodes()})}
+function drawNodes(){const j=S.nodeRows;if(!j)return;const kw=$("#nodeQ").value.trim().toLowerCase();
+  const rows=j.rows.filter(r=>!kw||(r.key+" "+(r.airport||"")).toLowerCase().includes(kw));
+  rowsTable($("#nodeTbl"),{...j,rows},[
+    {h:"节点",k:1,f:r=>esc(r.key)},{h:"机场",s:1,f:r=>`<span class="tag">${esc(r.airport||"")}</span>`},
+    {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],
+    r=>{S.node=r.key;S.tab="overview";showTab();refresh()},S.node)}
+$("#nodeQ").oninput=drawNodes;
+$("#apRules").onclick=()=>{$("#apTxt").value=S.apRules||"";$("#apMsg").textContent="";openM("#mAp")};
+$("#apClose").onclick=()=>closeM("#mAp");
+$("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j=await post("/api/airports/rules",{text:$("#apTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则`;
+  setTimeout(()=>{closeM("#mAp");loadAirports();status()},600)}catch(e){m.className="msg err";m.textContent=e.message}};
+
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 $("#btnSet").onclick=async()=>{const s=await get("/api/status");$("#sApi").value=s.config.api;$("#sSec").value="";$("#sSec").placeholder=s.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sMsg").textContent="";renderUpd(s.update);openM("#mSet")};
@@ -524,7 +580,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){document.querySelec
 
 /* ---------- 状态 ---------- */
 async function status(){try{const s=await get("/api/status");
-  $("#ver").textContent=s.version;
+  $("#ver").textContent=s.version;apNames=s.airports||[];syncAp();
   const c=s.conn;$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>$("#btnSet").click()}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}
@@ -533,6 +589,8 @@ async function status(){try{const s=await get("/api/status");
 function refresh(){
   loadTiles();
   if(S.tab==="overview"){loadTrend();loadHosts();loadRealtime()}
+  else if(S.tab==="airports")loadAirports();
+  else if(S.tab==="nodes")loadNodes();
   else if(S.tab==="devices")loadDevicesTab();
   else if(S.tab==="domains")loadDomains();
   else if(S.tab==="rules")loadRules();

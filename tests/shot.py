@@ -12,6 +12,7 @@ B = "http://127.0.0.1:18098"
 try:
     time.sleep(10)
     urllib.request.urlopen(urllib.request.Request(B + "/api/device", json.dumps({"dev": "aa:bb:cc:dd:ee:01", "name": "小林的手机"}).encode(), {"Content-Type": "application/json"}))
+    urllib.request.urlopen(urllib.request.Request(B + "/api/airports/rules", json.dumps({"text": "HK-=机场甲\nJP-=机场乙"}).encode(), {"Content-Type": "application/json"}))
     time.sleep(4)
     from playwright.sync_api import sync_playwright
     out = os.path.join(HERE, "shots"); os.makedirs(out, exist_ok=True)
@@ -23,7 +24,7 @@ try:
             pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
             pg.on("pageerror", lambda e: errs.append(str(e)))
             pg.goto(B + "/"); pg.wait_for_timeout(1500)
-            for tab in ("overview", "devices", "domains", "rules"):
+            for tab in ("overview", "airports", "nodes", "devices", "domains", "rules"):
                 pg.click(f'.tab[data-k="{tab}"]'); pg.wait_for_timeout(1200)
                 pg.screenshot(path=f"{out}/{scheme}-{w}-{tab}.png", full_page=True)
             if w > 500 and scheme == "light":
@@ -31,6 +32,11 @@ try:
                 pg.screenshot(path=f"{out}/light-{w}-devdropdown.png")
                 pg.keyboard.press("Escape"); pg.click("#btnSet"); pg.wait_for_timeout(500)
                 pg.screenshot(path=f"{out}/light-{w}-settings.png"); pg.keyboard.press("Escape")
+            pg.click('.tab[data-k="airports"]'); pg.wait_for_timeout(800)
+            pg.select_option("#apSel", "机场甲"); pg.wait_for_timeout(800)
+            pg.click('.tab[data-k="nodes"]'); pg.wait_for_timeout(1000)
+            pg.screenshot(path=f"{out}/{scheme}-{w}-airport-filtered-nodes.png", full_page=True)
+            pg.click("#chips b"); pg.wait_for_timeout(300)
             if w > 500:
                 pg.click("#btnLook"); pg.wait_for_timeout(400)
                 pg.screenshot(path=f"{out}/{scheme}-{w}-look.png")

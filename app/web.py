@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import collector, config, db, devices, realtime, update
+from . import airports, collector, config, db, devices, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -21,7 +21,7 @@ _kind_cache = {"at": 0.0, "d": ["DIRECT"], "r": []}
 
 def kind_names():
     """按节点「类型」判断直连/拒绝,而不是按名字(你的直连出口可能叫「直连」而不是 DIRECT)。"""
-    if time.time() - _kind_cache["at"] < 20:
+    if time.time() - _kind_cache["at"] < 5:
         return _kind_cache["d"], _kind_cache["r"]
     d, r = {"DIRECT"}, set()
     c = collector.COLLECTOR
@@ -47,6 +47,43 @@ def kind_names():
 
 def _in(names):
     return "(" + ",".join("?" * len(names)) + ")"
+
+
+_nodes_cache = {"at": 0.0, "v": []}
+
+
+def all_nodes():
+    """出现过的所有节点名(缓存 15 秒)。用来把「机场」展开成节点列表。"""
+    if time.time() - _nodes_cache["at"] < 15:
+        return _nodes_cache["v"]
+    names = set()
+    try:
+        con = ro()
+        try:
+            names |= {r[0] for r in con.execute("SELECT node FROM nodeinfo")}
+            names |= {r[0] for r in con.execute("SELECT DISTINCT node FROM hourly")}
+        finally:
+            con.close()
+    except Exception:
+        pass
+    names.discard("")
+    _nodes_cache.update(at=time.time(), v=sorted(names))
+    return _nodes_cache["v"]
+
+
+def node_kind(n, d, r):
+    return "direct" if n in d else "reject" if (n in r or n.startswith("REJECT")) else "proxy"
+
+
+def airport_of(n):
+    d, r = kind_names()
+    return airports.of(n, node_kind(n, d, r))
+
+
+def airport_names():
+    """真正的机场名(不含 直连/拒绝/未知)。"""
+    d, r = kind_names()
+    return sorted({airports.of(n, node_kind(n, d, r)) for n in all_nodes()} - airports.SPECIAL)
 
 
 def mode_clause(mode):
@@ -80,7 +117,7 @@ def day_range(p):
     return d1, d2
 
 
-def filters(p, cols, skip_mode=False):
+def filters(p, cols, skip_mode=False, skip_airport=False):
     """cols: 该表有哪些可筛选维度。返回 (where 列表, 参数)。"""
     where, args = [], []
     devs = [d.lower() for d in csv(p, "dev")]
@@ -96,6 +133,12 @@ def filters(p, cols, skip_mode=False):
     if kw and "host" in cols:
         where.append("host LIKE ? ESCAPE '\\'")
         args.append("%" + kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    ap = one(p, "airport")
+    if ap and "node" in cols and not skip_airport:
+        d, r = kind_names()
+        ns = [n for n in all_nodes() if airports.of(n, node_kind(n, d, r)) == ap]
+        where.append(f"node IN {_in(ns)}" if ns else "0")
+        args += ns
     mode = one(p, "mode")
     if mode in MODES and not skip_mode:
         sql, a = mode_clause(mode)
@@ -158,6 +201,7 @@ def q_summary(p):
                      live=lv["clients"].get(key))
         elif by == "node":
             r["live"] = lv["nodes"].get(key)
+            r["airport"] = airport_of(key)
         elif by in ("group", "rule"):
             r["nodes"] = [{"node": n, "bytes": b} for n, b in sorted(nodes_by.get(key, []), key=lambda x: -x[1])[:3]]
         out.append(r)
@@ -351,6 +395,52 @@ def q_devices(p):
     return 200, {"devices": out}
 
 
+def iter_days(d1, d2):
+    import datetime
+    a, b = datetime.date.fromisoformat(d1), datetime.date.fromisoformat(d2)
+    out = []
+    while a <= b and len(out) < 400:
+        out.append(a.isoformat())
+        a += datetime.timedelta(days=1)
+    return out
+
+
+def q_airports(p):
+    """每个机场的流量(按节点名归类)。直连/拒绝不算机场,单独给个合计。"""
+    d1, d2 = day_range(p)
+    fw, fa = filters(p, T_COLS, skip_mode=True, skip_airport=True)
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    con = ro()
+    try:
+        rows = con.execute(f"SELECT node, day, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY node, day",
+                           [d1, d2] + fa).fetchall()
+    finally:
+        con.close()
+    days = iter_days(d1, d2)
+    d, r = kind_names()
+    ag, special = {}, {}
+    for node, day, up, down in rows:
+        name = airports.of(node, node_kind(node, d, r))
+        if name in airports.SPECIAL:
+            s = special.setdefault(name, {"up": 0, "down": 0})
+            s["up"] += up
+            s["down"] += down
+            continue
+        a = ag.setdefault(name, {"key": name, "up": 0, "down": 0, "nodes": {}, "by_day": {}})
+        a["up"] += up
+        a["down"] += down
+        a["nodes"][node] = a["nodes"].get(node, 0) + up + down
+        a["by_day"][day] = a["by_day"].get(day, 0) + up + down
+    out = []
+    for a in sorted(ag.values(), key=lambda x: -(x["up"] + x["down"])):
+        out.append({"key": a["key"], "up": a["up"], "down": a["down"], "nodes": len(a["nodes"]),
+                    "top": [{"node": n, "bytes": b} for n, b in sorted(a["nodes"].items(), key=lambda x: -x[1])[:3]],
+                    "series": [a["by_day"].get(x, 0) for x in days[-62:]] if len(days) > 1 else []})
+    tot = {"up": sum(x["up"] for x in out), "down": sum(x["down"] for x in out)}
+    return 200, {"from": d1, "to": d2, "rows": out, "total": tot, "special": special,
+                 "rules": airports.rules_text(), "names": airport_names()}
+
+
 def q_status(p):
     c = collector.COLLECTOR
     cf = config.get()
@@ -360,7 +450,7 @@ def q_status(p):
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
         "now": int(time.time()), "live_at": live()["at"],
-        "wan": bool(collector.WAN_IFACES),
+        "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
     }
 
 
@@ -369,7 +459,7 @@ def q_live(p):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -390,6 +480,16 @@ def p_config(body):
     st = config.save(api, secret)
     log(f"连接设置已更新:{st['api']}")
     return {"ok": True, "version": (v or {}).get("version", "")}
+
+
+def p_airport_rules(body):
+    con = db.open_db()
+    try:
+        n = airports.save(con, str(body.get("text") or ""))
+    finally:
+        con.close()
+    _nodes_cache["at"] = 0.0
+    return {"ok": True, "rules": n}
 
 
 def p_device(body):
@@ -416,7 +516,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/config": p_config, "/api/device": p_device,
+POST_ROUTES = {"/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

@@ -101,6 +101,20 @@ try:
     except urllib.error.HTTPError as e:
         ok(e.code == 404, "出口接口已移除(404)")
     ok("tab-egress" not in urllib.request.urlopen(B + "/").read().decode(), "页面里没有出口标签")
+    # 机场
+    c, r = post("/api/airports/rules", {"text": "HK-=机场甲\nJP-=机场乙"}); ok(c == 200 and r["rules"] == 2, "保存机场规则")
+    ok(post("/api/airports/rules", {"text": "乱写"})[0] == 400, "无效规则报错")
+    ap = get("/api/airports")
+    got = {r["key"]: r for r in ap["rows"]}
+    ok(set(got) == {"机场甲"}, f"机场表只含代理流量,直连不算 {list(got)}")
+    ok(ap["special"].get("直连", {}).get("down", 0) > 0, "直连另外汇总")
+    ok(sorted(ap["names"]) == ["机场乙", "机场甲"] or sorted(ap["names"]) == ["机场甲"], f"机场名列表 {ap['names']}")
+    tot_hk = sum(r["up"] + r["down"] for r in get("/api/summary?by=node&airport=%E6%9C%BA%E5%9C%BA%E7%94%B2")["rows"])
+    ok(tot_hk == got["机场甲"]["up"] + got["机场甲"]["down"] > 0, "按机场筛选后的节点流量 = 机场表合计")
+    nr = get("/api/summary?by=node")["rows"]
+    ok({r["key"]: r["airport"] for r in nr}.get("HK-01") == "机场甲" and {r["key"]: r["airport"] for r in nr}.get("直连") == "直连", "节点表带机场名")
+    ok(get("/api/summary?by=host&airport=%E4%B8%8D%E5%AD%98%E5%9C%A8")["rows"] == [], "不存在的机场 → 空结果")
+    ok("机场甲" in get("/api/status")["airports"], "status 里有机场列表")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")

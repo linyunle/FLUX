@@ -44,6 +44,22 @@ def test_ip_neigh_text():
     assert devices.parse_ip_neigh(t) == {"192.168.1.10": "aa:bb:cc:dd:ee:01", "fe80::1": "aa:bb:cc:dd:ee:02"}
 
 
+def test_airports():
+    from app import airports as a
+    a.set_rules("")
+    assert a.of("CF | 香港 01") == "CF" and a.of("SSRDOG ｜ 日本 02") == "SSRDOG" and a.of("牛逼 ｜ 新加坡 01") == "牛逼"
+    assert a.of("备用节点") == "未分类" and a.of("UNKNOWN") == "未知"
+    assert a.of("直连", "direct") == "直连" and a.of("REJECT", "reject") == "拒绝"
+    a.set_rules("备用=自建机场\n# 注释\n香港 01=不该命中")
+    assert a.of("备用节点") == "自建机场" and a.of("CF | 香港 01") == "不该命中"  # 规则优先于竖线前缀
+    for bad in ("没有等号", "=x", "x="):
+        try:
+            a.parse_rules(bad); assert False, bad
+        except ValueError:
+            pass
+    a.set_rules("")
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
