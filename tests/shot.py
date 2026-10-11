@@ -45,8 +45,19 @@ try:
                     nav("overview"); pg.screenshot(path=f"{out}/{scheme}-{w}-theme-{k}.png")
                     nav("settings")
                 pg.click('#lkDens button[data-k="compact"]'); pg.click('#lkWidth button[data-k="f"]'); pg.click('#lkRad button[data-k="l"]'); pg.click('#lkFont button[data-k="l"]')
-                pg.click('#lkCards button[data-k="hosts"][data-d="-1"]'); pg.click('#lkCards input[data-k="rt"]'); pg.wait_for_timeout(300)
+                pg.click('#lkCards button[data-k="hosts"][data-d="-1"]'); pg.click('#lkCards input[data-k="rtdev"]')
+                pg.select_option('#lkCards select[data-k="rtd"][data-f="w"]', "6"); pg.select_option('#lkCards select[data-k="rtp"][data-f="w"]', "6"); pg.select_option('#lkCards select[data-k="rt"][data-f="w"]', "12")
+                pg.click('#lkTStyle button[data-k="area"]'); pg.click('#lkSplit'); pg.wait_for_timeout(300)
                 nav("overview"); pg.screenshot(path=f"{out}/{scheme}-{w}-layout.png", full_page=True)
+                for st in ("line", "group", "bars"):
+                    pg.click(f'#tStyle button[data-k="{st}"]'); pg.wait_for_timeout(200); pg.locator("#trendCard").screenshot(path=f"{out}/{scheme}-{w}-trend-{st}.png")
+                if scheme == "light":
+                    nav("devices"); pg.click("#devTbl tbody tr"); pg.wait_for_timeout(1500); pg.screenshot(path=f"{out}/light-{w}-device-detail.png", full_page=True)
+                    pg.click("#ddFilter"); pg.wait_for_timeout(1500); pg.screenshot(path=f"{out}/light-{w}-overview-onedev.png", full_page=True)
+                    pg.evaluate("window.scrollTo(0, 400)"); pg.wait_for_timeout(300)
+                    top = pg.evaluate("document.querySelector('#tiles').getBoundingClientRect().top")
+                    print("滚动后统计卡片 top =", top); pg.screenshot(path=f"{out}/light-{w}-sticky.png")
+                    pg.evaluate("window.scrollTo(0, 0)"); pg.click("#devBtn"); pg.click("#devClear"); pg.keyboard.press("Escape")
                 print("localStorage:", pg.evaluate("localStorage.getItem('nt.theme.v1')"))
                 nav("settings"); pg.click("#lkReset"); pg.wait_for_timeout(200)
             if w <= 500:

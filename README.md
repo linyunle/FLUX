@@ -1,12 +1,15 @@
-# nikki-traffic
+# FLUX
 
-给 nikki(mihomo)用的流量面板:按 **设备 / 机场 / 节点 / 策略组 / 规则 / 访问目标** 统计流量,看小时、天趋势。
+<img src="assets/logo.png" width="96" alt="FLUX">
+
+FLUX —— 给 nikki(mihomo)用的流量面板:按 **设备 / 机场 / 节点 / 策略组 / 规则 / 访问目标** 统计流量,看小时、天趋势。
 数据只存在你自己的路由器上(SQLite),不联网上报。
 
 ## 功能
-- 设备:同一台设备的 IPv4 / 多个 IPv6 按 MAC 合并;可改名,可粘贴 `uci show dhcp` 批量导入名字;顶部可多选筛选设备
-- 实时速度:概览顶部每 2 秒刷新,显示全局上下行速度、最近 2 分钟曲线、此刻最活跃的设备和节点(速度来自 nikki 的 /traffic,含直连)
-- 趋势:24 小时 / 48 小时 / 7 天(按小时)、14 / 30 天(按天),带表格视图
+- 设备:点开设备列表里的一台,看这台设备的详情(趋势、直连/代理占比、访问目标、用到的节点、策略组、规则);在概览筛选某台设备时自动隐藏与它无关的全局内容;顶部统计栏滚动时固定;同一台设备的 IPv4 / 多个 IPv6 按 MAC 合并;可改名,可粘贴 `uci show dhcp` 批量导入名字;顶部可多选筛选设备
+- 实时:每 2 秒刷新,直连 / 代理速度分开统计,另有连接数;左侧栏常驻四张实时小卡(总速度、直连、代理、连接数);概览里「实时速度 / 直连速度 / 代理速度 / 最活跃设备 / 最活跃节点」都是独立卡片
+- 概览卡片可自由排列:「设置 → 外观 → 概览卡片」里每张卡片单独设宽度(1/4 ~ 整行)、图表高度、显示/隐藏、顺序,同一行放得下的卡片自动并排
+- 趋势:堆叠柱 / 分组柱 / 折线 / 面积四种样式,可单独设上行、下行颜色,可把上行和下行拆成两张图;24 小时 / 48 小时 / 7 天(按小时)、14 / 30 天(按天),带表格视图
 - 域名清单:谁访问过哪些域名、走直连还是代理、最近哪天,可合并子域名,可导出 CSV(按连接记录统计,不是 DNS 查询日志)
 - 规则与策略组:点一行就能钻取,并显示每个策略组/规则实际走了哪些节点
 - 机场与节点:按节点名自动归类机场(取「机场名 | 地区 01」里竖线前面的部分,也可以写规则),看每个机场/节点的下行、上行、合计和趋势;顶部可按机场筛选,概览、设备、域名都会跟着只看这个机场;时间范围有「本月」
@@ -16,7 +19,7 @@
 
 ## 部署(路由器上)
 ```sh
-mkdir -p /mnt/data/docker/nikki-traffic && cd /mnt/data/docker/nikki-traffic
+mkdir -p /mnt/data/docker/flux && cd /mnt/data/docker/flux
 # 放入 docker-compose.yml和 .env(可选)
 docker compose up -d
 ```
@@ -24,12 +27,12 @@ docker compose up -d
 
 ## 更新
 ```sh
-cd /mnt/data/docker/nikki-traffic && docker compose pull && docker compose up -d
+cd /mnt/data/docker/flux && docker compose pull && docker compose up -d
 ```
 数据在 `./data`,更新不丢。旧版 v1 的数据库会自动升级。
 
 ## 发布新版本(开发者)
-推一个 `v*` 标签,GitHub Actions 会构建 amd64 + arm64 镜像并推到 `ghcr.io/<owner>/nikki-traffic`,同时创建 Release。
+推一个 `v*` 标签,GitHub Actions 会构建 amd64 + arm64 镜像并推到 `ghcr.io/<owner>/flux`,同时创建 Release。
 首次发布后,到仓库 Packages 页面把该包设为 Public,路由器才能免登录拉取。
 
 ## 设备主机名
@@ -43,3 +46,7 @@ cd /mnt/data/docker/nikki-traffic && docker compose pull && docker compose up -d
 ```sh
 python3 tests/test_units.py && python3 tests/test_e2e.py
 ```
+
+## 在 sun-panel 等导航页里用 FLUX 的 logo
+面板自带公开的 logo 地址(不需要口令):`http://路由器IP:8099/logo.png`(512×512 PNG)。
+仓库里也有一份:`https://raw.githubusercontent.com/linyunle/FLUX/main/assets/logo.png`。

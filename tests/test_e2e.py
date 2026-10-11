@@ -74,7 +74,10 @@ try:
     h = get("/api/hours?hours=3&dev=aa:bb:cc:dd:ee:01")["hours"]; ok(len(h) == 3 and sum(x["down"] for x in h) > 0, "小时趋势 + 设备筛选")
     dd = get("/api/days?days=3")["days"]; ok(len(dd) == 3 and dd[-1]["down"] > 0, "按天趋势补零")
     # 实时速度 + 节点
-    rt = get("/api/realtime"); ok(rt["ok"] and len(rt["samples"]) >= 3 and rt["now"]["down"] >= 5000, f"实时速度流 {len(rt['samples'])} 个点")
+    import time as _t; _t.sleep(3)
+    rt = get("/api/realtime"); ok(rt["ok"] and len(rt["proxy"]["series"]) >= 2 and rt["proxy"]["down"] > 0 and rt["direct"]["down"] > 0, f"实时:直连/代理分开 {rt['direct']['down']}/{rt['proxy']['down']}")
+    ok(rt["conns"]["total"] == 6 and rt["conns"]["direct"] == 2 and rt["conns"]["proxy"] == 4, f"实时连接数 {rt['conns']}")
+    ok(sum(1 for n in rt["nodes"] if n["node"] == "直连") == 1, "实时节点:直连合并成一行")
     ok(any(d["key"] == "aa:bb:cc:dd:ee:01" for d in rt["devices"]), "实时:活跃设备")
     gr = {r["key"]: r for r in get("/api/summary?by=group")["rows"]}
     ok(gr["Proxy"]["nodes"][0]["node"] == "HK-01" and gr["国内"]["nodes"][0]["node"] == "直连", "策略组实际走的节点")
@@ -119,6 +122,7 @@ try:
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")
     ok(urllib.request.urlopen(B + "/health").read() == b"ok", "/health")
+    lg = urllib.request.urlopen(B + "/logo.png"); ok(lg.read(8)[:4] == b"\x89PNG" and lg.headers["Content-Type"] == "image/png", "/logo.png 公开可拉取")
 finally:
     proc.terminate()
     try: out = proc.communicate(timeout=5)[0]

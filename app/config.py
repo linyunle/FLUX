@@ -5,7 +5,7 @@ import threading
 import urllib.parse
 
 VERSION = os.environ.get("APP_VERSION", "dev")
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "")  # 形如 owner/nikki-traffic,构建镜像时写入
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "")  # 形如 owner/FLUX,构建镜像时写入
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.environ.get("DB_PATH", os.path.join(DATA_DIR, "traffic.db"))

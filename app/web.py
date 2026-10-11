@@ -156,6 +156,8 @@ def ro():
 
 
 def live():
+    if realtime.LIVE["at"]:
+        return realtime.LIVE
     c = collector.COLLECTOR
     return c.live if c else {"at": 0, "nodes": {}, "clients": {}}
 
@@ -333,7 +335,7 @@ def q_realtime(p):
     except ValueError:
         secs = 120
     now = time.time()
-    samples = [[round(ts, 1), u, d] for ts, u, d in list(realtime.SAMPLES) if ts >= now - secs]
+    rows = [r for r in list(realtime.SAMPLES) if r[0] >= now - secs]
     lv = live()
     con = ro()
     try:
@@ -344,18 +346,34 @@ def q_realtime(p):
 
     def rate(v):
         return v["up_rate"] + v["down_rate"]
+    want = {x for x in one(p, "dev", "").split(",") if x}
     devs = []
     for k, v in sorted(lv["clients"].items(), key=lambda kv: -rate(kv[1])):
-        if rate(v) <= 0 or len(devs) >= 6:
+        if k not in want and (rate(v) <= 0 or len(devs) >= 8):
             continue
         ips = macips.get(k, [] if is_mac(k) else [k])
         name = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
         devs.append({"key": k, "name": name, **v})
-    nodes = [{"node": k, **v} for k, v in sorted(lv["nodes"].items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:6]
-    last = samples[-1] if samples else None
-    return 200, {"ok": realtime.STATE["ok"], "error": realtime.STATE["error"], "samples": samples,
-                 "now": {"up": last[1], "down": last[2]} if last else {"up": 0, "down": 0},
-                 "devices": devs, "nodes": nodes, "at": lv["at"]}
+    dn, rj = kind_names()
+    merged = {}
+    for k, v in lv["nodes"].items():
+        key = "直连" if k in dn else ("拒绝" if k in rj else k)
+        a = merged.setdefault(key, {"conns": 0, "up_rate": 0.0, "down_rate": 0.0})
+        a["conns"] += v["conns"]
+        a["up_rate"] += v["up_rate"]
+        a["down_rate"] += v["down_rate"]
+    nodes = [{"node": k, **v} for k, v in sorted(merged.items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:8]
+    last = rows[-1] if rows else None
+    L = lambda i: round(last[i]) if last else 0
+    return 200, {
+        "ok": realtime.STATE["ok"], "error": realtime.STATE["error"], "interval": realtime.INTERVAL, "at": lv["at"],
+        "direct": {"up": L(1), "down": L(2), "conns": L(6),
+                   "series": [[round(r[0], 1), round(r[1]), round(r[2])] for r in rows]},
+        "proxy": {"up": L(3), "down": L(4), "conns": L(7),
+                  "series": [[round(r[0], 1), round(r[3]), round(r[4])] for r in rows]},
+        "conns": {"total": L(5), "direct": L(6), "proxy": L(7),
+                  "series": [[round(r[0], 1), r[5]] for r in rows]},
+        "devices": devs, "nodes": nodes}
 
 
 def q_hours(p):
@@ -522,7 +540,7 @@ POST_ROUTES = {"/api/config": p_config, "/api/device": p_device, "/api/airports/
 
 # ---------------------------------------------------------------- HTTP
 class Handler(BaseHTTPRequestHandler):
-    server_version = "nikki-traffic"
+    server_version = "flux"
 
     def log_message(self, *a):
         pass
@@ -533,7 +551,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if "Cache-Control" not in (extra or {}):
+            self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
@@ -551,8 +570,11 @@ class Handler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(u.query)
         if u.path == "/health":
             return self._send(200, b"ok", "text/plain")
-        if u.path == "/favicon.ico":
-            return self._send(204, b"", "image/x-icon")
+        if u.path in ("/logo.png", "/favicon.png", "/favicon.ico", "/apple-touch-icon.png"):
+            # logo 不需要口令,方便 sun-panel 等导航页直接拉取
+            name = "favicon.png" if u.path in ("/favicon.png", "/favicon.ico") else "logo.png"
+            with open(os.path.join(STATIC, name), "rb") as f:
+                return self._send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if not self._authed(params):
             return self._send(401, {"error": "需要 ?t=<token>"})
         if u.path in ("/", "/index.html"):

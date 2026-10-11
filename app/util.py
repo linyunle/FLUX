@@ -73,7 +73,7 @@ def is_local_ip(s):
 
 
 def http_json(url, timeout=8, opener=None):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 nikki-traffic"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 FLUX"})
     op = opener.open if opener else urllib.request.urlopen
     with op(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))

@@ -1,7 +1,7 @@
 services:
-  nikki-traffic:
-    image: ghcr.io/linyunle/nikki-traffic:latest
-    container_name: nikki-traffic
+  flux:
+    image: ghcr.io/linyunle/flux:latest
+    container_name: flux
     restart: unless-stopped
     network_mode: host
     env_file: .env
