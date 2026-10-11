@@ -32,7 +32,8 @@ try:
             nav("nodes"); pg.screenshot(path=f"{out}/{scheme}-{w}-airport-filtered-nodes.png", full_page=True)
             pg.click("#chips b"); pg.wait_for_timeout(300)
             if w > 500 and scheme == "light":
-                nav("overview"); pg.click("#devBtn"); pg.wait_for_timeout(500)
+                nav("overview"); pg.click("#sideTgl"); pg.wait_for_timeout(1500); pg.screenshot(path=f"{out}/light-{w}-collapsed.png"); pg.click("#sideTgl"); pg.wait_for_timeout(500)
+                pg.click("#devBtn"); pg.wait_for_timeout(500)
                 pg.screenshot(path=f"{out}/light-{w}-devdropdown.png"); pg.keyboard.press("Escape")
                 nav("settings")
                 for k in ("conn", "airport", "devices"):
