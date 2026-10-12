@@ -213,6 +213,16 @@ html{background:var(--bg)}
  .navi svg{margin:0}
  .main{padding-bottom:calc(.5cm + 78px + env(safe-area-inset-bottom))}
 }
+input[type=range].sl{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;border:0;padding:0;outline:none;cursor:pointer;background:linear-gradient(to right,var(--accent) var(--p,100%),var(--line) var(--p,100%))}
+input.sl::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.28)}
+input.sl::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.28)}
+input.sl::-moz-range-track{background:transparent}
+input.sl:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.row2>.lb.wide{width:104px}
+.slrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.slrow .v{min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.slrow button{padding:0 9px;line-height:22px}
+.navprev{display:inline-block;width:96px;height:28px;border-radius:8px;position:relative;overflow:hidden;background:repeating-linear-gradient(45deg,var(--line) 0 6px,var(--hover) 6px 12px)}
+.navprev i{position:absolute;inset:4px 8px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) var(--navop,45%),transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
@@ -388,8 +398,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
   <div class="row2"><span class="lb">卡片阴影</span><div class="seg" id="lkShadow"></div></div>
-  <div class="row2"><span class="lb">手机底栏透明度</span><input type="range" id="lkNav" min="10" max="100" step="5" style="width:160px"> <span class="sub" id="lkNavV"></span></div>
-  <div class="row2"><span class="lb">卡片透明度</span><input type="range" id="lkOp" min="50" max="100" step="5" style="width:160px"> <span class="sub" id="lkOpV"></span></div>
+  <div class="row2"><span class="lb wide">手机底栏透明度</span><span class="slrow"><button data-sl="lkNav" data-d="-1" aria-label="减 1%">−</button><input type="range" class="sl" id="lkNav" min="10" max="100" step="1" style="width:170px"><button data-sl="lkNav" data-d="1" aria-label="加 1%">+</button><b class="v" id="lkNavV"></b><span class="navprev" title="预览:半透明导航条盖在条纹背景上"><i></i></span></span></div>
+  <div class="row2"><span class="lb wide">卡片透明度</span><span class="slrow"><button data-sl="lkOp" data-d="-1" aria-label="减 1%">−</button><input type="range" class="sl" id="lkOp" min="50" max="100" step="1" style="width:170px"><button data-sl="lkOp" data-d="1" aria-label="加 1%">+</button><b class="v" id="lkOpV"></b></span></div>
+  <div class="row2"><span class="lb wide">侧栏速度/连接图</span><div class="seg" id="lkSideViz"></div></div>
   <div class="row2"><span class="lb">速度/内存图</span><div class="seg" id="lkViz"></div></div>
   <div class="row2"><span class="lb">速度/内存色</span>
     <span class="crow"><input type="color" id="cVzA" aria-label="下行/系统内存颜色"> <span class="sub">下行 / 系统内存</span></span>
@@ -775,8 +786,12 @@ function rtList(el,rows,nameFn,empty,pad){
   if(!rows.length)h=`<tr><td class="sub" colspan="4">${empty||"现在没有明显的流量"}</td></tr>`;
   el.innerHTML=`<table><tbody>${h}</tbody></table>`}
 /* 侧栏小折线:arrs = [数组, ...],cols 对应颜色 */
-function mini(el,arrs,cols){const W=200,H=30,a=arrs.map(x=>x.slice(-60)),m=Math.max(...a.flat(),1),len=Math.max(...a.map(x=>x.length));
-  const ln=(x,c)=>x.length>1?`<polyline fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" points="${x.map((v,k)=>(k/Math.max(len-1,1)*W).toFixed(1)+","+(H-2-(H-4)*v/m).toFixed(1)).join(" ")}"/>`:"";
+function mini(el,arrs,cols){const W=200,H=30,a=arrs.map(x=>x.slice(-60)),m=Math.max(...a.flat(),1),len=Math.max(...a.map(x=>x.length)),wave=TH.sideViz==="wave";
+  const P=x=>x.map((v,k)=>[k/Math.max(len-1,1)*W,H-2-(H-4)*v/m]);
+  const sm=x=>x.map((v,i)=>{let t=0,w=0;for(let k=-2;k<=2;k++){const j=i+k;if(j<0||j>=x.length)continue;const c=3-Math.abs(k);t+=x[j]*c;w+=c}return t/w});
+  const ln=(x,c)=>{if(x.length<2)return"";
+    if(wave){const d=smooth(P(sm(sm(x))));return `<path d="${d}L${W} ${H-1}L0 ${H-1}Z" style="fill:${c};fill-opacity:.3"/><path d="${d}" fill="none" style="stroke:${c}" stroke-width="1.5"/>`}
+    return `<polyline fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" points="${P(x).map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>`};
   el.innerHTML=`<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${W}" y1="${H-1}" y2="${H-1}" stroke="var(--line)"/>${a.map((x,i)=>ln(x,cols[i])).join("")}</svg>`}
 const fmtS=n=>{n=+n||0;if(n<1000)return Math.round(n)+"B";const u=["K","M","G"];let i=-1;while(n>=1000&&i<2){n/=1024;i++}return (n>=100?Math.round(n):n.toFixed(1))+u[i]};
 function applyCollapse(){$(".app").classList.toggle("collapsed",!!TH.collapse);const b=$("#sideTgl");b.textContent=TH.collapse?"›":"‹";b.title=b.ariaLabel=TH.collapse?"展开侧栏":"收起侧栏"}
@@ -788,7 +803,7 @@ function drawSide(j){
   $("#sdDown").textContent=rate(D.down);$("#sdUp").textContent=rate(D.up);
   $("#spDown").textContent=rate(P.down);$("#spUp").textContent=rate(P.up);
   $("#scTotal").textContent=j.conns.total;$("#scSplit").textContent=j.conns.direct+" / "+j.conns.proxy;
-  const cols=["var(--down)","var(--up)"];
+  const cols=["var(--vzd,var(--down))","var(--vzu,var(--up))"];
   mini($("#miniChart"),[D.series.map((r,i)=>r[2]+(P.series[i]||[0,0,0])[2]),D.series.map((r,i)=>r[1]+(P.series[i]||[0,0,0])[1])],cols);
   mini($("#sdChart"),[D.series.map(r=>r[2]),D.series.map(r=>r[1])],cols);
   mini($("#spChart"),[P.series.map(r=>r[2]),P.series.map(r=>r[1])],cols);
@@ -855,7 +870,7 @@ const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,navOp:45,viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
 function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),d=themeDefault();
@@ -866,7 +881,7 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   if((t.v||0)<3){for(const k of ["rt","rtd","rtp"])if(r.cards[k].w===4)r.cards[k].w=3}
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
-  if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));
+  if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
   const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf(k==="mem"?"rt":"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
   if(!PRESETS[r.preset])r.preset="default";r.v=3;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
@@ -939,7 +954,8 @@ function renderLook(){
   $("#lkSplit").checked=!!TH.trend.split;
   $("#lkSideItems").innerHTML=SIDE_ITEMS.map(([k,l])=>`<label class="crow sub" style="cursor:pointer"><input type="checkbox" data-s="${k}" ${TH.sideShow[k]?"checked":""}> ${l}</label>`).join("");
   seg($("#lkShadow"),Object.entries(SHADOWS).map(([k,v])=>[k,v[0]]),TH.shadow,k=>{TH.shadow=k;themeChanged()});
-  $("#lkNav").value=TH.navOp;$("#lkNavV").textContent=TH.navOp+"%";$("#lkOp").value=TH.op;$("#lkOpV").textContent=TH.op+"%";
+  $("#lkNav").value=TH.navOp;$("#lkNavV").textContent=TH.navOp+"%";$("#lkOp").value=TH.op;$("#lkOpV").textContent=TH.op+"%";syncSl($("#lkNav"));syncSl($("#lkOp"));
+  seg($("#lkSideViz"),[["line","曲线"],["wave","水波"]],TH.sideViz,k=>{TH.sideViz=k;themeChanged(true)});
   {const c=trCols(),css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cTrDown","down","--down"],["#cTrUp","up","--up"]]){const col=hexOk(TH.trend[k])?TH.trend[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
@@ -954,8 +970,10 @@ $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);themeChanged(true)};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
-$("#lkNav").oninput=e=>{TH.navOp=+e.target.value;$("#lkNavV").textContent=TH.navOp+"%";saveTheme();applyTheme()};
-$("#lkOp").oninput=e=>{TH.op=+e.target.value;$("#lkOpV").textContent=TH.op+"%";saveTheme();applyTheme()};
+function syncSl(el){const mn=+el.min,mx=+el.max;el.style.setProperty("--p",((+el.value-mn)/(mx-mn)*100)+"%")}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-sl]");if(!b)return;const el=$("#"+b.dataset.sl);el.value=+el.value+ +b.dataset.d;el.dispatchEvent(new Event("input"))});
+$("#lkNav").oninput=e=>{TH.navOp=+e.target.value;$("#lkNavV").textContent=TH.navOp+"%";syncSl(e.target);saveTheme();applyTheme()};
+$("#lkOp").oninput=e=>{TH.op=+e.target.value;$("#lkOpV").textContent=TH.op+"%";syncSl(e.target);saveTheme();applyTheme()};
 $("#lkSplit").onchange=e=>{TH.trend.split=e.target.checked;themeChanged(true)};
 for(const [id,k] of [["#cTrDown","down"],["#cTrUp","up"]])$(id).oninput=e=>{TH.trend[k]=e.target.value;saveTheme();drawTrend();loadRealtime()};
 $("#cTrClear").onclick=()=>{TH.trend.up=TH.trend.down="";themeChanged(true)};
