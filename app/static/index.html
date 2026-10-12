@@ -185,7 +185,7 @@ html{background:var(--bg)}
 .gcard td.k{max-width:0;width:100%}
 @container (max-width:470px){.gcard .hide-s{display:none}}
 /* ---- v0.7.5 ---- */
-#ver2{display:none}
+#ver2{display:none!important}
 .pager{display:flex;align-items:center;gap:6px;padding-top:8px;margin-top:auto}
 .pager button{padding:2px 9px;font-size:12px;white-space:nowrap}
 .pager .pgn{min-width:40px;text-align:center;font-variant-numeric:tabular-nums}
@@ -201,13 +201,14 @@ html{background:var(--bg)}
  .side{position:sticky;top:0;z-index:30;background:var(--bg);padding:calc(14px + env(safe-area-inset-top)) 12px 8px;gap:6px 8px;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:1px solid var(--line)}
  .brand{flex:1 0 100%}
  .sfoot,.footrow,.verrow{display:contents}
- #ver2{display:inline-block;order:1}
+ #ver{display:inline-block!important;margin-left:auto}.brand .sp{display:none}
+ .side #hostQ{order:3;flex:1 1 0;min-width:0;width:auto!important;padding:3px 8px;font-size:12px}
  #newver{order:1}
  .ddside{order:2;flex:1 1 0!important;min-width:0}
- #scStatus{order:3;white-space:nowrap;font-size:12px}
- #btnMode{order:4;font-size:0!important;padding:3px 8px!important}#btnMode::before{content:"◐";font-size:13px}
+ #scStatus{order:4;font-size:0;padding:0 2px!important}#scStatus #conn{font-size:0}#scStatus .dot{width:10px;height:10px;margin:0}
+ #btnMode{order:5;font-size:0!important;padding:3px 8px!important}#btnMode::before{content:"◐";font-size:13px}
  .nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(.5cm + env(safe-area-inset-bottom));width:calc(100% - 24px);max-width:560px;z-index:40;order:0;flex:none;flex-direction:row;gap:0;padding:5px;overflow:visible;
-   border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--surface) 68%,transparent);-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);box-shadow:0 8px 28px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.1)}
+   border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--surface) var(--navop,45%),transparent);-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);box-shadow:0 8px 28px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.1)}
  .navi{flex:1 1 0;min-width:0;width:auto;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:6px 0;font-size:10px;line-height:1.3;border-radius:16px;white-space:nowrap}
  .navi svg{margin:0}
  .main{padding-bottom:calc(.5cm + 78px + env(safe-area-inset-bottom))}
@@ -265,22 +266,22 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <section id="tab-overview">
   <div class="card gcard gone" id="rtselCard"><h2>所选设备此刻</h2><div id="rtSel"></div></div>
   <div class="card gcard" id="memCard">
-    <h2>内存使用<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>系统</span><span><i style="background:var(--vzu,var(--up))"></i>nikki</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 心电图 / 水波样式"></button><span class="sub" id="memNote"></span></h2>
+    <h2>内存使用<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>系统</span><span><i style="background:var(--vzu,var(--up))"></i>nikki</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="memNote"></span></h2>
     <div class="big"><div><span class="sub">系统</span> <b id="memUsed">–</b></div><div><span class="sub">nikki</span> <b id="memMi">–</b></div><div class="sub" id="memSub"></div></div>
     <div class="chartbox" id="memChart"></div>
   </div>
   <div class="card gcard" id="rtCard">
-    <h2>实时速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 心电图 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
+    <h2>实时速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
     <div class="big"><div><span class="sub">下行</span> <b id="rtDown">–</b></div><div><span class="sub">上行</span> <b id="rtUp">–</b></div><div class="sub" id="rtSub"></div></div>
     <div class="chartbox" id="rtChart"></div>
   </div>
   <div class="card gcard" id="rtdCard">
-    <h2>直连速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 心电图 / 水波样式"></button><span class="sub" id="rtdNote"></span></h2>
+    <h2>直连速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtdNote"></span></h2>
     <div class="big"><div><span class="sub">下行</span> <b id="rtdDown">–</b></div><div><span class="sub">上行</span> <b id="rtdUp">–</b></div><div class="sub" id="rtdSub"></div></div>
     <div class="chartbox" id="rtdChart"></div>
   </div>
   <div class="card gcard" id="rtpCard">
-    <h2>代理速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 心电图 / 水波样式"></button><span class="sub" id="rtpNote"></span></h2>
+    <h2>代理速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtpNote"></span></h2>
     <div class="big"><div><span class="sub">下行</span> <b id="rtpDown">–</b></div><div><span class="sub">上行</span> <b id="rtpUp">–</b></div><div class="sub" id="rtpSub"></div></div>
     <div class="chartbox" id="rtpChart"></div>
   </div>
@@ -387,6 +388,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
   <div class="row2"><span class="lb">卡片阴影</span><div class="seg" id="lkShadow"></div></div>
+  <div class="row2"><span class="lb">手机底栏透明度</span><input type="range" id="lkNav" min="10" max="100" step="5" style="width:160px"> <span class="sub" id="lkNavV"></span></div>
   <div class="row2"><span class="lb">卡片透明度</span><input type="range" id="lkOp" min="50" max="100" step="5" style="width:160px"> <span class="sub" id="lkOpV"></span></div>
   <div class="row2"><span class="lb">速度/内存图</span><div class="seg" id="lkViz"></div></div>
   <div class="row2"><span class="lb">速度/内存色</span>
@@ -494,7 +496,9 @@ $("#devList").onchange=e=>{const c=e.target;if(c.checked)S.devs.add(c.value);els
 $("#devQ").oninput=renderDevList;
 $("#devBtn").onclick=e=>{e.stopPropagation();const pn=$("#devPanel");pn.classList.toggle("open");
   if(pn.classList.contains("open")){const r=e.currentTarget.getBoundingClientRect(),w=Math.min(300,innerWidth-16);pn.style.width=w+"px";
-    pn.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";pn.style.top="auto";pn.style.bottom=Math.max(8,innerHeight-r.top+6)+"px";pn.style.maxHeight=Math.max(160,r.top-20)+"px"}};
+    pn.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";
+    if(matchMedia("(max-width:820px)").matches){pn.style.bottom="auto";pn.style.top=(r.bottom+6)+"px";pn.style.maxHeight=Math.max(160,innerHeight-r.bottom-100)+"px"}
+    else{pn.style.top="auto";pn.style.bottom=Math.max(8,innerHeight-r.top+6)+"px";pn.style.maxHeight=Math.max(160,r.top-20)+"px"}}};
 $("#devPanel").onclick=e=>e.stopPropagation();
 document.addEventListener("click",()=>$("#devPanel").classList.remove("open"));
 $("#devClear").onclick=()=>{S.devs.clear();renderDevList();renderChrome();refresh()};
@@ -719,9 +723,16 @@ $("#domCsv").onclick=()=>{const rows=S.domRows||[];if(!rows.length)return;
   a.download="域名清单-"+ymd(new Date())+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 const rate=n=>fmt(n)+"/s";
 /* 速度折线:samples = [[时间戳, 上行, 下行], ...],最近 120 秒 */
+const WAVES=new Set();
+/* 水面波纹:在曲线上叠一层正弦起伏(只在有水的地方) */
+function rippleD(p,amp,base,wl,ph){return smooth(p.map(([x,y])=>[x,y<base-1.5?y+amp*Math.sin(x/wl*6.2832+ph):y]))}
+setInterval(()=>{if(document.hidden||!WAVES.size)return;const ph=Date.now()/450;
+  for(const b of WAVES){if(!b.isConnected){WAVES.delete(b);continue}const w=b._w;if(!w)continue;
+    for(const n of ["a","b"]){const p=w[n];if(p.length<2)continue;const d=rippleD(p,w.amp,w.base,26,ph),f=b.querySelector(".wf-"+n),l=b.querySelector(".wl-"+n);
+      if(f)f.setAttribute("d",`${d}L${p[p.length-1][0].toFixed(1)} ${w.base}L${p[0][0].toFixed(1)} ${w.base}Z`);if(l)l.setAttribute("d",d)}}},60);
 function smooth(p){if(p.length<2)return"";let d=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
   for(let i=1;i<p.length;i++){const [x0,y0]=p[i-1],[x1,y1]=p[i],mx=(x0+x1)/2;d+=` C${mx.toFixed(1)} ${y0.toFixed(1)} ${mx.toFixed(1)} ${y1.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`}return d}
-/* o: {fmtY, max(固定上限,内存用), tip(样本)->html};样式取 TH.viz.style:line=心电图 / wave=水波 */
+/* o: {fmtY, max(固定上限,内存用), tip(样本)->html};样式取 TH.viz.style:line=曲线 / wave=水波 */
 function drawRt(box,samples,H,o={}){
   const W=Math.max(200,box.clientWidth||700),L=W<300?50:56,R=8,T=8,B=20,pw=W-L-R,ph=H-T-B,fy=o.fmtY||(W<300?fmt:rate);
   const now=Date.now()/1000,t0=now-120,wave=TH.viz.style==="wave",gid="wg"+(box.id||"x");
@@ -733,16 +744,22 @@ function drawRt(box,samples,H,o={}){
   for(let i=0;i<=ticks;i++){const v=max*i/ticks,y=Y(v);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${fy(v)}</text>`}
   g+=`<text x="${L}" y="${H-5}">2 分钟前</text><text x="${W-R}" y="${H-5}" text-anchor="end">现在</text>`;
   const pts=i=>samples.map(x=>[X(x[0]),Y(x[i])]);
+  let wv=null;
   if(wave){
-    g+=`<defs>${[["a","--vzd","--down"],["b","--vzu","--up"]].map(([n,v,d])=>`<linearGradient id="${gid}${n}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(${v},var(${d}));stop-opacity:.62"/><stop offset="1" style="stop-color:var(${v},var(${d}));stop-opacity:.05"/></linearGradient>`).join("")}</defs>`;
-    const area=(i,n,col)=>{const p=pts(i);if(p.length<2)return"";const d=smooth(p);
-      return `<path d="${d}L${p[p.length-1][0].toFixed(1)} ${T+ph}L${p[0][0].toFixed(1)} ${T+ph}Z" fill="url(#${gid}${n})"/><path d="${d}" fill="none" style="stroke:${col}" stroke-width="1.8" stroke-linecap="round"/>`};
-    g+=area(1,"b",cB)+area(2,"a",cA);
+    const sm=a=>a.map((v,i)=>{let t=0,w=0;for(let k=-2;k<=2;k++){const j=i+k;if(j<0||j>=a.length)continue;const c=3-Math.abs(k);t+=a[j]*c;w+=c}return t/w});
+    const base=T+ph,amp=Math.min(3,Math.max(1.2,ph*.045));
+    const P2=i=>{const ys=sm(sm(samples.map(x=>x[i])));return samples.map((x,n)=>[X(x[0]),Y(ys[n])])};
+    wv={base,amp,a:P2(2),b:P2(1)};
+    g+=`<defs>${[["a","--vzd","--down"],["b","--vzu","--up"]].map(([n,v,d])=>`<linearGradient id="${gid}${n}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(${v},var(${d}));stop-opacity:.78"/><stop offset="1" style="stop-color:var(${v},var(${d}));stop-opacity:.12"/></linearGradient>`).join("")}</defs>`;
+    const area=(n,col)=>{const p=wv[n];if(p.length<2)return"";const d=rippleD(p,amp,base,26,Date.now()/450);
+      return `<path class="wf-${n}" d="${d}L${p[p.length-1][0].toFixed(1)} ${base}L${p[0][0].toFixed(1)} ${base}Z" fill="url(#${gid}${n})"/><path class="wl-${n}" d="${d}" fill="none" style="stroke:${col}" stroke-width="1.6" stroke-linecap="round" opacity=".9"/>`};
+    g+=area("b",cB)+area("a",cA);
   }else{
     const line=(i,col)=>samples.length?`<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" points="${samples.map(x=>X(x[0]).toFixed(1)+","+Y(x[i]).toFixed(1)).join(" ")}"/>`:"";
     g+=line(2,cA)+line(1,cB)}
   g+=`<line class="rx" y1="${T}" y2="${T+ph}" stroke="var(--muted)" style="display:none"/><rect class="rh" x="${L}" y="${T}" width="${pw}" height="${ph}" fill="transparent"/>`;
   box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="实时图表">${g}</svg><div class="tip"></div>`;
+  box._w=wv;if(wv)WAVES.add(box);else WAVES.delete(box);
   const tip=box.querySelector(".tip"),xl=box.querySelector(".rx");
   box.onmousemove=e=>{if(!samples.length||!e.target.closest(".rh"))return;
     const b=box.getBoundingClientRect(),px=(e.clientX-b.left)/b.width*W,t=t0+(px-L)/pw*120;
@@ -787,7 +804,7 @@ function paintMem(j){const el=$("#memCard");if(!el||el.offsetParent===null)retur
   drawRt($("#memChart"),m.series,HGT.rt[TH.cards.mem.h]||130,{fmtY:fmt,max:m.total,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>系统 ${fmt(b[2])}<br>nikki ${fmt(b[1])}`})}
 function paintRt(j){
   const D=j.direct,P=j.proxy,msg=j.ok?"":"实时速度暂时读不到(会自动重试)";
-  document.querySelectorAll("[data-vz]").forEach(b=>b.textContent=TH.viz.style==="wave"?"心电图":"水波");
+  document.querySelectorAll("[data-vz]").forEach(b=>b.textContent=TH.viz.style==="wave"?"曲线":"水波");
   for(const k of ["rt","rtd","rtp"])$("#"+k+"Note").textContent=msg;
   fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
   fillRt("rtd",D,D.series,`${D.conns} 个连接`);fillRt("rtp",P,P.series,`${P.conns} 个连接`);paintMem(j)}
@@ -838,7 +855,7 @@ const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,navOp:45,viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
 function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),d=themeDefault();
@@ -849,7 +866,7 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   if((t.v||0)<3){for(const k of ["rt","rtd","rtp"])if(r.cards[k].w===4)r.cards[k].w=3}
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
-  if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));
+  if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));
   const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf(k==="mem"?"rt":"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
   if(!PRESETS[r.preset])r.preset="default";r.v=3;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
@@ -881,6 +898,7 @@ function applyTheme(){
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
    R.style.setProperty("--bf",TH.op<100?"blur(8px)":"none")}
   for(const [k,,sel] of SIDE_ITEMS)document.querySelectorAll(sel).forEach(el=>el.classList.toggle("gone",!TH.sideShow[k]));
+  R.style.setProperty("--navop",TH.navOp+"%");
   for(const [k,v] of [["a","--vzd"],["b","--vzu"]]){if(hexOk(TH.viz[k]))R.style.setProperty(v,TH.viz[k]);else R.style.removeProperty(v)}
   $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
   $(".footrow").classList.toggle("gone",!TH.sideShow.dev&&!TH.sideShow.theme);
@@ -921,9 +939,9 @@ function renderLook(){
   $("#lkSplit").checked=!!TH.trend.split;
   $("#lkSideItems").innerHTML=SIDE_ITEMS.map(([k,l])=>`<label class="crow sub" style="cursor:pointer"><input type="checkbox" data-s="${k}" ${TH.sideShow[k]?"checked":""}> ${l}</label>`).join("");
   seg($("#lkShadow"),Object.entries(SHADOWS).map(([k,v])=>[k,v[0]]),TH.shadow,k=>{TH.shadow=k;themeChanged()});
-  $("#lkOp").value=TH.op;$("#lkOpV").textContent=TH.op+"%";
+  $("#lkNav").value=TH.navOp;$("#lkNavV").textContent=TH.navOp+"%";$("#lkOp").value=TH.op;$("#lkOpV").textContent=TH.op+"%";
   {const c=trCols(),css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cTrDown","down","--down"],["#cTrUp","up","--up"]]){const col=hexOk(TH.trend[k])?TH.trend[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
-  seg($("#lkViz"),[["line","心电图"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
+  seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   $("#lkTiles").checked=TH.tiles;
 }
@@ -936,6 +954,7 @@ $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);themeChanged(true)};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
+$("#lkNav").oninput=e=>{TH.navOp=+e.target.value;$("#lkNavV").textContent=TH.navOp+"%";saveTheme();applyTheme()};
 $("#lkOp").oninput=e=>{TH.op=+e.target.value;$("#lkOpV").textContent=TH.op+"%";saveTheme();applyTheme()};
 $("#lkSplit").onchange=e=>{TH.trend.split=e.target.checked;themeChanged(true)};
 for(const [id,k] of [["#cTrDown","down"],["#cTrUp","up"]])$(id).oninput=e=>{TH.trend[k]=e.target.value;saveTheme();drawTrend();loadRealtime()};
@@ -949,6 +968,8 @@ $("#lkReset").onclick=()=>{TH=themeDefault();themeChanged(true)};
 $("#btnMode").onclick=()=>{TH.mode={auto:"light",light:"dark",dark:"auto"}[TH.mode]||"light";themeChanged()};
 mq.addEventListener&&mq.addEventListener("change",()=>{if(TH.mode==="auto"){applyTheme();if(S.tab==="settings"&&S.set==="look")renderLook()}});
 applyTheme();applyCollapse();
+{const mqm=matchMedia("(max-width:820px)"),place=()=>{const q=$("#hostQ");if(mqm.matches){$(".side").appendChild(q);q.placeholder="搜索目标"}else{$("#filters").appendChild(q);q.placeholder="搜索访问目标"}};
+ place();mqm.addEventListener&&mqm.addEventListener("change",place)}
 
 /* ---------- 机场 / 节点 ---------- */
 let apNames=[];
@@ -1029,7 +1050,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").clas
 /* ---------- 状态 ---------- */
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
-  const c=s.conn;$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
+  const c=s.conn;$("#scStatus").title=c.ok?"已连接 nikki":(c.error||"未连接");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}
 }catch(e){$("#conn").innerHTML='<span class="dot bad"></span>面板服务无响应'}}
