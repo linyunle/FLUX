@@ -61,6 +61,18 @@ try:
                     pg.evaluate("window.scrollTo(0, 0)"); pg.click("#devBtn"); pg.click("#devClear"); pg.keyboard.press("Escape")
                 print("localStorage:", pg.evaluate("localStorage.getItem('nt.theme.v1')"))
                 nav("settings"); pg.click("#lkReset"); pg.wait_for_timeout(200)
+            if w > 500 and scheme == "light":
+                nav("overview")
+                pg.click("#dtTbl tbody tr"); pg.click("#hostsTbl tbody tr"); pg.wait_for_timeout(1500)
+                pg.locator("#devtopCard").screenshot(path=f"{out}/light-{w}-devtop-open.png"); pg.locator("#hostsCard").screenshot(path=f"{out}/light-{w}-hosts-open.png")
+                nav("domains"); pg.click("#domTbl tbody tr"); pg.wait_for_timeout(1200); pg.screenshot(path=f"{out}/light-{w}-domain-open.png")
+                nav("nodes"); pg.click("#nodeTbl tbody tr"); pg.wait_for_timeout(2000); pg.screenshot(path=f"{out}/light-{w}-node-detail.png", full_page=True)
+                pg.click("#ndDevs tbody tr"); pg.wait_for_timeout(1000)
+                pg.click("#ndBack"); nav("overview")
+                pg.fill("#hostQ", "netflix"); pg.wait_for_timeout(1500); pg.screenshot(path=f"{out}/light-{w}-search.png", full_page=True); pg.fill("#hostQ", ""); pg.wait_for_timeout(800)
+                nav("settings"); pg.click('#lkSideItems input[data-s="direct"]'); pg.click('#lkSideItems input[data-s="ver"]'); pg.click('#lkShadow button[data-k="l"]'); pg.fill("#lkOp", "80"); pg.dispatch_event("#lkOp", "input"); pg.wait_for_timeout(400)
+                pg.screenshot(path=f"{out}/light-{w}-settings-new.png", full_page=True)
+                pg.click("#lkReset")
             if w <= 500:
                 pg.click("#btnMode"); pg.wait_for_timeout(300)
             overflow = pg.evaluate("document.documentElement.scrollWidth > window.innerWidth")

@@ -93,6 +93,10 @@ try:
     ok({r["key"] for r in d2} == {"baidu.com", "quark.cn"} and all(r["ndev"] == 1 for r in d2), "域名清单按设备筛选")
     ok(all(r["key"] == "quark.cn" for r in get("/api/domains?q=quark")["rows"]), "域名清单搜索")
     ok(dm["youtube.com"]["devs"][0]["key"] == "aa:bb:cc:dd:ee:01", "域名的访问设备")
+    dv = get("/api/summary?by=client&dom=googlevideo.com")["rows"]
+    ok(len(dv) == 1 and dv[0]["key"] == "aa:bb:cc:dd:ee:01", "dom 筛选:域名(含子域名)被哪些设备访问")
+    ok(get("/api/summary?by=client&host=r1.googlevideo.com")["rows"][0]["key"] == "aa:bb:cc:dd:ee:01", "host 筛选")
+    ok(len(get("/api/summary?by=client&dom=ogle.com")["rows"]) == 0, "dom 不会误匹配后缀片段")
     # 命名
     ok(post("/api/device", {"dev": "aa:bb:cc:dd:ee:01", "name": "小林的手机"})[0] == 200, "改名")
     ok(post("/api/devices/import", {"text": "dhcp.@host[0]=host\ndhcp.@host[0].name='nas'\ndhcp.@host[0].mac='aa:bb:cc:dd:ee:02'"})[0] == 200, "导入 uci 静态绑定")

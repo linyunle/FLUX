@@ -129,6 +129,11 @@ def filters(p, cols, skip_mode=False, skip_airport=False):
         if v and f in cols:
             where.append(f"{col} = ?")
             args.append(v)
+    dom = one(p, "dom").strip().lower()
+    if dom and "host" in cols:
+        # 域名及其所有子域名(用于「合并子域名」后的域名点开看设备)
+        where.append("(host = ? OR host LIKE ? ESCAPE '\\')")
+        args += [dom, "%." + dom.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")]
     kw = one(p, "q").strip()
     if kw and "host" in cols:
         where.append("host LIKE ? ESCAPE '\\'")
