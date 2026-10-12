@@ -54,7 +54,10 @@ input,select,textarea{background:var(--surface);border:1px solid var(--line);bor
 .card{background:var(--cardbg,var(--surface));border:1px solid var(--line);border-radius:var(--r);padding:var(--cp);margin-bottom:var(--gap)}
 #tab-overview{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap);align-items:stretch}
 .gcard{grid-column:span var(--span,12);margin-bottom:0!important;min-width:0;display:flex;flex-direction:column}
-.lbody{overflow:auto;flex:none;scrollbar-width:thin}
+.gcard{container-type:inline-size}
+@container (max-width:470px){.hide-s{display:none}td.k{max-width:150px}}
+@container (max-width:300px){td.k{max-width:110px}}
+.seg button{white-space:nowrap}@container (max-width:470px){.gcard .seg{flex-wrap:wrap}.gcard .seg button{padding:4px 8px}}
 .autohide{display:none!important}
 .big>.sub{flex:1 0 100%}.big{display:flex;gap:4px 24px;flex-wrap:wrap;align-items:baseline}.big b{font-size:20px;font-variant-numeric:tabular-nums}
 .cl{margin:2px 0}.cl:empty{display:none}
@@ -344,7 +347,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2"><span class="lb">页面宽度</span><div class="seg" id="lkWidth"></div></div>
   <div class="row2"><span class="lb">圆角</span><div class="seg" id="lkRad"></div></div>
   <div class="row2"><span class="lb">字号</span><div class="seg" id="lkFont"></div></div>
-  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。列表类卡片超出高度时在卡片里滚动。</div><div id="lkCards"></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。列表类卡片的「矮/中/高」是最多显示 5 / 8 / 12 行,卡片高度随内容自动适应,不会出现滚动条;卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
@@ -566,10 +569,10 @@ const cDown={h:"下行",n:1,s:1,f:r=>fmt(r.down)},cUp={h:"上行",n:1,s:1,f:r=>f
 const cKey=h=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':esc(r.key)});
 
 S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
-function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:30},j=>expTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal],S.hostOpen,
+function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal],S.hostOpen,
   r=>get("/api/summary",{...base({host:r.key}),by:"client",limit:50}).then(x=>miniDevs(x.rows))))}
 function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direct","直连"]],S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();loadDevTop()});
-  load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:30},j=>expTable($("#dtTbl"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.dtOpen,
+  load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:rowsOf("devtop")},j=>expTable($("#dtTbl"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.dtOpen,
     r=>get("/api/domains",{...base({mode:S.dtMode,dev:r.key}),merge:"1",limit:12}).then(x=>miniDoms(x.rows))))}
 function loadDevicesTab(){
   $("#tiles").style.display=S.dd?"none":"";$("#devListView").style.display=S.dd?"none":"";$("#devDetail").style.display=S.dd?"":"none";
@@ -657,7 +660,6 @@ function rtList(el,rows,nameFn,empty,pad){
   rows=pad?rows.slice(0,pad):rows;
   let h=rows.map(r=>`<tr><td class="k" title="${esc(nameFn(r))}">${esc(nameFn(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
   if(!rows.length)h=`<tr><td class="sub" colspan="4">${empty||"现在没有明显的流量"}</td></tr>`;
-  for(let i=Math.max(rows.length,1);i<(pad||0);i++)h+='<tr class="ph"><td colspan="4">&nbsp;</td></tr>';
   el.innerHTML=`<table><tbody>${h}</tbody></table>`}
 /* 侧栏小折线:arrs = [数组, ...],cols 对应颜色 */
 function mini(el,arrs,cols){const W=200,H=30,a=arrs.map(x=>x.slice(-60)),m=Math.max(...a.flat(),1),len=Math.max(...a.map(x=>x.length));
@@ -689,7 +691,7 @@ function loadRealtime(){if(document.hidden)return;
     for(const k of ["rt","rtd","rtp"])$("#"+k+"Note").textContent=msg;
     fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
     fillRt("rtd",D,D.series,`${D.conns} 个连接`);fillRt("rtp",P,P.series,`${P.conns} 个连接`);
-    rtList($("#rtDev"),j.devices,r=>r.name||r.key);rtList($("#rtNode"),j.nodes,r=>r.node);
+    rtList($("#rtDev"),j.devices,r=>r.name||r.key,"",rowsOf("rtdev"));rtList($("#rtNode"),j.nodes,r=>r.node,"",rowsOf("rtnode"));
     rtList($("#rtSel"),j.devices.filter(d=>S.devs.has(d.key)),r=>r.name||r.key,"这台设备现在没有流量")})}
 setInterval(loadRealtime,2000);
 const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r.nodes.map(n=>`${esc(n.node)} <span class="sub">${Math.round(n.bytes/Math.max(1,r.up+r.down)*100)}%</span>`).join("<br>")};
@@ -721,7 +723,8 @@ const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
 const CARDS={rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],hosts:["#hostsCard","访问目标 Top"]};
-const LISTS=["rtdev","rtnode","devtop","hosts"],LH={s:180,m:300,l:460};
+const LISTS=["rtdev","rtnode","devtop","hosts"],ROWS={s:5,m:8,l:12};
+const rowsOf=k=>ROWS[(TH.cards[k]||{}).h]||8;
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
 const DEF_CARDS={rt:{w:4,h:"m"},rtd:{w:4,h:"m"},rtp:{w:4,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m"}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
@@ -768,7 +771,6 @@ function applyTheme(){
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
    R.style.setProperty("--bf",TH.op<100?"blur(8px)":"none")}
   for(const [k,,sel] of SIDE_ITEMS){const el=$(sel);if(el)el.classList.toggle("gone",!TH.sideShow[k])}
-  for(const k of LISTS){const b=$(CARDS[k][0]+" .lbody");if(b)b.style.height=LH[TH.cards[k].h]+"px"}
   $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
   $(".footrow").classList.toggle("gone",!TH.sideShow.dev&&!TH.sideShow.theme);
   {const bg=getComputedStyle(R).getPropertyValue("--bg").trim();if(hexOk(bg))$("#tc").content=bg}
@@ -782,7 +784,7 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
 
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime()}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop()}}}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
   sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});

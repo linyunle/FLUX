@@ -354,7 +354,7 @@ def q_realtime(p):
     want = {x for x in one(p, "dev", "").split(",") if x}
     devs = []
     for k, v in sorted(lv["clients"].items(), key=lambda kv: -rate(kv[1])):
-        if k not in want and (rate(v) <= 0 or len(devs) >= 8):
+        if k not in want and (rate(v) <= 0 or len(devs) >= 12):
             continue
         ips = macips.get(k, [] if is_mac(k) else [k])
         name = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
@@ -367,7 +367,7 @@ def q_realtime(p):
         a["conns"] += v["conns"]
         a["up_rate"] += v["up_rate"]
         a["down_rate"] += v["down_rate"]
-    nodes = [{"node": k, **v} for k, v in sorted(merged.items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:8]
+    nodes = [{"node": k, **v} for k, v in sorted(merged.items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:12]
     last = rows[-1] if rows else None
     L = lambda i: round(last[i]) if last else 0
     return 200, {
