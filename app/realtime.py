@@ -11,6 +11,23 @@ INTERVAL = max(1, min(10, int(os.environ.get("REALTIME_SEC", "2") or 2)))
 # (时间戳, 直连上, 直连下, 代理上, 代理下, 总连接, 直连连接, 代理连接)
 SAMPLES = collections.deque(maxlen=600)
 LIVE = {"at": 0, "clients": {}, "nodes": {}}
+# (时间戳, mihomo 进程内存, 系统已用, 系统总量),字节
+MEM = collections.deque(maxlen=600)
+
+
+def host_mem():
+    """读 /proc/meminfo(host 网络模式的容器里看到的就是路由器自己的内存)"""
+    try:
+        m = {}
+        with open("/proc/meminfo") as f:
+            for ln in f:
+                k, _, v = ln.partition(":")
+                m[k] = int(v.split()[0]) * 1024
+        tot = m.get("MemTotal", 0)
+        avail = m.get("MemAvailable", m.get("MemFree", 0) + m.get("Buffers", 0) + m.get("Cached", 0))
+        return max(0, tot - avail), tot
+    except Exception:
+        return 0, 0
 STATE = {"ok": False, "error": ""}
 
 
@@ -73,6 +90,8 @@ def run():
                     a[1] += du
                     a[2] += dd
             seen, last_t = new_seen, t0
+            hu, ht = host_mem()
+            MEM.append((t0, int(data.get("memory") or 0), hu, ht))
             if not first:
                 SAMPLES.append((t0, tot["direct"][0] / elapsed, tot["direct"][1] / elapsed,
                                 tot["proxy"][0] / elapsed, tot["proxy"][1] / elapsed,

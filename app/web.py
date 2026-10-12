@@ -354,7 +354,7 @@ def q_realtime(p):
     want = {x for x in one(p, "dev", "").split(",") if x}
     devs = []
     for k, v in sorted(lv["clients"].items(), key=lambda kv: -rate(kv[1])):
-        if k not in want and (rate(v) <= 0 or len(devs) >= 12):
+        if k not in want and (rate(v) <= 0 or len(devs) >= 60):
             continue
         ips = macips.get(k, [] if is_mac(k) else [k])
         name = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
@@ -367,7 +367,11 @@ def q_realtime(p):
         a["conns"] += v["conns"]
         a["up_rate"] += v["up_rate"]
         a["down_rate"] += v["down_rate"]
-    nodes = [{"node": k, **v} for k, v in sorted(merged.items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:12]
+    nodes = [{"node": k, **v} for k, v in sorted(merged.items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:60]
+    mrows = [r for r in list(realtime.MEM) if r[0] >= now - secs]
+    ml = mrows[-1] if mrows else None
+    mem = {"mihomo": ml[1] if ml else 0, "used": ml[2] if ml else 0, "total": ml[3] if ml else 0,
+           "series": [[round(r[0], 1), r[1], r[2]] for r in mrows]}
     last = rows[-1] if rows else None
     L = lambda i: round(last[i]) if last else 0
     return 200, {
@@ -378,7 +382,7 @@ def q_realtime(p):
                   "series": [[round(r[0], 1), round(r[3]), round(r[4])] for r in rows]},
         "conns": {"total": L(5), "direct": L(6), "proxy": L(7),
                   "series": [[round(r[0], 1), r[5]] for r in rows]},
-        "devices": devs, "nodes": nodes}
+        "devices": devs, "nodes": nodes, "mem": mem}
 
 
 def q_hours(p):

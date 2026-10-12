@@ -76,6 +76,7 @@ try:
     # 实时速度 + 节点
     import time as _t; _t.sleep(3)
     rt = get("/api/realtime"); ok(rt["ok"] and len(rt["proxy"]["series"]) >= 2 and rt["proxy"]["down"] > 0 and rt["direct"]["down"] > 0, f"实时:直连/代理分开 {rt['direct']['down']}/{rt['proxy']['down']}")
+    ok(rt["mem"]["mihomo"] == 88000000 and rt["mem"]["total"] > 0 and len(rt["mem"]["series"]) >= 2, f"实时:内存 nikki={rt['mem']['mihomo']} 系统={rt['mem']['used']}/{rt['mem']['total']}")
     ok(rt["conns"]["total"] == 6 and rt["conns"]["direct"] == 2 and rt["conns"]["proxy"] == 4, f"实时连接数 {rt['conns']}")
     ok(sum(1 for n in rt["nodes"] if n["node"] == "直连") == 1, "实时节点:直连合并成一行")
     ok(any(d["key"] == "aa:bb:cc:dd:ee:01" for d in rt["devices"]), "实时:活跃设备")

@@ -53,7 +53,7 @@ class API(BaseHTTPRequestHandler):
             return
         if p == "/connections":
             STATE["tick"] += 1
-            return self._j(200, {"connections": conns()})
+            return self._j(200, {"connections": conns(), "memory": 88000000})
         if p == "/proxies":
             return self._j(200, {"proxies": {
                 "DIRECT": {"type": "Direct"},
