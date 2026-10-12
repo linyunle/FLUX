@@ -55,8 +55,7 @@ input,select,textarea{background:var(--surface);border:1px solid var(--line);bor
 #tab-overview{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap);align-items:stretch}
 .gcard{grid-column:span var(--span,12);margin-bottom:0!important;min-width:0;display:flex;flex-direction:column}
 .gcard{container-type:inline-size}
-@container (max-width:470px){.hide-s{display:none}td.k{max-width:150px}}
-@container (max-width:300px){td.k{max-width:110px}}
+
 .seg button{white-space:nowrap}@container (max-width:470px){.gcard .seg{flex-wrap:wrap}.gcard .seg button{padding:4px 8px}}
 .autohide{display:none!important}
 .big>.sub{flex:1 0 100%}.big{display:flex;gap:4px 24px;flex-wrap:wrap;align-items:baseline}.big b{font-size:20px;font-variant-numeric:tabular-nums}
@@ -182,6 +181,9 @@ html{background:var(--bg)}
   .main{padding:12px}
   .setgrid{grid-template-columns:1fr}.subnav{flex-direction:row;overflow-x:auto}.subnav button{white-space:nowrap}
 }
+.gcard{overflow:hidden}
+.gcard td.k{max-width:0;width:100%}
+@container (max-width:470px){.gcard .hide-s{display:none}}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
