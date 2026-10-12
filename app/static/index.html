@@ -349,7 +349,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2"><span class="lb">页面宽度</span><div class="seg" id="lkWidth"></div></div>
   <div class="row2"><span class="lb">圆角</span><div class="seg" id="lkRad"></div></div>
   <div class="row2"><span class="lb">字号</span><div class="seg" id="lkFont"></div></div>
-  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。列表类卡片的「矮/中/高」是最多显示 5 / 8 / 12 行,卡片高度随内容自动适应,不会出现滚动条;卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。列表类卡片的「矮/中/高」是最多显示 5 / 8 / 12 行;访问目标 Top 单独设置显示行数(5~100 行)。卡片高度随内容自动适应,不会出现滚动条;卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
@@ -726,9 +726,10 @@ const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","1
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
 const CARDS={rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],hosts:["#hostsCard","访问目标 Top"]};
 const LISTS=["rtdev","rtnode","devtop","hosts"],ROWS={s:5,m:8,l:12};
-const rowsOf=k=>ROWS[(TH.cards[k]||{}).h]||8;
+const HROWS=[5,8,10,15,20,30,50,100];
+const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.hosts.rows)?+TH.cards.hosts.rows:30):(ROWS[(TH.cards[k]||{}).h]||8);
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={rt:{w:4,h:"m"},rtd:{w:4,h:"m"},rtp:{w:4,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m"}};
+const DEF_CARDS={rt:{w:4,h:"m"},rtd:{w:4,h:"m"},rtp:{w:4,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver"]];
 const AUTOHIDE=["rt","rtd","rtp","rtdev","rtnode","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
@@ -806,7 +807,7 @@ function renderLook(){
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
-    <select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${CH.map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
+    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${CH.map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
@@ -819,7 +820,7 @@ function renderLook(){
 $("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k,i=TH.order.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=TH.order.length)return;
   TH.order.splice(i,1);TH.order.splice(j,0,k);themeChanged()};
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
-  if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"?+c.value:c.value;themeChanged(true);return}
+  if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
   TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);themeChanged(true)};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};

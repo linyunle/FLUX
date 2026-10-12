@@ -48,8 +48,8 @@ try:
                 pg.click('#lkDens button[data-k="compact"]'); pg.click('#lkWidth button[data-k="f"]'); pg.click('#lkRad button[data-k="l"]'); pg.click('#lkFont button[data-k="l"]')
                 pg.click('#lkCards button[data-k="hosts"][data-d="-1"]'); pg.click('#lkCards input[data-k="rtdev"]')
                 pg.select_option('#lkCards select[data-k="rtd"][data-f="w"]', "6"); pg.select_option('#lkCards select[data-k="rtp"][data-f="w"]', "6"); pg.select_option('#lkCards select[data-k="rt"][data-f="w"]', "12")
-                pg.click('#lkTStyle button[data-k="area"]'); pg.click('#lkSplit'); pg.wait_for_timeout(300)
-                nav("overview"); pg.screenshot(path=f"{out}/{scheme}-{w}-layout.png", full_page=True)
+                pg.select_option('#lkCards select[data-k="hosts"][data-f="rows"]', "5"); pg.click('#lkTStyle button[data-k="area"]'); pg.click('#lkSplit'); pg.wait_for_timeout(300)
+                nav("overview"); pg.wait_for_timeout(800); print("访问目标行数(设 5):", pg.locator("#hostsTbl tbody tr").count()); pg.screenshot(path=f"{out}/{scheme}-{w}-layout.png", full_page=True)
                 for st in ("line", "group", "bars"):
                     pg.click(f'#tStyle button[data-k="{st}"]'); pg.wait_for_timeout(200); pg.locator("#trendCard").screenshot(path=f"{out}/{scheme}-{w}-trend-{st}.png")
                 if scheme == "light":
