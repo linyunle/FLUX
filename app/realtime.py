@@ -10,7 +10,7 @@ from .util import api_call, log, stop
 INTERVAL = max(1, min(10, int(os.environ.get("REALTIME_SEC", "2") or 2)))
 # (时间戳, 直连上, 直连下, 代理上, 代理下, 总连接, 直连连接, 代理连接)
 SAMPLES = collections.deque(maxlen=600)
-LIVE = {"at": 0, "clients": {}, "nodes": {}}
+LIVE = {"at": 0, "clients": {}, "nodes": {}, "hosts": {}}
 # (时间戳, mihomo 进程内存, 系统已用, 系统总量),字节
 MEM = collections.deque(maxlen=600)
 
@@ -56,7 +56,7 @@ def run():
             ptype = dict(col.ptype) if col else {}
             tot = {"direct": [0, 0], "proxy": [0, 0]}
             cnt = {"direct": 0, "proxy": 0}
-            lc, ln = {}, {}
+            lc, ln, lh = {}, {}, {}
             new_seen, first = {}, not last_t
             for cn in conns:
                 cid = cn.get("id")
@@ -84,7 +84,9 @@ def run():
                     tot[grp][0] += du
                     tot[grp][1] += dd
                     cnt[grp] += 1
-                for store, key in ((lc, client), (ln, node)):
+                hk = (str(m.get("host") or "").strip().lower() or str(m.get("sniffHost") or "").strip().lower()
+                      or str(m.get("destinationIP") or "").strip() or "unknown")
+                for store, key in ((lc, client), (ln, node), (lh, hk)):
                     a = store.setdefault(key, [0, 0, 0])
                     a[0] += 1
                     a[1] += du
@@ -97,7 +99,7 @@ def run():
                                 tot["proxy"][0] / elapsed, tot["proxy"][1] / elapsed,
                                 len(conns), cnt["direct"], cnt["proxy"]))
             conv = lambda d: {k: {"conns": v[0], "up_rate": v[1] / elapsed, "down_rate": v[2] / elapsed} for k, v in d.items()}
-            LIVE.update(at=int(t0), clients=conv(lc), nodes=conv(ln))
+            LIVE.update(at=int(t0), clients=conv(lc), nodes=conv(ln), hosts=conv(lh))
             STATE.update(ok=True, error="")
             if fail_logged:
                 log("实时速度已恢复")

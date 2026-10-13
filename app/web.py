@@ -117,6 +117,23 @@ def day_range(p):
     return d1, d2
 
 
+def dev_keys_like(kw):
+    """名字 / IP / MAC 里含关键字的设备(返回设备键)。"""
+    kw = kw.lower()
+    con = ro()
+    try:
+        macips = devices.ips_by_dev(con)
+        stored = devices.stored_names(con)
+    finally:
+        con.close()
+    out = []
+    for k, ips in macips.items():
+        name = devices.NAMES.label(k, ips, stored) or ""
+        if kw in (name + " " + " ".join(ips) + " " + k).lower():
+            out.append(k.lower())
+    return out[:200]
+
+
 def filters(p, cols, skip_mode=False, skip_airport=False):
     """cols: 该表有哪些可筛选维度。返回 (where 列表, 参数)。"""
     where, args = [], []
@@ -136,8 +153,21 @@ def filters(p, cols, skip_mode=False, skip_airport=False):
         args += [dom, "%." + dom.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")]
     kw = one(p, "q").strip()
     if kw and "host" in cols:
-        where.append("host LIKE ? ESCAPE '\\'")
-        args.append("%" + kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+        # 全局搜索:域名 / 节点 / 策略组 / 规则 / 设备(名字、IP、MAC)任意一项匹配
+        like = "%" + kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        parts, pa = ["host LIKE ? ESCAPE '\\'", "node LIKE ? ESCAPE '\\'", "client LIKE ? ESCAPE '\\'"], [like, like, like]
+        if "group" in cols:
+            parts.append("grp LIKE ? ESCAPE '\\'")
+            pa.append(like)
+        if "rule" in cols:
+            parts.append("rule LIKE ? ESCAPE '\\'")
+            pa.append(like)
+        keys = dev_keys_like(kw)
+        if keys:
+            parts.append(f"{DEVX} IN ({','.join('?' * len(keys))})")
+            pa += keys
+        where.append("(" + " OR ".join(parts) + ")")
+        args += pa
     ap = one(p, "airport")
     if ap and "node" in cols and not skip_airport:
         d, r = kind_names()
@@ -268,6 +298,21 @@ def q_trace(p):
     return 200, {"from": d1, "to": d2, "cols": cols, "rows": out, "more": more,
                  "total": {"up": sum(v[0] for v in kinds.values()), "down": sum(v[1] for v in kinds.values())},
                  "kinds": {k: {"up": v[0], "down": v[1]} for k, v in kinds.items()}, "dns": dns}
+
+
+def q_protocols(p):
+    d1, d2 = day_range(p)
+    fw, fa = filters(p, {"dev", "node"})
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    con = ro()
+    try:
+        rows = con.execute(f"SELECT proto, SUM(up), SUM(down) FROM proto WHERE {where} GROUP BY proto "
+                           f"ORDER BY SUM(up)+SUM(down) DESC LIMIT 30", [d1, d2] + fa).fetchall()
+        first = con.execute("SELECT MIN(day) FROM proto").fetchone()[0]
+    finally:
+        con.close()
+    return 200, {"from": d1, "to": d2, "since": first or "", "total": {"up": sum(r[1] for r in rows), "down": sum(r[2] for r in rows)},
+                 "rows": [{"key": k, "up": u, "down": d} for k, u, d in rows]}
 
 
 def q_modes(p):
@@ -427,6 +472,7 @@ def q_realtime(p):
     ml = mrows[-1] if mrows else None
     mem = {"mihomo": ml[1] if ml else 0, "used": ml[2] if ml else 0, "total": ml[3] if ml else 0,
            "series": [[round(r[0], 1), r[1], r[2]] for r in mrows]}
+    hosts = [{"host": k, **v} for k, v in sorted(lv.get("hosts", {}).items(), key=lambda kv: -rate(kv[1])) if rate(v) > 0][:60]
     last = rows[-1] if rows else None
     L = lambda i: round(last[i]) if last else 0
     return 200, {
@@ -437,7 +483,7 @@ def q_realtime(p):
                   "series": [[round(r[0], 1), round(r[3]), round(r[4])] for r in rows]},
         "conns": {"total": L(5), "direct": L(6), "proxy": L(7),
                   "series": [[round(r[0], 1), r[5]] for r in rows]},
-        "devices": devs, "nodes": nodes, "mem": mem}
+        "devices": devs, "nodes": nodes, "hosts": hosts, "mem": mem}
 
 
 def q_hours(p):
@@ -541,7 +587,7 @@ def q_live(p):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST

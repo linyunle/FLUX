@@ -77,6 +77,15 @@ try:
     import time as _t; _t.sleep(3)
     rt = get("/api/realtime"); ok(rt["ok"] and len(rt["proxy"]["series"]) >= 2 and rt["proxy"]["down"] > 0 and rt["direct"]["down"] > 0, f"实时:直连/代理分开 {rt['direct']['down']}/{rt['proxy']['down']}")
     ok(rt["mem"]["mihomo"] == 88000000 and rt["mem"]["total"] > 0 and len(rt["mem"]["series"]) >= 2, f"实时:内存 nikki={rt['mem']['mihomo']} 系统={rt['mem']['used']}/{rt['mem']['total']}")
+    pr = get("/api/protocols")
+    ks = {r["key"]: r for r in pr["rows"]}
+    ok("HTTPS / TLS" in ks and "HTTP" in ks and "QUIC / HTTP3" in ks and pr["total"]["down"] > 0, f"应用协议分布 {sorted(ks)}")
+    ok(get("/api/protocols?dev=aa:bb:cc:dd:ee:02")["rows"][0]["key"] == "HTTP", "协议:按设备筛选")
+    gq = get("/api/summary?by=host&q=HK-01")["rows"]
+    ok(gq and {r["key"] for r in gq} >= {"youtube.com", "netflix.com"} and "baidu.com" not in {r["key"] for r in gq}, "全局搜索:按节点名")
+    ok(get("/api/summary?by=host&q=RuleSet")["rows"], "全局搜索:按规则")
+    ok(get("/api/summary?by=host&q=192.168.1.20")["rows"][0]["key"] in ("baidu.com", "dl.drive.quark.cn"), "全局搜索:按设备 IP")
+    ok(len(rt["hosts"]) >= 3 and rt["hosts"][0]["host"], f"实时:活跃域名 {len(rt['hosts'])} 个")
     tr = get("/api/trace?host=youtube.com&cols=client,node,group,rule")
     ok(tr["rows"] and tr["rows"][0]["kind"] == "proxy" and tr["rows"][0]["node"] == "HK-01" and tr["rows"][0]["rule"] == "RuleSet" and tr["kinds"]["proxy"]["down"] > 0, "追踪:设备→节点→规则")
     ok(any(x["ip"] == "1.1.1.1" and x["mode"] == "normal" for x in tr["dns"].get("youtube.com", [])), "追踪:DNS 解析 IP 和方式")

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" id="tc" content="#f6f6f4">
 <title>FLUX</title>
 <link rel="icon" id="fav" type="image/png" href="/favicon.png">
@@ -202,7 +202,7 @@ html{background:var(--bg)}
  .brand{flex:1 0 100%}
  .sfoot,.footrow,.verrow{display:contents}
  #ver{display:inline-block!important;margin-left:auto}.brand .sp{display:none}
- .side #hostQ{order:3;flex:1 1 0;min-width:0;width:auto!important;padding:3px 8px;font-size:12px}
+ .side #hostQ{order:3;flex:1 1 0;min-width:0;width:auto!important;padding:2px 8px}
  #newver{order:1}
  .ddside{order:2;flex:1 1 0!important;min-width:0}
  #scStatus{order:4;font-size:0;padding:0 2px!important}#scStatus #conn{font-size:0}#scStatus .dot{width:10px;height:10px;margin:0}
@@ -226,6 +226,15 @@ input.sl:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 .trace{margin-top:4px}.trace th{font-size:11px}.trace td{vertical-align:top;font-size:13px;overflow-wrap:anywhere}
 .trace td:first-child{max-width:220px}
 .xbox .dnsbox{margin:4px 0 6px;line-height:1.6}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+.nav{transition:transform .25s ease,opacity .25s ease}
+.proto-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--hover);margin:4px 0 8px}
+.proto-bar i{display:block;height:100%;min-width:2px}
+.pdot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+@media(max-width:820px){
+ input,select,textarea{font-size:16px!important}
+ .nav.hid{transform:translate(-50%,calc(100% + 1.5cm + env(safe-area-inset-bottom)));opacity:0;pointer-events:none}
+}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
@@ -270,7 +279,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="seg" id="range" role="group" aria-label="时间范围"></div>
   <span id="custom" style="display:none"><input type="date" id="d1"> – <input type="date" id="d2"></span>
   <div class="seg" id="mode" role="group" aria-label="流向"></div>
-  <input id="hostQ" placeholder="搜索访问目标" style="width:150px">
+  <input id="hostQ" placeholder="全局搜索:设备 / 域名 / 节点 / 规则" style="width:230px;max-width:100%">
 </div>
 <div id="chips"></div>
 <div class="tiles" id="tiles"><div id="tilesData" style="display:contents"></div><div class="tile" id="tConn"><div class="l">连接数</div><div class="v" id="tConnV">–</div><div class="s" id="tConnS">&nbsp;</div></div></div>
@@ -300,6 +309,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div>
   <div class="card gcard" id="rtdevCard"><h2>此刻最活跃的设备</h2><div id="rtDev" class="lbody"></div></div>
   <div class="card gcard" id="rtnodeCard"><h2>此刻最活跃的节点</h2><div id="rtNode" class="lbody"></div></div>
+  <div class="card gcard" id="rthostCard"><h2>此刻最活跃的域名或 IP</h2><div id="rtHost" class="lbody"></div></div>
   <div class="card gcard" id="devtopCard">
     <h2>设备流量消耗 Top<span class="seg" id="dtMode" role="group" aria-label="流向"></span><span class="sp"></span><span class="sub">点一行看它访问的域名去向</span></h2>
     <div class="scroll lbody" id="dtTbl"></div><div id="dtPager"></div>
@@ -317,6 +327,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="sub cl" id="cl2"></div><div class="chartbox" id="chart2"></div>
     <div class="scroll" id="chartTable" style="display:none"></div>
   </div>
+  <div class="card gcard" id="protoCard"><h2>应用协议分布 <span class="sub" id="protoNote"></span></h2><div id="protoBody"></div></div>
   <div class="card gcard" id="hostsCard"><h2>访问目标 Top <span class="sub">点一行看 设备 / 规则 / 节点 / DNS</span></h2><div class="scroll lbody" id="hostsTbl"></div></div>
 </section>
 
@@ -492,10 +503,10 @@ function renderChrome(){
   $("#nav").innerHTML=TABS.map(([k,l])=>`<button class="navi ${k==="settings"?"sep":""}" role="tab" title="${l}" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}<span class="nl">${l}</span></button>`).join("");
   $("#nav").onclick=e=>{const b=e.target.closest(".navi");if(b){S.tab=b.dataset.k;if(S.tab==="devices")S.dd="";if(S.tab==="nodes")S.nd="";showTab();refresh()}};
   autoHide();const n=S.devs.size;$("#devBtn").textContent="设备:"+(n?n+" 台":"全部")+" ▾";
-  const ch=[];if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);if(S.airport)ch.push(["airport","机场 "+S.airport]);
+  const ch=[];if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);if(S.airport)ch.push(["airport","机场 "+S.airport]);if(S.q)ch.push(["q","搜索 "+S.q]);
   $("#chips").innerHTML=ch.map(([k,t])=>`<span class="chip">${esc(t)} <b data-k="${k}" title="取消" role="button" tabindex="0">×</b></span>`).join(" ");
 }
-$("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";renderChrome();syncAp();refresh()}};
+$("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";if(b.dataset.k==="q")$("#hostQ").value="";renderChrome();syncAp();refresh()}};
 function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=S.tab==="settings"?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
@@ -561,7 +572,7 @@ function drawChart(box,rows,ser,style,H,labelFn,tipFn){
   }
   rows.forEach((r,i)=>{if(i%every===0)g+=`<text x="${cx(i)}" y="${H-6}" text-anchor="middle">${esc(labelFn(r))}</text>`;
     g+=`<rect class="hit" data-i="${i}" x="${L+bw*i}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>`});
-  box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="流量趋势">${g}</svg><div class="tip"></div>`;
+  box.style.minHeight=H+"px";box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="流量趋势">${g}</svg><div class="tip"></div>`;
   const tip=box.querySelector(".tip");
   box.onmousemove=e=>{const h=e.target.closest(".hit");if(!h){tip.style.display="none";return}
     const r=rows[+h.dataset.i];tip.innerHTML=tipFn(r);tip.style.display="block";
@@ -610,11 +621,13 @@ function rowsTable(el,j,cols,onclick,selKey){
   if(onclick)el.querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(tr&&tr.dataset.i!==undefined&&!e.target.closest("button,a")&&j.rows[+tr.dataset.i].key!=="")onclick(j.rows[+tr.dataset.i])}
 }
 /* 点一行在下面展开明细:loader(row) 返回 Promise<html>;openSet 记住哪些行是展开的,刷新后保持 */
+const EXPC=new Map();
 function paintExp(el,rows,openSet,loader,ncol){
   el.querySelectorAll("tr.exp").forEach(x=>x.remove());
   rows.forEach((r,i)=>{if(!openSet.has(r.key))return;const tr=el.querySelector(`tr[data-i="${i}"]`);if(!tr)return;
-    tr.classList.add("sel");const x=document.createElement("tr");x.className="exp";x.innerHTML=`<td colspan="${ncol}"><div class="xbox sub">加载中…</div></td>`;tr.after(x);
-    loader(r).then(h=>{x.firstChild.innerHTML=`<div class="xbox">${h}</div>`}).catch(()=>{x.firstChild.innerHTML='<div class="xbox sub">读取失败</div>'})})}
+    const ck=el.id+"|"+r.key,old=EXPC.get(ck);
+    tr.classList.add("sel");const x=document.createElement("tr");x.className="exp";x.innerHTML=`<td colspan="${ncol}">${old?`<div class="xbox">${old}</div>`:'<div class="xbox sub">加载中…</div>'}</td>`;tr.after(x);
+    loader(r).then(h=>{EXPC.set(ck,h);x.firstChild.innerHTML=`<div class="xbox">${h}</div>`}).catch(()=>{if(!old)x.firstChild.innerHTML='<div class="xbox sub">读取失败</div>'})})}
 function expTable(el,j,cols,openSet,loader){
   rowsTable(el,j,cols,r=>{if(openSet.has(r.key))openSet.delete(r.key);else openSet.add(r.key);el.querySelectorAll("tr.sel").forEach(t=>t.classList.remove("sel"));paintExp(el,j.rows,openSet,loader,cols.length)});
   paintExp(el,j.rows,openSet,loader,cols.length)}
@@ -647,9 +660,17 @@ const cKey=h=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没
 S.ddHostOpen=new Set();S.ddNodeOpen=new Set();S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
 function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal],S.hostOpen,
   r=>trace(base({host:r.key}),["client","node","group","rule"],20)))}
-S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,snap:null,cur:[],page:[]},devtop:{p:0}};
+S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,snap:null,cur:[],page:[]},rthost:{p:0,pause:false,snap:null,cur:[],page:[]},devtop:{p:0}};
 function pagerBar(k,total,per,paused){const n=Math.max(1,Math.ceil(total/per)),p=Math.max(0,Math.min(S.pg[k].p,n-1));
   return `<div class="pager" data-k="${k}">${paused===undefined?"":`<button data-a="pause" class="${paused?"pri":""}" title="${paused?"继续刷新":"暂停刷新,方便查看内容"}">${paused?"▶ 继续":"⏸ 暂停"}</button>`}<span class="sub">${total} 个</span><span class="sp"></span><button data-a="prev" ${p<=0?"disabled":""} aria-label="上一页">‹</button><span class="sub pgn">${p+1} / ${n}</span><button data-a="next" ${p>=n-1?"disabled":""} aria-label="下一页">›</button></div>`}
+const PCOL=["#4c78a8","#f58518","#54a24b","#e45756","#79706e","#b279a2","#ff9da6","#9d755d","#bab0ac","#72b7b2"];
+function loadProto(){load("proto","/api/protocols",base(),j=>{
+  const T=j.total.up+j.total.down;
+  $("#protoNote").textContent=j.since&&j.since>j.from?`从 ${j.since} 开始统计(升级前没有这项数据)`:"按传输层 + 目标端口判断,不是深度识别";
+  if(!j.rows.length||!T){$("#protoBody").innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会统计)</div>';return}
+  let rows=j.rows.slice(0,9);const rest=j.rows.slice(9);if(rest.length)rows.push({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0)});
+  $("#protoBody").innerHTML=`<div class="proto-bar" role="img" aria-label="协议占比">${rows.map((r,i)=>`<i style="width:${(r.up+r.down)/T*100}%;background:${PCOL[i%PCOL.length]}" title="${esc(r.key)} ${Math.round((r.up+r.down)/T*100)}%"></i>`).join("")}</div>
+  <table><thead><tr><th>协议</th><th class="n">占比</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td><span class="pdot" style="background:${PCOL[i%PCOL.length]}"></span>${esc(r.key)}</td><td class="n">${((r.up+r.down)/T*100).toFixed(1)}%</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`})}
 function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direct","直连"]],S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();S.pg.devtop.p=0;loadDevTop()});
   load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:100},j=>{S.dtJ=j;paintDevTop()})}
 function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=S.pg.devtop,n=Math.max(1,Math.ceil(j.rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
@@ -657,11 +678,12 @@ function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=
     r=>trace(base({mode:S.dtMode,dev:r.key}),["host","node","group","rule"],15));
   $("#dtPager").innerHTML=j.rows.length>per?pagerBar("devtop",j.rows.length,per):""}
 /* 此刻最活跃的设备 / 节点:固定行数、翻页、可暂停、点一行看详情 */
-function paintPg(k){const st=S.pg[k],dev=k==="rtdev",el=$(dev?"#rtDev":"#rtNode"),per=rowsOf(k);
+const PGCFG={rtdev:["#rtDev",r=>r.name||r.key],rtnode:["#rtNode",r=>r.node],rthost:["#rtHost",r=>r.host]};
+function paintPg(k){const st=S.pg[k],el=$(PGCFG[k][0]),per=rowsOf(k);
   const rows=(st.pause&&st.snap)?st.snap:(st.cur||[]);
   const n=Math.max(1,Math.ceil(rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
   const page=rows.slice(st.p*per,st.p*per+per);st.page=page;
-  const nm=dev?(r=>r.name||r.key):(r=>r.node);
+  const nm=PGCFG[k][1];
   let h=page.map((r,i)=>`<tr class="click" data-i="${i}"><td class="k" title="${esc(nm(r))}">${esc(nm(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
   if(!page.length)h='<tr><td colspan="4" style="color:var(--muted)">现在没有明显的流量</td></tr>';
   for(let i=Math.max(page.length,1);i<per;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
@@ -672,25 +694,27 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
   if(a==="prev")st.p--;else if(a==="next")st.p++;
   else if(a==="pause"){st.pause=!st.pause;st.snap=st.pause?JSON.parse(JSON.stringify(st.cur||[])):null}
   if(k==="devtop")paintDevTop();else paintPg(k)});
-for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"]])$(id).addEventListener("click",e=>{
+for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
 /* 点一行弹出的详情 */
 const miniKV=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td class="k" title="${esc(r.key)}">${esc(r.key)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 function updDetailLive(){const m=S.dm;if(!m||!$("#dtl").classList.contains("open")||!S.rt)return;
-  const list=m.kind==="dev"?S.rt.devices:S.rt.nodes,r=list.find(x=>(m.kind==="dev"?x.key:x.node)===m.key);
+  const list=m.kind==="dev"?S.rt.devices:m.kind==="host"?(S.rt.hosts||[]):S.rt.nodes,f={dev:x=>x.key,node:x=>x.node,host:x=>x.host}[m.kind],r=list.find(x=>f(x)===m.key);
   $("#dtlLive").innerHTML=r?`此刻 ${r.conns} 个连接 · ↓ ${rate(r.down_rate)} · ↑ ${rate(r.up_rate)}`:'<span class="sub">此刻没有活动连接</span>'}
-function openDetail(kind,r){const dev=kind==="dev",key=dev?r.key:r.node,name=dev?(r.name||r.key):r.node,id=(S.dtlSeq=(S.dtlSeq||0)+1),special=!dev&&(key==="直连"||key==="拒绝");
-  S.dm={kind,key};$("#dtlTitle").textContent=(dev?"设备 · ":"节点 · ")+name;updDetailLive();
-  const o=dev?base({dev:key}):special?base({mode:key==="直连"?"direct":"reject",node:""}):base({node:key,airport:"",group:"",rule:""}),d=dates();
+function openDetail(kind,r){const dev=kind==="dev",hk=kind==="host",key=dev?r.key:hk?r.host:r.node,name=dev?(r.name||r.key):key,id=(S.dtlSeq=(S.dtlSeq||0)+1),special=kind==="node"&&(key==="直连"||key==="拒绝");
+  S.dm={kind,key};$("#dtlTitle").textContent=({dev:"设备 · ",node:"节点 · ",host:"域名 / IP · "})[kind]+name;updDetailLive();
+  const o=dev?base({dev:key,q:""}):hk?base({host:key,q:""}):special?base({mode:key==="直连"?"direct":"reject",node:"",q:""}):base({node:key,airport:"",group:"",rule:"",q:""}),d=dates();
   $("#dtlRange").textContent=`下面的统计范围:${d.from===d.to?d.from:d.from+" ~ "+d.to}(在顶部切换时间范围)`;
   const sec=(t,i)=>`<h4>${t}</h4><div id="${i}"><span class="sub">加载中…</span></div>`;
-  $("#dtlBody").innerHTML=dev?sec("流量去向追踪(域名 → 规则 → 节点)","dx1")+sec("用到的节点","dx2")+sec("命中规则","dx3"):sec("连接的设备","dx1")+sec("流量去向追踪(设备 → 域名 → 规则)","dx2")+sec("命中规则","dx3");
-  $("#dtlAct").innerHTML=special?"":`<button id="dtlPage">${dev?"查看设备详情页":"查看节点详情页"}</button><button id="dtlOnly" class="pri">${dev?"在概览里只看这台设备":"在概览里只看这个节点"}</button>`;
-  if(!special){$("#dtlPage").onclick=()=>{closeM("#dtl");if(dev){S.tab="devices";S.dd=key}else{S.tab="nodes";S.nd=key;S.ndDevOpen.clear();S.ndHostOpen.clear()}showTab();refresh()};
+  $("#dtlBody").innerHTML=dev?sec("流量去向追踪(域名 → 规则 → 节点)","dx1")+sec("用到的节点","dx2")+sec("命中规则","dx3"):hk?sec("谁在访问 · 走哪个节点 · 命中哪条规则 · DNS","dx1")+sec("用到的节点","dx2")+sec("命中规则","dx3"):sec("连接的设备","dx1")+sec("流量去向追踪(设备 → 域名 → 规则)","dx2")+sec("命中规则","dx3");
+  $("#dtlAct").innerHTML=special?"":hk?'<button id="dtlOnly" class="pri">全局搜索这个域名</button>':`<button id="dtlPage">${dev?"查看设备详情页":"查看节点详情页"}</button><button id="dtlOnly" class="pri">${dev?"在概览里只看这台设备":"在概览里只看这个节点"}</button>`;
+  if(hk)$("#dtlOnly").onclick=()=>{closeM("#dtl");$("#hostQ").value=key;S.q=key;S.hostOpen.clear();S.dtOpen.clear();autoHide();renderChrome();refresh()};
+  else if(!special){$("#dtlPage").onclick=()=>{closeM("#dtl");if(dev){S.tab="devices";S.dd=key}else{S.tab="nodes";S.nd=key;S.ndDevOpen.clear();S.ndHostOpen.clear()}showTab();refresh()};
     $("#dtlOnly").onclick=()=>{closeM("#dtl");if(dev){S.devs.clear();S.devs.add(key);renderDevList()}else S.node=key;S.tab="overview";showTab();refresh()}}
   openM("#dtl");
   const fill=(el,p,f)=>p.then(x=>{if(S.dtlSeq===id)$(el).innerHTML=f(x)}).catch(()=>{if(S.dtlSeq===id)$(el).innerHTML='<span class="sub">读取失败</span>'});
   if(dev){fill("#dx1",trace(o,["host","node","group","rule"],15),x=>x);fill("#dx2",get("/api/summary",{...o,by:"node",limit:10}),x=>miniKV(x.rows))}
+  else if(hk){fill("#dx1",trace(o,["client","node","group","rule"],15),x=>x);fill("#dx2",get("/api/summary",{...o,by:"node",limit:10}),x=>miniKV(x.rows))}
   else{fill("#dx1",get("/api/summary",{...o,by:"client",limit:10}),x=>miniDevs(x.rows));fill("#dx2",trace(o,["client","host","node","group","rule"],15),x=>x)}
   fill("#dx3",get("/api/summary",{...o,by:"rule",limit:8}),x=>miniKV(x.rows))}
 $("#dtlX").onclick=()=>closeM("#dtl");
@@ -789,7 +813,7 @@ function drawRt(box,samples,H,o={}){
     const line=(i,col)=>samples.length?`<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" points="${samples.map(x=>X(x[0]).toFixed(1)+","+Y(x[i]).toFixed(1)).join(" ")}"/>`:"";
     g+=line(2,cA)+line(1,cB)}
   g+=`<line class="rx" y1="${T}" y2="${T+ph}" stroke="var(--muted)" style="display:none"/><rect class="rh" x="${L}" y="${T}" width="${pw}" height="${ph}" fill="transparent"/>`;
-  box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="实时图表">${g}</svg><div class="tip"></div>`;
+  box.style.minHeight=H+"px";box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="实时图表">${g}</svg><div class="tip"></div>`;
   box._w=wv;if(wv)WAVES.add(box);else WAVES.delete(box);
   const tip=box.querySelector(".tip"),xl=box.querySelector(".rx");
   box.onmousemove=e=>{if(!samples.length||!e.target.closest(".rh"))return;
@@ -848,8 +872,8 @@ function loadRealtime(){if(document.hidden)return;
   load("rt","/api/realtime",{seconds:120,dev:[...S.devs].join(",")},j=>{
     S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;$("#tConnS").textContent=`直连 ${j.conns.direct} · 代理 ${j.conns.proxy}`;updDetailLive();if(S.tab!=="overview")return;
     paintRt(j);
-    S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;
-    if(!S.pg.rtdev.pause||!S.pg.rtdev.snap)paintPg("rtdev");if(!S.pg.rtnode.pause||!S.pg.rtnode.snap)paintPg("rtnode");
+    S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
+    for(const k of ["rtdev","rtnode","rthost"])if(!S.pg[k].pause||!S.pg[k].snap)paintPg(k);
     rtList($("#rtSel"),j.devices.filter(d=>S.devs.has(d.key)),r=>r.name||r.key,"这台设备现在没有流量")})}
 setInterval(loadRealtime,2000);
 const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r.nodes.map(n=>`${esc(n.node)} <span class="sub">${Math.round(n.bytes/Math.max(1,r.up+r.down)*100)}%</span>`).join("<br>")};
@@ -880,16 +904,16 @@ const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:
 const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
-const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],hosts:["#hostsCard","访问目标 Top"]};
-const LISTS=["rtdev","rtnode","devtop","hosts"],ROWS={s:5,m:8,l:12};
+const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","此刻最活跃的域名或 IP"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],proto:["#protoCard","应用协议分布"],hosts:["#hostsCard","访问目标 Top"]};
+const LISTS=["rtdev","rtnode","rthost","devtop","hosts"],ROWS={s:5,m:8,l:12};
 const HROWS=[5,8,10,15,20,30,50,100];
 const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.hosts.rows)?+TH.cards.hosts.rows:30):(ROWS[(TH.cards[k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
+const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m"},proto:{w:12,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
-const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
+const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","rthost","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
@@ -902,7 +926,7 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
-  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf(k==="mem"?"rt":"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
+  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",rthost:"devtop",proto:"hosts"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
   if(!PRESETS[r.preset])r.preset="default";r.v=3;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
@@ -944,11 +968,11 @@ function applyTheme(){
 /* 概览里只筛了设备时,隐藏和该设备无关的全局内容,改显示「所选设备此刻」 */
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
-    if(k==="hosts")el.classList.toggle("gone",TH.hide.includes("hosts")&&!q);
+    if(k==="hosts"||k==="devtop"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.toggle("autohide",k==="devtop"&&!q&&one)}
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
 
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop()}}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadProto()}}}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
   sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
@@ -968,7 +992,7 @@ function renderLook(){
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
-    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
+    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${k==="proto"?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
@@ -1006,7 +1030,13 @@ $("#lkReset").onclick=()=>{TH=themeDefault();themeChanged(true)};
 $("#btnMode").onclick=()=>{TH.mode={auto:"light",light:"dark",dark:"auto"}[TH.mode]||"light";themeChanged()};
 mq.addEventListener&&mq.addEventListener("change",()=>{if(TH.mode==="auto"){applyTheme();if(S.tab==="settings"&&S.set==="look")renderLook()}});
 applyTheme();applyCollapse();
-{const mqm=matchMedia("(max-width:820px)"),place=()=>{const q=$("#hostQ");if(mqm.matches){$(".side").appendChild(q);q.placeholder="搜索目标"}else{$("#filters").appendChild(q);q.placeholder="搜索访问目标"}};
+/* 手机:禁止双指 / 手势缩放;向上滑隐藏浮动导航,向下滑显示 */
+document.addEventListener("gesturestart",e=>e.preventDefault());document.addEventListener("gesturechange",e=>e.preventDefault());
+document.addEventListener("touchmove",e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
+{let ly=scrollY;addEventListener("scroll",()=>{const y=scrollY,nav=$("#nav"),dy=y-ly;
+  if(y<40||innerHeight+y>=document.documentElement.scrollHeight-6||dy<-6)nav.classList.remove("hid");else if(dy>6)nav.classList.add("hid");
+  if(Math.abs(dy)>6)ly=y},{passive:true})}
+{const mqm=matchMedia("(max-width:820px)"),place=()=>{const q=$("#hostQ");if(mqm.matches){$(".side").appendChild(q);q.placeholder="全局搜索"}else{$("#filters").appendChild(q);q.placeholder="全局搜索:设备 / 域名 / 节点 / 规则"}};
  place();mqm.addEventListener&&mqm.addEventListener("change",place)}
 
 /* ---------- 机场 / 节点 ---------- */
@@ -1095,7 +1125,7 @@ async function status(){try{const s=await get("/api/status");
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
-  if(S.tab==="overview"){loadTrend();loadHosts();loadDevTop();loadRealtime()}
+  if(S.tab==="overview"){loadTrend();loadHosts();loadDevTop();loadProto();loadRealtime()}
   else if(S.tab==="airports")loadAirports();
   else if(S.tab==="nodes")loadNodes();
   else if(S.tab==="devices")loadDevicesTab();
@@ -1103,7 +1133,7 @@ function refresh(){
   else if(S.tab==="rules")loadRules();
   else if(S.tab==="settings")loadSettings();
 }
-$("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();refresh()},300)}})();
+$("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();S.dtOpen.clear();renderChrome();refresh()},300)}})();
 $("#d1").onchange=$("#d2").onchange=refresh;
 window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadRealtime()),200)}})());
 renderChrome();showTab();status();loadDevices();refresh();

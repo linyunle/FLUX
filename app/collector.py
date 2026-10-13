@@ -18,6 +18,29 @@ BUILTIN_TYPES = {"direct", "reject", "rejectdrop", "compatible", "pass", "dns"}
 COLLECTOR = None
 
 
+PORTS = {80: "HTTP", 8080: "HTTP", 443: "HTTPS / TLS", 8443: "HTTPS / TLS", 53: "DNS", 853: "DNS-over-TLS", 22: "SSH",
+         21: "FTP", 25: "邮件 SMTP", 465: "邮件 SMTP", 587: "邮件 SMTP", 110: "邮件 POP3", 995: "邮件 POP3", 143: "邮件 IMAP",
+         993: "邮件 IMAP", 123: "NTP 校时", 3478: "STUN / 语音", 3479: "STUN / 语音", 5222: "即时通讯 XMPP", 1883: "MQTT", 8883: "MQTT",
+         3389: "远程桌面 RDP", 445: "SMB 文件共享", 139: "SMB 文件共享", 5353: "mDNS", 1900: "SSDP", 51820: "WireGuard",
+         1194: "OpenVPN", 5060: "SIP 电话", 554: "RTSP 视频流", 1935: "RTMP 直播"}
+
+
+def classify(m):
+    """按传输层 + 目标端口粗分应用协议(mihomo 不提供深度识别)。"""
+    net = str(m.get("network") or "").lower()
+    try:
+        port = int(m.get("destinationPort") or 0)
+    except ValueError:
+        port = 0
+    if net == "udp" and port == 443:
+        return "QUIC / HTTP3"
+    if port in PORTS:
+        return PORTS[port] + (" (UDP)" if net == "udp" and port not in (53, 123, 3478, 3479, 5353, 1900, 51820, 1194, 5060) else "")
+    if 6881 <= port <= 6999:
+        return "BT 下载(端口推测)"
+    return "UDP 其他" if net == "udp" else "TCP 其他" if net == "tcp" else "其他"
+
+
 class Collector:
     def __init__(self, con):
         global COLLECTOR
@@ -36,6 +59,7 @@ class Collector:
         self.nodeinfo = {}
         self.ndirty = set()
         self.dns = {}
+        self.pbuf = {}
         self.wan_last, self.wan_warned = {}, False
         self.live = {"at": 0, "nodes": {}, "clients": {}}
         self.status = {"ok": False, "error": "尚未连接", "last_ok": 0, "rev": -1}
@@ -153,6 +177,9 @@ class Collector:
             grp = str(chains[-1]) if chains else ""
             r, p = str(c.get("rule") or ""), str(c.get("rulePayload") or "")
             rule = ((r + "," + p) if p else r)[:80] or "unknown"
+            pa = self.pbuf.setdefault((day, client, node, classify(m)), [0, 0])
+            pa[0] += du
+            pa[1] += dd
             a = self.buf.setdefault((day, client, node, grp, rule, host), [0, 0])
             a[0] += du
             a[1] += dd
@@ -214,7 +241,8 @@ class Collector:
         buf, hbuf, wbuf, whbuf = self.buf, self.hbuf, self.wbuf, self.whbuf
         ipd, nd = self.neigh.dirty, set(self.ndirty)
         dns, self.dns = self.dns, {}
-        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns):
+        pbuf, self.pbuf = self.pbuf, {}
+        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns or pbuf):
             return
         self.buf, self.hbuf, self.wbuf, self.whbuf = {}, {}, {}, {}
         self.neigh.dirty = {}
@@ -240,6 +268,10 @@ class Collector:
                     "INSERT INTO ipmap(ip,mac,seen) VALUES(?,?,?) ON CONFLICT(ip) DO UPDATE SET mac=excluded.mac, seen=excluded.seen",
                     [(ip, mac, now) for ip, mac in ipd.items()])
                 self.con.executemany(
+                    "INSERT INTO proto(day,client,node,proto,up,down) VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(day,client,node,proto) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
+                    [(*k, v[0], v[1]) for k, v in pbuf.items()])
+                self.con.executemany(
                     "INSERT INTO dns(host,ip,mode,last) VALUES(?,?,?,?) ON CONFLICT(host,ip) DO UPDATE SET mode=excluded.mode, last=excluded.last",
                     [(h, ip, md, now) for (h, ip), md in dns.items()])
                 for node in nd:
@@ -259,6 +291,10 @@ class Collector:
             self.ndirty |= nd
             for k, v in dns.items():
                 self.dns.setdefault(k, v)
+            for k, v in pbuf.items():
+                a = self.pbuf.setdefault(k, [0, 0])
+                a[0] += v[0]
+                a[1] += v[1]
             log("写库失败,稍后重试:", e)
 
     def prune(self):
@@ -267,6 +303,7 @@ class Collector:
         with self.con:
             self.con.execute("DELETE FROM traffic WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM wan WHERE day < ?", (day_cut,))
+            self.con.execute("DELETE FROM proto WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM wan_hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM ipmap WHERE seen < ?", (int(time.time()) - 30 * 86400,))
