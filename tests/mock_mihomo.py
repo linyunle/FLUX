@@ -14,7 +14,7 @@ def conns():
     t = STATE["tick"]
     def c(i, src, chains, rule, host, k, inbound="mixed-in"):
         return {"id": i, "upload": 1000 * k * t, "download": 5000 * k * t, "chains": chains, "rule": rule, "rulePayload": "",
-                "metadata": {"sourceIP": src, "host": host, "destinationIP": "1.1.1.1", "remoteDestination": "203.0.113.5:443",
+                "metadata": {"sourceIP": src, "host": host, "destinationIP": "1.1.1.1" if not host.startswith("netflix") else "", "dnsMode": "normal" if not host.startswith("netflix") else "fake-ip", "remoteDestination": "203.0.113.5:443",
                             "inboundName": inbound, "inboundPort": "7890"}}
     return [
         c("a", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "youtube.com", 1),

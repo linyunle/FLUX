@@ -223,6 +223,9 @@ input.sl:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 .slrow button{padding:0 9px;line-height:22px}
 .navprev{display:inline-block;width:96px;height:28px;border-radius:8px;position:relative;overflow:hidden;background:repeating-linear-gradient(45deg,var(--line) 0 6px,var(--hover) 6px 12px)}
 .navprev i{position:absolute;inset:4px 8px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) var(--navop,45%),transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.trace{margin-top:4px}.trace th{font-size:11px}.trace td{vertical-align:top;font-size:13px;overflow-wrap:anywhere}
+.trace td:first-child{max-width:220px}
+.xbox .dnsbox{margin:4px 0 6px;line-height:1.6}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
@@ -298,7 +301,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card gcard" id="rtdevCard"><h2>此刻最活跃的设备</h2><div id="rtDev" class="lbody"></div></div>
   <div class="card gcard" id="rtnodeCard"><h2>此刻最活跃的节点</h2><div id="rtNode" class="lbody"></div></div>
   <div class="card gcard" id="devtopCard">
-    <h2>设备流量消耗 Top<span class="seg" id="dtMode" role="group" aria-label="流向"></span><span class="sp"></span><span class="sub">点一行看它访问了哪些域名</span></h2>
+    <h2>设备流量消耗 Top<span class="seg" id="dtMode" role="group" aria-label="流向"></span><span class="sp"></span><span class="sub">点一行看它访问的域名去向</span></h2>
     <div class="scroll lbody" id="dtTbl"></div><div id="dtPager"></div>
   </div>
   <div class="card gcard" id="trendCard">
@@ -314,7 +317,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="sub cl" id="cl2"></div><div class="chartbox" id="chart2"></div>
     <div class="scroll" id="chartTable" style="display:none"></div>
   </div>
-  <div class="card gcard" id="hostsCard"><h2>访问目标 Top <span class="sub">点一行看是哪些设备访问的</span></h2><div class="scroll lbody" id="hostsTbl"></div></div>
+  <div class="card gcard" id="hostsCard"><h2>访问目标 Top <span class="sub">点一行看 设备 / 规则 / 节点 / DNS</span></h2><div class="scroll lbody" id="hostsTbl"></div></div>
 </section>
 
 <section id="tab-airports" style="display:none">
@@ -352,8 +355,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="tiles" id="ddTiles"></div>
     <div class="dgrid">
       <div class="card" style="grid-column:span 12"><h2>流量趋势 <span class="legend" id="ddLegend"></span><span class="sp"></span><span class="sub" id="ddTrNote"></span></h2><div class="chartbox" id="ddChart"></div></div>
-      <div class="card"><h2>访问目标 Top</h2><div class="scroll" id="ddHosts"></div></div>
-      <div class="card"><h2>用到的节点</h2><div class="scroll" id="ddNodes"></div></div>
+      <div class="card"><h2>访问目标 Top <span class="sub">点一行看规则 / 节点 / DNS</span></h2><div class="scroll" id="ddHosts"></div></div>
+      <div class="card"><h2>用到的节点 <span class="sub">点一行看它承载的域名</span></h2><div class="scroll" id="ddNodes"></div></div>
       <div class="card"><h2>策略组</h2><div class="scroll" id="ddGroups"></div></div>
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ddRules"></div></div>
     </div>
@@ -620,13 +623,30 @@ const dirTag=r=>{const t=r.up+r.down;if(!t)return"";const f=(r.direct||0)/t;retu
 /* 小表:设备列表 / 域名列表 */
 const miniDevs=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(devName(r))}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 const miniDoms=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(r.key)}${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td><td>${dirTag(r)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
+const KT={direct:'<span class="tag">直连</span>',proxy:'<span class="tag" style="color:var(--accent);border-color:var(--accent)">代理</span>',reject:'<span class="tag" style="color:var(--bad);border-color:var(--bad)">拒绝</span>'};
+const DNSM={"fake-ip":"fake-ip","normal":"正常解析","redir-host":"redir-host","mapping":"映射","hosts":"hosts 文件"};
+const dnsMode=m=>DNSM[m]||m||"未知方式";
+const dnsEntry=e=>e.ip?`${esc(e.ip)} <span class="sub">(${esc(dnsMode(e.mode))})</span>`:`<span class="sub">${esc(dnsMode(e.mode))}:由代理节点端解析,本机没有 IP 记录</span>`;
+const dnsShort=l=>(l||[]).slice(0,2).map(e=>e.ip?esc(e.ip):esc(dnsMode(e.mode))).join("、");
+function renderTrace(j){
+  const T=j.total.up+j.total.down,K=j.kinds,pc=k=>T?Math.round((K[k].up+K[k].down)/T*100):0,hasH=j.cols.includes("host"),hasC=j.cols.includes("client");
+  let h=`<div class="sub">合计 <b>${fmt(T)}</b>(↓${fmt(j.total.down)} ↑${fmt(j.total.up)}) · 直连 ${pc("direct")}% · 代理 ${pc("proxy")}%${K.reject.up+K.reject.down?` · 拒绝 ${pc("reject")}%`:""}</div>`;
+  if(!hasH){const hs=Object.entries(j.dns);
+    h+=hs.length?`<div class="sub dnsbox"><b>DNS 解析</b>${hs.slice(0,6).map(([host,l])=>`<div>${hs.length>1?esc(host)+" → ":""}${l.slice(0,4).map(dnsEntry).join(";  ")}</div>`).join("")}</div>`:'<div class="sub dnsbox">DNS 解析:暂无记录(升级后新产生的连接才会记)</div>'}
+  if(!j.rows.length)return h+'<span class="sub">没有记录</span>';
+  const who=r=>{const hd=hasH?esc(r.host):"",dn=hasH&&j.dns[r.host]?dnsShort(j.dns[r.host]):"";
+    if(hasC&&hasH)return `${esc(r.name||r.client)}<div class="sub">${hd}${dn?" → "+dn:""}</div>`;
+    if(hasC)return esc(r.name||r.client);return `${hd}${dn?`<div class="sub">→ ${dn}</div>`:""}`};
+  return h+`<table class="trace"><thead><tr>${hasC||hasH?`<th>${hasC&&hasH?"设备 / 域名":hasC?"设备":"域名"}</th>`:""}<th>去向 · 命中规则</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th></tr></thead><tbody>${j.rows.map(r=>
+    `<tr>${hasC||hasH?`<td>${who(r)}</td>`:""}<td>${KT[r.kind]||""} ${esc(r.node||"")}<div class="sub">${esc(r.rule||"–")}${r.group?" · 策略组 "+esc(r.group):""}</div></td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>${j.more?`<div class="sub">只显示最大的 ${j.rows.length} 条</div>`:""}`}
+const trace=(o,cols,limit)=>get("/api/trace",{...o,cols:cols.join(","),limit:limit||15}).then(renderTrace);
 const cTotal={h:"合计",n:1,f:(r,sh)=>`${fmt(r.up+r.down)}<div class="share"><i style="width:${sh}%"></i></div>`};
 const cDown={h:"下行",n:1,s:1,f:r=>fmt(r.down)},cUp={h:"上行",n:1,s:1,f:r=>fmt(r.up)};
 const cKey=h=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':esc(r.key)});
 
-S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
+S.ddHostOpen=new Set();S.ddNodeOpen=new Set();S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
 function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal],S.hostOpen,
-  r=>get("/api/summary",{...base({host:r.key}),by:"client",limit:50}).then(x=>miniDevs(x.rows))))}
+  r=>trace(base({host:r.key}),["client","node","group","rule"],20)))}
 S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,snap:null,cur:[],page:[]},devtop:{p:0}};
 function pagerBar(k,total,per,paused){const n=Math.max(1,Math.ceil(total/per)),p=Math.max(0,Math.min(S.pg[k].p,n-1));
   return `<div class="pager" data-k="${k}">${paused===undefined?"":`<button data-a="pause" class="${paused?"pri":""}" title="${paused?"继续刷新":"暂停刷新,方便查看内容"}">${paused?"▶ 继续":"⏸ 暂停"}</button>`}<span class="sub">${total} 个</span><span class="sp"></span><button data-a="prev" ${p<=0?"disabled":""} aria-label="上一页">‹</button><span class="sub pgn">${p+1} / ${n}</span><button data-a="next" ${p>=n-1?"disabled":""} aria-label="下一页">›</button></div>`}
@@ -634,7 +654,7 @@ function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direc
   load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:100},j=>{S.dtJ=j;paintDevTop()})}
 function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=S.pg.devtop,n=Math.max(1,Math.ceil(j.rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
   expTable($("#dtTbl"),{...j,rows:j.rows.slice(st.p*per,st.p*per+per)},[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.dtOpen,
-    r=>get("/api/domains",{...base({mode:S.dtMode,dev:r.key}),merge:"1",limit:12}).then(x=>miniDoms(x.rows)));
+    r=>trace(base({mode:S.dtMode,dev:r.key}),["host","node","group","rule"],15));
   $("#dtPager").innerHTML=j.rows.length>per?pagerBar("devtop",j.rows.length,per):""}
 /* 此刻最活跃的设备 / 节点:固定行数、翻页、可暂停、点一行看详情 */
 function paintPg(k){const st=S.pg[k],dev=k==="rtdev",el=$(dev?"#rtDev":"#rtNode"),per=rowsOf(k);
@@ -664,14 +684,14 @@ function openDetail(kind,r){const dev=kind==="dev",key=dev?r.key:r.node,name=dev
   const o=dev?base({dev:key}):special?base({mode:key==="直连"?"direct":"reject",node:""}):base({node:key,airport:"",group:"",rule:""}),d=dates();
   $("#dtlRange").textContent=`下面的统计范围:${d.from===d.to?d.from:d.from+" ~ "+d.to}(在顶部切换时间范围)`;
   const sec=(t,i)=>`<h4>${t}</h4><div id="${i}"><span class="sub">加载中…</span></div>`;
-  $("#dtlBody").innerHTML=dev?sec("访问的域名 Top 15","dx1")+sec("用到的节点","dx2")+sec("命中规则","dx3"):sec("连接的设备","dx1")+sec("访问的域名 Top 15","dx2")+sec("命中规则","dx3");
+  $("#dtlBody").innerHTML=dev?sec("流量去向追踪(域名 → 规则 → 节点)","dx1")+sec("用到的节点","dx2")+sec("命中规则","dx3"):sec("连接的设备","dx1")+sec("流量去向追踪(设备 → 域名 → 规则)","dx2")+sec("命中规则","dx3");
   $("#dtlAct").innerHTML=special?"":`<button id="dtlPage">${dev?"查看设备详情页":"查看节点详情页"}</button><button id="dtlOnly" class="pri">${dev?"在概览里只看这台设备":"在概览里只看这个节点"}</button>`;
   if(!special){$("#dtlPage").onclick=()=>{closeM("#dtl");if(dev){S.tab="devices";S.dd=key}else{S.tab="nodes";S.nd=key;S.ndDevOpen.clear();S.ndHostOpen.clear()}showTab();refresh()};
     $("#dtlOnly").onclick=()=>{closeM("#dtl");if(dev){S.devs.clear();S.devs.add(key);renderDevList()}else S.node=key;S.tab="overview";showTab();refresh()}}
   openM("#dtl");
   const fill=(el,p,f)=>p.then(x=>{if(S.dtlSeq===id)$(el).innerHTML=f(x)}).catch(()=>{if(S.dtlSeq===id)$(el).innerHTML='<span class="sub">读取失败</span>'});
-  if(dev){fill("#dx1",get("/api/domains",{...o,merge:"1",limit:15}),x=>miniDoms(x.rows));fill("#dx2",get("/api/summary",{...o,by:"node",limit:10}),x=>miniKV(x.rows))}
-  else{fill("#dx1",get("/api/summary",{...o,by:"client",limit:10}),x=>miniDevs(x.rows));fill("#dx2",get("/api/summary",{...o,by:"host",limit:15}),x=>miniKV(x.rows))}
+  if(dev){fill("#dx1",trace(o,["host","node","group","rule"],15),x=>x);fill("#dx2",get("/api/summary",{...o,by:"node",limit:10}),x=>miniKV(x.rows))}
+  else{fill("#dx1",get("/api/summary",{...o,by:"client",limit:10}),x=>miniDevs(x.rows));fill("#dx2",trace(o,["client","host","node","group","rule"],15),x=>x)}
   fill("#dx3",get("/api/summary",{...o,by:"rule",limit:8}),x=>miniKV(x.rows))}
 $("#dtlX").onclick=()=>closeM("#dtl");
 function loadDevicesTab(){
@@ -701,8 +721,8 @@ function loadDetail(){
     $("#ddLegend").innerHTML=`<span><i style="background:${c.down}"></i>下行(收)</span><span><i style="background:${c.up}"></i>上行(发)</span>`;
     drawChart($("#ddChart"),t.rows,[{k:"down",c:c.down},{k:"up",c:c.up}],TH.trend.style,200,t.lab,tipUD)}).catch(e=>console.warn(e));
   const lim={...o,limit:15};
-  load("dd_h","/api/summary",{...lim,by:"host"},j=>rowsTable($("#ddHosts"),j,[cKey("目标"),cDown,cUp,cTotal]));
-  load("dd_n","/api/summary",{...lim,by:"node"},j=>rowsTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal]));
+  load("dd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ddHosts"),j,[cKey("目标"),cDown,cUp,cTotal],S.ddHostOpen,r=>trace({...o,host:r.key},["node","group","rule"],12)));
+  load("dd_n","/api/summary",{...lim,by:"node"},j=>expTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal],S.ddNodeOpen,r=>trace({...o,node:r.key},["host","node","group","rule"],15)));
   load("dd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ddGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
   load("dd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ddRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
 $("#ddBack").onclick=()=>{S.dd="";loadDevicesTab()};
@@ -721,7 +741,7 @@ function loadDomains(){$("#domMerge").checked=S.merge;
       <td class="k" title="${esc(r.key)}">${esc(r.key)}${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td>
       ${one?"":`<td class="hide-s" style="max-width:240px">${devCell(r)}</td>`}
       <td>${direction(r)}</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td><td class="n hide-s">${fmtDay(r.last)}</td></tr>`).join("")}</tbody></table>`;
-    const ld=r=>get("/api/summary",{...base(S.merge?{dom:r.key}:{host:r.key}),by:"client",limit:100}).then(x=>miniDevs(x.rows));
+    const ld=r=>trace(base(S.merge?{dom:r.key}:{host:r.key}),S.merge&&r.subs>1?["client","host","node","group","rule"]:["client","node","group","rule"],25);
     $("#domTbl").querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(!tr||tr.dataset.i===undefined)return;const r=j.rows[+tr.dataset.i];
       if(S.domOpen.has(r.key))S.domOpen.delete(r.key);else S.domOpen.add(r.key);$("#domTbl").querySelectorAll("tr.sel").forEach(t=>t.classList.remove("sel"));paintExp($("#domTbl"),j.rows,S.domOpen,ld,ncol)};
     paintExp($("#domTbl"),j.rows,S.domOpen,ld,ncol)})}
@@ -1025,9 +1045,9 @@ function loadNodeDetail(){
     drawChart($("#ndChart"),t.rows,[{k:"down",c:c.down},{k:"up",c:c.up}],TH.trend.style,200,t.lab,tipUD)}).catch(e=>console.warn(e));
   const lim={...o,limit:20};
   load("nd_d","/api/summary",{...lim,by:"client"},j=>expTable($("#ndDevs"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.ndDevOpen,
-    r=>get("/api/domains",{...o,dev:r.key,merge:"1",limit:12}).then(x=>miniDoms(x.rows))));
+    r=>trace({...o,dev:r.key},["host","node","group","rule"],15)));
   load("nd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ndHosts"),j,[cKey("目标"),cDown,cUp,cTotal],S.ndHostOpen,
-    r=>get("/api/summary",{...o,host:r.key,by:"client",limit:50}).then(x=>miniDevs(x.rows))));
+    r=>trace({...o,host:r.key},["client","node","group","rule"],20)));
   load("nd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ndGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
   load("nd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ndRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
 $("#ndBack").onclick=()=>{S.nd="";loadNodes()};

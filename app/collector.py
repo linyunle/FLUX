@@ -35,6 +35,7 @@ class Collector:
         self.neigh = devices.Neigh(con)
         self.nodeinfo = {}
         self.ndirty = set()
+        self.dns = {}
         self.wan_last, self.wan_warned = {}, False
         self.live = {"at": 0, "nodes": {}, "clients": {}}
         self.status = {"ok": False, "error": "尚未连接", "last_ok": 0, "rev": -1}
@@ -78,6 +79,20 @@ class Collector:
         return name or "UNKNOWN"
 
     # ---- 一次采样
+    def note_dns(self, m, node):
+        """记下「域名解析到了哪个 IP、用什么方式解析」。fake-ip 下代理连接本机没有真实 IP,只记方式。"""
+        host = (str(m.get("host") or "").strip().lower() or str(m.get("sniffHost") or "").strip().lower())
+        if not host or host == str(m.get("destinationIP") or ""):
+            return
+        ip = str(m.get("destinationIP") or "").strip()
+        mode = str(m.get("dnsMode") or "").strip()[:20]
+        if not ip and (self.ptype.get(node, "").lower() == "direct" or node == "DIRECT"):
+            ip = host_of(str(m.get("remoteDestination") or ""))
+        if ip.startswith(("198.18.", "198.19.")):
+            ip = ""
+        if len(self.dns) < 5000:
+            self.dns[(host[:200], ip)] = mode
+
     def poll(self):
         t0 = time.time()
         data = api_call("/connections")
@@ -114,6 +129,7 @@ class Collector:
                     if remote and self.nodeinfo.get(node, (None, ""))[1] != remote:
                         self.nodeinfo[node] = (self.ptype.get(node, ""), remote)
                         self.ndirty.add(node)
+            self.note_dns(m, node)
             up, down = int(c.get("upload") or 0), int(c.get("download") or 0)
             last = self.seen.get(cid)
             self.seen[cid] = (up, down)
@@ -197,7 +213,8 @@ class Collector:
         self.last_flush = time.time()
         buf, hbuf, wbuf, whbuf = self.buf, self.hbuf, self.wbuf, self.whbuf
         ipd, nd = self.neigh.dirty, set(self.ndirty)
-        if not (buf or hbuf or wbuf or whbuf or ipd or nd):
+        dns, self.dns = self.dns, {}
+        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns):
             return
         self.buf, self.hbuf, self.wbuf, self.whbuf = {}, {}, {}, {}
         self.neigh.dirty = {}
@@ -222,6 +239,9 @@ class Collector:
                 self.con.executemany(
                     "INSERT INTO ipmap(ip,mac,seen) VALUES(?,?,?) ON CONFLICT(ip) DO UPDATE SET mac=excluded.mac, seen=excluded.seen",
                     [(ip, mac, now) for ip, mac in ipd.items()])
+                self.con.executemany(
+                    "INSERT INTO dns(host,ip,mode,last) VALUES(?,?,?,?) ON CONFLICT(host,ip) DO UPDATE SET mode=excluded.mode, last=excluded.last",
+                    [(h, ip, md, now) for (h, ip), md in dns.items()])
                 for node in nd:
                     typ, remote = self.nodeinfo.get(node, ("", ""))
                     self.con.execute(
@@ -237,6 +257,8 @@ class Collector:
                     a[1] += v[1]
             self.neigh.dirty.update(ipd)
             self.ndirty |= nd
+            for k, v in dns.items():
+                self.dns.setdefault(k, v)
             log("写库失败,稍后重试:", e)
 
     def prune(self):
@@ -248,6 +270,12 @@ class Collector:
             self.con.execute("DELETE FROM hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM wan_hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM ipmap WHERE seen < ?", (int(time.time()) - 30 * 86400,))
+            self.con.execute("DELETE FROM dns WHERE last < ?", (int(time.time()) - 30 * 86400,))
+            try:  # 每个域名只留最近 6 条解析记录
+                self.con.execute("DELETE FROM dns WHERE rowid IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER "
+                                 "(PARTITION BY host ORDER BY last DESC) rn FROM dns) WHERE rn > 6)")
+            except Exception:
+                pass
         log(f"已清理 {day_cut} 之前的明细")
 
     def on_conf_change(self):

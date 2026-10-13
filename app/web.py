@@ -215,6 +215,61 @@ def q_summary(p):
     return 200, {"from": d1, "to": d2, "by": by, "total": {"up": tot[0], "down": tot[1]}, "count": n_all, "rows": out}
 
 
+TR_COLS = {"client": DEVX, "host": "host", "node": "node", "group": "grp", "rule": "rule"}
+
+
+def q_trace(p):
+    """流量追踪:设备 → 域名 → 规则 → 策略组 → 节点 的流量明细,附带 DNS 解析记录。cols 决定按哪几列分组。"""
+    cols = [c for c in one(p, "cols", "client,host,node,group,rule").split(",") if c in TR_COLS] or ["client", "host", "node"]
+    try:
+        limit = max(1, min(100, int(one(p, "limit", "20"))))
+    except ValueError:
+        limit = 20
+    d1, d2 = day_range(p)
+    fw, fa = filters(p, T_COLS)
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    args = [d1, d2] + fa
+    sel = ", ".join(TR_COLS[c] for c in cols)
+    con = ro()
+    try:
+        rows = con.execute(f"SELECT {sel}, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY {sel} "
+                           f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", (*args, limit + 1)).fetchall()
+        by_node = con.execute(f"SELECT node, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY node", args).fetchall()
+        if "host" in cols:
+            hosts = list({r[cols.index("host")] for r in rows[:limit]})
+        else:
+            hosts = [r[0] for r in con.execute(f"SELECT host FROM traffic WHERE {where} GROUP BY host "
+                                               f"ORDER BY SUM(up)+SUM(down) DESC LIMIT 8", args)]
+        dns = {}
+        if hosts:
+            for h, ip, md, last in con.execute(f"SELECT host, ip, mode, last FROM dns WHERE host IN {_in(hosts)} ORDER BY last DESC", hosts):
+                dns.setdefault(h, []).append({"ip": ip, "mode": md, "last": last})
+        macips = devices.ips_by_dev(con) if "client" in cols else {}
+        stored = devices.stored_names(con) if "client" in cols else {}
+    finally:
+        con.close()
+    dn, rj = kind_names()
+    kinds = {"direct": [0, 0], "proxy": [0, 0], "reject": [0, 0]}
+    for n, u, d in by_node:
+        k = kinds[node_kind(n, dn, rj)]
+        k[0] += u
+        k[1] += d
+    more = len(rows) > limit
+    out = []
+    for r in rows[:limit]:
+        o = dict(zip(cols, r[:-2]))
+        o["up"], o["down"] = r[-2], r[-1]
+        if "client" in o:
+            ips = macips.get(o["client"], [] if is_mac(o["client"]) else [o["client"]])
+            o["name"] = devices.NAMES.label(o["client"], ips, stored) or next((i for i in ips if ":" not in i), "") or o["client"]
+        if "node" in o:
+            o["kind"] = node_kind(o["node"], dn, rj)
+        out.append(o)
+    return 200, {"from": d1, "to": d2, "cols": cols, "rows": out, "more": more,
+                 "total": {"up": sum(v[0] for v in kinds.values()), "down": sum(v[1] for v in kinds.values())},
+                 "kinds": {k: {"up": v[0], "down": v[1]} for k, v in kinds.items()}, "dns": dns}
+
+
 def q_modes(p):
     d1, d2 = day_range(p)
     fw, fa = filters(p, T_COLS, skip_mode=True)
@@ -486,7 +541,7 @@ def q_live(p):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
