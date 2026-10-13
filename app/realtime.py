@@ -4,7 +4,7 @@ import collections
 import os
 import time
 
-from . import collector, config
+from . import collector, config, netstat
 from .util import api_call, log, stop
 
 INTERVAL = max(1, min(10, int(os.environ.get("REALTIME_SEC", "2") or 2)))
@@ -109,4 +109,8 @@ def run():
             if not fail_logged:
                 log("实时速度读取失败(会自动重试):", e)
                 fail_logged = True
+        try:
+            netstat.sample()
+        except Exception:
+            pass
         stop.wait(INTERVAL)

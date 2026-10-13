@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import airports, collector, config, db, devices, realtime, update
+from . import airports, appsig, collector, config, db, devices, netstat, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -300,19 +300,213 @@ def q_trace(p):
                  "kinds": {k: {"up": v[0], "down": v[1]} for k, v in kinds.items()}, "dns": dns}
 
 
+def _limit(p, d=30, mx=500):
+    try:
+        return max(1, min(mx, int(one(p, "limit", str(d)))))
+    except ValueError:
+        return d
+
+
+def _client_rows(con, rows):
+    """(设备键, up, down) → [{key,name,ips,...}]"""
+    macips, stored = devices.ips_by_dev(con), devices.stored_names(con)
+    out = []
+    for k, u, d in rows:
+        ips = macips.get(k, [] if is_mac(k) else [k])
+        out.append({"key": k, "up": u, "down": d, "name": devices.NAMES.label(k, ips, stored), "ips": ips[:8], "is_mac": is_mac(k)})
+    return out
+
+
 def q_protocols(p):
+    """端口协议分布。by=proto(默认)或 client(谁在用这个协议:Top Talkers 下钻)。"""
+    d1, d2 = day_range(p)
+    by = "client" if one(p, "by") == "client" else "proto"
+    fw, fa = filters(p, {"dev", "node"})
+    pr = one(p, "proto")
+    if pr:
+        fw.append("proto = ?")
+        fa.append(pr)
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    expr = DEVX if by == "client" else "proto"
+    con = ro()
+    try:
+        rows = con.execute(f"SELECT {expr}, SUM(up), SUM(down) FROM proto WHERE {where} GROUP BY 1 "
+                           f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", [d1, d2] + fa + [_limit(p, 30, 100)]).fetchall()
+        first = con.execute("SELECT MIN(day) FROM proto").fetchone()[0]
+        out = _client_rows(con, rows) if by == "client" else [{"key": k, "up": u, "down": d} for k, u, d in rows]
+    finally:
+        con.close()
+    return 200, {"from": d1, "to": d2, "since": first or "", "total": {"up": sum(r["up"] for r in out), "down": sum(r["down"] for r in out)}, "rows": out}
+
+
+def q_apps(p):
+    """应用识别(域名特征 + 端口)。by=app / cat / client(Top Talkers) / node;可用 app、cat 过滤做联动下钻。"""
+    by = one(p, "by", "app")
+    if by not in ("app", "cat", "client", "node"):
+        return 400, {"error": "by 不对"}
     d1, d2 = day_range(p)
     fw, fa = filters(p, {"dev", "node"})
+    for f in ("app", "cat"):
+        if one(p, f):
+            fw.append(f"{f} = ?")
+            fa.append(one(p, f))
+    where = " AND ".join(["day >= ?", "day <= ?"] + fw)
+    expr = {"app": "app", "cat": "cat", "client": DEVX, "node": "node"}[by]
+    con = ro()
+    try:
+        if by == "app":
+            rows = con.execute(f"SELECT app, cat, SUM(up), SUM(down) FROM app WHERE {where} GROUP BY app, cat "
+                               f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", [d1, d2] + fa + [_limit(p)]).fetchall()
+            out = [{"key": a, "cat": c, "up": u, "down": d} for a, c, u, d in rows]
+        else:
+            rows = con.execute(f"SELECT {expr}, SUM(up), SUM(down) FROM app WHERE {where} GROUP BY 1 "
+                               f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", [d1, d2] + fa + [_limit(p)]).fetchall()
+            out = _client_rows(con, rows) if by == "client" else [{"key": k, "up": u, "down": d} for k, u, d in rows]
+        first = con.execute("SELECT MIN(day) FROM app").fetchone()[0]
+    finally:
+        con.close()
+    return 200, {"from": d1, "to": d2, "since": first or "", "by": by,
+                 "total": {"up": sum(r["up"] for r in out), "down": sum(r["down"] for r in out)}, "rows": out}
+
+
+def q_tunnels(p):
+    """出口隧道协议分布:你的节点用的是 Shadowsocks / VLESS / Trojan / WireGuard …,各自走了多少流量。"""
+    d1, d2 = day_range(p)
+    fw, fa = filters(p, T_COLS)
     where = " AND ".join(["day >= ?", "day <= ?"] + fw)
     con = ro()
     try:
-        rows = con.execute(f"SELECT proto, SUM(up), SUM(down) FROM proto WHERE {where} GROUP BY proto "
-                           f"ORDER BY SUM(up)+SUM(down) DESC LIMIT 30", [d1, d2] + fa).fetchall()
-        first = con.execute("SELECT MIN(day) FROM proto").fetchone()[0]
+        rows = con.execute(f"SELECT node, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY node", [d1, d2] + fa).fetchall()
+        types = {n: t for n, t in con.execute("SELECT node, type FROM nodeinfo")}
     finally:
         con.close()
-    return 200, {"from": d1, "to": d2, "since": first or "", "total": {"up": sum(r[1] for r in rows), "down": sum(r[2] for r in rows)},
-                 "rows": [{"key": k, "up": u, "down": d} for k, u, d in rows]}
+    c = collector.COLLECTOR
+    if c:
+        types.update({k: v for k, v in c.ptype.items() if v})
+    dn, rj = kind_names()
+    agg = {}
+    for n, u, d in rows:
+        k = node_kind(n, dn, rj)
+        t = "直连" if k == "direct" else "拒绝" if k == "reject" else (types.get(n) or "未知")
+        a = agg.setdefault(t, {"key": t, "up": 0, "down": 0, "nodes": 0})
+        a["up"] += u
+        a["down"] += d
+        a["nodes"] += 1
+    out = sorted(agg.values(), key=lambda r: -(r["up"] + r["down"]))
+    return 200, {"from": d1, "to": d2, "rows": out}
+
+
+def q_qoe(p):
+    """网络质量:节点延迟 / 抖动 / 超时率(来自 mihomo 的延迟测试),以及路由器本机 TCP 重传率。"""
+    try:
+        n = max(1, min(14 * 24, int(one(p, "hours", "24"))))
+    except ValueError:
+        n = 24
+    now = time.time()
+    labels = [time.strftime("%Y-%m-%d %H", time.localtime(now - i * 3600)) for i in range(n - 1, -1, -1)]
+    idx = {h: i for i, h in enumerate(labels)}
+    per = {}
+    con = ro()
+    try:
+        for node, hour, cnt, sd, sq, fl in con.execute("SELECT node, hour, n, sum_d, sum_sq, fails FROM qoe WHERE hour >= ? AND hour <= ?",
+                                                        (labels[0], labels[-1])):
+            a = per.setdefault(node, {"n": 0, "sd": 0.0, "sq": 0.0, "f": 0, "h": [None] * n})
+            a["n"] += cnt
+            a["sd"] += sd
+            a["sq"] += sq
+            a["f"] += fl
+            if cnt and hour in idx:
+                a["h"][idx[hour]] = round(sd / cnt)
+        tcp = {h: (o, r, rs) for h, o, r, rs in con.execute("SELECT hour, out, retrans, resets FROM tcp WHERE hour >= ? AND hour <= ?",
+                                                             (labels[0], labels[-1]))}
+        types = {nm: t for nm, t in con.execute("SELECT node, type FROM nodeinfo")}
+    finally:
+        con.close()
+    c = collector.COLLECTOR
+    live = dict(c.nodes) if c else {}
+    nodes = []
+    for node in set(per) | set(live):
+        a = per.get(node)
+        lv = live.get(node) or {}
+        cnt = a["n"] if a else 0
+        avg = a["sd"] / cnt if cnt else None
+        jit = (max(0.0, a["sq"] / cnt - avg * avg) ** 0.5) if cnt else None
+        tests = (a["n"] + a["f"]) if a else 0
+        nodes.append({"node": node, "type": lv.get("type") or types.get(node, ""), "airport": airport_of(node), "delay": lv.get("delay"),
+                      "avg": round(avg) if avg is not None else None, "jitter": round(jit) if jit is not None else None,
+                      "fail_rate": round(a["f"] / tests, 4) if tests else None, "tests": tests, "series": a["h"] if a else []})
+    nodes.sort(key=lambda r: (r["avg"] is None, r["avg"] or 0))
+    hourly = []
+    for h in labels:
+        o, r, rs = tcp.get(h, (0, 0, 0))
+        hourly.append({"hour": h, "out": o, "retrans": r, "resets": rs, "rate": round(r / o * 100, 3) if o else None})
+    tot_o, tot_r = sum(x["out"] for x in hourly), sum(x["retrans"] for x in hourly)
+    w = [r for r in list(netstat.SERIES) if r[0] >= now - 60]
+    wo, wr = sum(r[1] for r in w), sum(r[2] for r in w)
+    return 200, {"hours": n, "nodes": nodes[:60], "tcp": {"ok": netstat.STATE["ok"], "hourly": hourly,
+                 "avg_rate": round(tot_r / tot_o * 100, 3) if tot_o else None,
+                 "now": {"rate": round(wr / wo * 100, 3) if wo else None, "out": wo, "retrans": wr}},
+                 "test_note": "" if per else "还没有延迟测试记录(需要 nikki 里的策略组开启 url-test / 自动测速)"}
+
+
+STACK_BY = ("client", "node", "mode", "app", "cat", "proto")
+
+
+def q_stack(p):
+    """按小时的堆叠面积图数据。by=client/node/mode/app/cat/proto。"""
+    by = one(p, "by", "client")
+    if by not in STACK_BY:
+        return 400, {"error": "by 不对"}
+    try:
+        n = max(2, min(14 * 24, int(one(p, "hours", "24"))))
+    except ValueError:
+        n = 24
+    now = time.time()
+    labels = [time.strftime("%Y-%m-%d %H", time.localtime(now - i * 3600)) for i in range(n - 1, -1, -1)]
+    idx = {h: i for i, h in enumerate(labels)}
+    con = ro()
+    try:
+        if by in ("client", "node", "mode"):
+            fw, fa = filters(p, H_COLS)
+            where = " AND ".join(["hour >= ?", "hour <= ?"] + fw)
+            expr = DEVX if by == "client" else "node"
+            rows = con.execute(f"SELECT hour, {expr}, SUM(up)+SUM(down) FROM hourly WHERE {where} GROUP BY 1, 2", [labels[0], labels[-1]] + fa).fetchall()
+        else:
+            fw, fa = filters(p, {"dev"})
+            where = " AND ".join(["hour >= ?", "hour <= ?"] + fw)
+            col, tbl = {"app": ("app", "app_hourly"), "cat": ("cat", "app_hourly"), "proto": ("proto", "proto_hourly")}[by]
+            rows = con.execute(f"SELECT hour, {col}, SUM(up)+SUM(down) FROM {tbl} WHERE {where} GROUP BY 1, 2", [labels[0], labels[-1]] + fa).fetchall()
+        macips = devices.ips_by_dev(con) if by == "client" else {}
+        stored = devices.stored_names(con) if by == "client" else {}
+    finally:
+        con.close()
+    if by == "mode":
+        dn, rj = kind_names()
+        nm = {"direct": "直连", "reject": "拒绝", "proxy": "代理"}
+        rows = [(h, nm[node_kind(k, dn, rj)], b) for h, k, b in rows]
+    per, tot = {}, {}
+    for h, k, b in rows:
+        if h not in idx:
+            continue
+        per.setdefault(k, [0] * n)[idx[h]] += b
+        tot[k] = tot.get(k, 0) + b
+    keys = sorted(tot, key=lambda k: -tot[k])
+    top, rest = keys[:8], keys[8:]
+    series = []
+    for k in top:
+        name = k
+        if by == "client":
+            ips = macips.get(k, [] if is_mac(k) else [k])
+            name = devices.NAMES.label(k, ips, stored) or next((i for i in ips if ":" not in i), "") or k
+        series.append({"key": k, "name": name, "values": per[k], "total": tot[k]})
+    if rest:
+        vals = [sum(per[k][i] for k in rest) for i in range(n)]
+        series.append({"key": "", "name": f"其他({len(rest)})", "values": vals, "total": sum(vals), "other": True})
+    totals = [sum(s["values"][i] for s in series) for i in range(n)]
+    pk = max(range(n), key=lambda i: totals[i]) if any(totals) else 0
+    since = None
+    return 200, {"by": by, "labels": labels, "series": series, "totals": totals,
+                 "peak": {"hour": labels[pk], "bytes": totals[pk], "avg": round(sum(totals) / n)} if any(totals) else None}
 
 
 def q_modes(p):
@@ -586,8 +780,21 @@ def q_live(p):
     return 200, live()
 
 
+def q_apprules(p):
+    return 200, {"rules": appsig.rules_text(), "cats": appsig.CATS}
+
+
+def p_apprules(body):
+    con = db.open_db()
+    try:
+        n = appsig.save(con, str(body.get("text") or ""))
+    finally:
+        con.close()
+    return {"ok": True, "rules": n}
+
+
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -644,7 +851,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

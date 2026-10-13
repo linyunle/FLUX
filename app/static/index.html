@@ -228,6 +228,13 @@ input.sl:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 .xbox .dnsbox{margin:4px 0 6px;line-height:1.6}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .nav{transition:transform .25s ease,opacity .25s ease}
+.stleg{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:var(--ink2)}.stleg .it{white-space:nowrap}.stleg b{color:var(--ink);font-weight:600}
+.stbox svg text{fill:var(--muted);font-size:11px}
+.qstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:2px 0 10px}.qstat>div{background:var(--hover);border-radius:var(--rs);padding:8px 10px}
+.qstat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}.qstat .l{font-size:12px;color:var(--muted)}
+.good{color:var(--good)}.bad{color:var(--bad)}
+.qsec{font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:600}
+.spark{vertical-align:middle}
 .proto-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--hover);margin:4px 0 8px}
 .proto-bar i{display:block;height:100%;min-width:2px}
 .pdot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
@@ -327,7 +334,13 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="sub cl" id="cl2"></div><div class="chartbox" id="chart2"></div>
     <div class="scroll" id="chartTable" style="display:none"></div>
   </div>
+  <div class="card gcard" id="stackCard">
+    <h2>流量堆叠趋势 <span class="seg" id="stBy" role="group" aria-label="堆叠维度"></span><span class="seg" id="stH" role="group" aria-label="时间范围"></span><span class="sp"></span><span class="sub" id="stNote"></span></h2>
+    <div class="chartbox" id="stChart"></div><div class="stleg" id="stLeg"></div>
+  </div>
   <div class="card gcard" id="protoCard"><h2>应用协议分布 <span class="sub" id="protoNote"></span></h2><div id="protoBody"></div></div>
+  <div class="card gcard" id="appsCard"><h2>应用识别 <span class="seg" id="apBy" role="group" aria-label="分组"></span><span class="sp"></span><span class="sub" id="apNote"></span></h2><div id="apBody"></div></div>
+  <div class="card gcard" id="qoeCard"><h2>网络质量 QoE <span class="sp"></span><span class="sub" id="qoeNote">延迟 / 抖动 / 超时 / TCP 重传</span></h2><div id="qoeBody"></div></div>
   <div class="card gcard" id="hostsCard"><h2>访问目标 Top <span class="sub">点一行看 设备 / 规则 / 节点 / DNS</span></h2><div class="scroll lbody" id="hostsTbl"></div></div>
 </section>
 
@@ -443,6 +456,12 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <textarea id="apTxt" rows="7" placeholder="备用=自建机场&#10;GIA=某某机场"></textarea>
   <div class="msg" id="apMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="apSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-apps"><h2>应用识别规则</h2>
+  <div class="sub" style="margin-bottom:8px">面板内置了一份域名 / 端口特征库(流媒体、网盘、P2P、代理隧道等)。这里可以补充自己的规则,优先于内置库。每行一条:<code>域名关键字=应用名|类别</code>,类别可省略。关键字不含点时按「包含」匹配,含点时按域名后缀匹配。<br>例:<code>mycdn.example.com=公司内网|办公 / 开发</code>　<code>quark=夸克网盘|网盘 / 云存储</code></div>
+  <textarea id="appTxt" rows="7" placeholder="mycdn.example.com=公司内网|办公 / 开发"></textarea>
+  <div class="sub" id="appCats" style="margin-top:6px"></div>
+  <div class="msg" id="appMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="appSave" class="pri">保存</button></div></div>
       <div class="card sec" id="sec-devices"><h2>设备名导入</h2>
   <div class="sub" style="margin-bottom:8px">在路由器上执行 <code>uci show dhcp</code>,把输出粘贴到下面(也可以粘贴 /etc/config/dhcp 全文)。只读取静态绑定里的 名字 / MAC / IP。</div>
   <textarea id="iTxt" rows="9" placeholder="dhcp.@host[0]=host&#10;dhcp.@host[0].name='my-phone'&#10;dhcp.@host[0].mac='aa:bb:cc:dd:ee:ff'"></textarea>
@@ -664,13 +683,104 @@ S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,s
 function pagerBar(k,total,per,paused){const n=Math.max(1,Math.ceil(total/per)),p=Math.max(0,Math.min(S.pg[k].p,n-1));
   return `<div class="pager" data-k="${k}">${paused===undefined?"":`<button data-a="pause" class="${paused?"pri":""}" title="${paused?"继续刷新":"暂停刷新,方便查看内容"}">${paused?"▶ 继续":"⏸ 暂停"}</button>`}<span class="sub">${total} 个</span><span class="sp"></span><button data-a="prev" ${p<=0?"disabled":""} aria-label="上一页">‹</button><span class="sub pgn">${p+1} / ${n}</span><button data-a="next" ${p>=n-1?"disabled":""} aria-label="下一页">›</button></div>`}
 const PCOL=["#4c78a8","#f58518","#54a24b","#e45756","#79706e","#b279a2","#ff9da6","#9d755d","#bab0ac","#72b7b2"];
-function loadProto(){load("proto","/api/protocols",base(),j=>{
+S.protoOpen=new Set();S.appOpen=new Set();S.apBy=S.apBy||"app";S.stBy=S.stBy||"client";S.stH=S.stH||24;
+function colored(rows){return rows.map((r,i)=>({...r,_c:PCOL[i%PCOL.length]}))}
+const cShare=r=>`${((r.up+r.down)/(r._T||1)*100).toFixed(1)}%`;
+function colorBar(rows,T,label){return `<div class="proto-bar" role="img" aria-label="${label}">${rows.map(r=>`<i style="width:${(r.up+r.down)/T*100}%;background:${r._c}" title="${esc(r.key)} ${Math.round((r.up+r.down)/T*100)}%"></i>`).join("")}</div>`}
+function loadProto(){load("proto","/api/protocols",{...base(),limit:30},j=>{
   const T=j.total.up+j.total.down;
-  $("#protoNote").textContent=j.since&&j.since>j.from?`从 ${j.since} 开始统计(升级前没有这项数据)`:"按传输层 + 目标端口判断,不是深度识别";
-  if(!j.rows.length||!T){$("#protoBody").innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会统计)</div>';return}
-  let rows=j.rows.slice(0,9);const rest=j.rows.slice(9);if(rest.length)rows.push({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0)});
-  $("#protoBody").innerHTML=`<div class="proto-bar" role="img" aria-label="协议占比">${rows.map((r,i)=>`<i style="width:${(r.up+r.down)/T*100}%;background:${PCOL[i%PCOL.length]}" title="${esc(r.key)} ${Math.round((r.up+r.down)/T*100)}%"></i>`).join("")}</div>
-  <table><thead><tr><th>协议</th><th class="n">占比</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td><span class="pdot" style="background:${PCOL[i%PCOL.length]}"></span>${esc(r.key)}</td><td class="n">${((r.up+r.down)/T*100).toFixed(1)}%</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`})}
+  $("#protoNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始统计 · `:"")+"端口协议判断;点一行看是哪些设备在用";
+  const el=$("#protoBody");
+  if(!j.rows.length||!T){el.innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会统计)</div>';return}
+  const all=colored(j.rows).map(r=>({...r,_T:T}));
+  let bar=all.slice(0,9);const rest=all.slice(9);if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
+  el.innerHTML=colorBar(bar,T,"协议占比")+'<div id="protoTbl"></div>';
+  expTable($("#protoTbl"),{rows:all,total:j.total},[{h:"协议",k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${esc(r.key)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.protoOpen,
+    r=>get("/api/protocols",{...base(),by:"client",proto:r.key,limit:8}).then(x=>miniDevs(x.rows)))})}
+/* ---- 应用识别 ---- */
+const AP_BY=[["app","应用"],["cat","类别"],["client","设备"],["node","出口节点"]];
+function loadApps(){
+  seg($("#apBy"),AP_BY,S.apBy,k=>{S.apBy=k;S.appOpen.clear();loadApps()});
+  load("apps","/api/apps",{...base(),by:S.apBy,limit:30},j=>{
+    const T=j.total.up+j.total.down,el=$("#apBody");
+    if(!j.rows.length||!T){$("#apNote").textContent="";el.innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会识别)</div>';return}
+    let un=0;if(S.apBy==="app"){const u=j.rows.find(r=>r.key==="未识别");un=u?(u.up+u.down)/T:0}
+    $("#apNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始 · `:"")+"按域名/SNI 特征库 + 端口识别,不解密内容"+(S.apBy==="app"?` · 未识别 ${Math.round(un*100)}%`:"");
+    const all=colored(j.rows).map(r=>({...r,_T:T}));
+    let bar=all.slice(0,9);const rest=all.slice(9);if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
+    const nm=r=>S.apBy==="client"?esc(devName(r)):esc(r.key)+(r.cat&&S.apBy==="app"?` <span class="tag">${esc(r.cat)}</span>`:"");
+    el.innerHTML=colorBar(bar,T,"应用占比")+'<div id="apTbl"></div>';
+    const ld=r=>{const o={...base(),limit:10};
+      if(S.apBy==="app")return get("/api/apps",{...o,by:"client",app:r.key}).then(x=>miniDevs(x.rows));
+      if(S.apBy==="cat")return get("/api/apps",{...o,by:"app",cat:r.key}).then(x=>miniApps(x.rows));
+      if(S.apBy==="client")return get("/api/apps",{...o,by:"app",dev:r.key}).then(x=>miniApps(x.rows));
+      return get("/api/apps",{...o,by:"app",node:r.key}).then(x=>miniApps(x.rows))};
+    expTable($("#apTbl"),{rows:all,total:j.total},[{h:S.apBy==="client"?"设备":S.apBy==="node"?"出口节点":S.apBy==="cat"?"类别":"应用",k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,ld)})}
+const miniApps=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(r.key)} <span class="tag">${esc(r.cat||"")}</span></td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
+/* ---- 堆叠面积图 ---- */
+const ST_BY=[["client","设备"],["node","节点"],["mode","去向"],["app","应用"],["cat","类别"],["proto","协议"]],ST_H=[[24,"24 小时"],[48,"48 小时"],[168,"7 天"]];
+function stColor(x,i){return x.other?"#9aa0a6":PCOL[i%PCOL.length]}
+function loadStack(){
+  seg($("#stBy"),ST_BY,S.stBy,k=>{S.stBy=k;loadStack()});
+  seg($("#stH"),ST_H.map(([k,l])=>[String(k),l]),String(S.stH),k=>{S.stH=+k;loadStack()});
+  load("stack","/api/stack",{...base(),by:S.stBy,hours:S.stH},j=>paintStack(j))}
+function paintStack(j){
+  const box=$("#stChart"),leg=$("#stLeg");box.classList.add("stbox");
+  const n=j.labels.length;
+  if(!j.peak){box.style.minHeight="";box.innerHTML='<div class="empty">这段时间没有数据(按小时的明细只保留 14 天;应用/协议维度只统计升级后的流量)</div>';leg.innerHTML="";$("#stNote").textContent="";return}
+  const W=Math.max(320,box.clientWidth||700),H=240,L=52,R=10,T=14,B=24,pw=W-L-R,ph=H-T-B;
+  const max=niceMax(Math.max(...j.totals)),X=i=>L+pw*(n>1?i/(n-1):.5),Y=v=>T+ph-ph*v/max;
+  let g="";
+  for(let i=0;i<=3;i++){const v=max*i/3,y=T+ph-ph*i/3;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${fmt(v)}</text>`}
+  const cum=new Array(n).fill(0);
+  j.series.forEach((x,k)=>{const lo=cum.slice();for(let i=0;i<n;i++)cum[i]+=x.values[i];
+    const top=cum.map((v,i)=>`${X(i).toFixed(1)} ${Y(v).toFixed(1)}`),bot=lo.map((v,i)=>`${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).reverse();
+    g+=`<path d="M${top.join("L")}L${bot.join("L")}Z" fill="${stColor(x,k)}" fill-opacity=".82" stroke="var(--surface)" stroke-width=".8"/>`});
+  const every=Math.ceil(n/Math.max(2,Math.floor(pw/70)));
+  j.labels.forEach((lb,i)=>{if(i%every===0){const hh=lb.slice(11)+":00";g+=`<text x="${X(i)}" y="${H-6}" text-anchor="${i===0?"start":"middle"}">${n>48?lb.slice(5,10):(hh==="00:00"||i===0?lb.slice(5,10)+" ":"")+hh}</text>`}});
+  const pk=j.totals.indexOf(Math.max(...j.totals)),px=X(pk),py=Y(j.totals[pk]);
+  g+=`<circle cx="${px}" cy="${py}" r="3.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>`;
+  g+=`<line id="stCur" x1="0" x2="0" y1="${T}" y2="${T+ph}" stroke="var(--ink2)" stroke-dasharray="3 3" style="display:none"/>`;
+  box.style.minHeight=H+"px";box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="堆叠面积图">${g}</svg><div class="tip"></div>`;
+  const svg=box.querySelector("svg"),cur=box.querySelector("#stCur"),tip=box.querySelector(".tip");
+  const show=(cx,cy)=>{const b=svg.getBoundingClientRect(),vx=(cx-b.left)*W/b.width;let i=Math.round((vx-L)/pw*(n-1));i=Math.max(0,Math.min(n-1,i));
+    cur.setAttribute("x1",X(i));cur.setAttribute("x2",X(i));cur.style.display="";
+    const rows=j.series.map((x,k)=>({n:x.name,v:x.values[i],c:stColor(x,k)})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
+    tip.innerHTML=`<b>${esc(j.labels[i].slice(5))}:00</b> · 合计 ${fmt(j.totals[i])}<br>`+rows.slice(0,8).map(r=>`<span class="pdot" style="background:${r.c}"></span>${esc(r.n)} ${fmt(r.v)}`).join("<br>");
+    tip.style.display="block";const bb=box.getBoundingClientRect();let x=cx-bb.left+14;if(x+tip.offsetWidth>bb.width)x=cx-bb.left-tip.offsetWidth-14;tip.style.left=Math.max(0,x)+"px";tip.style.top=Math.max(0,Math.min(cy-bb.top-30,H-tip.offsetHeight))+"px"};
+  box.onmousemove=e=>show(e.clientX,e.clientY);box.onmouseleave=()=>{tip.style.display="none";cur.style.display="none"};
+  box.ontouchstart=box.ontouchmove=e=>{const t=e.touches[0];if(t)show(t.clientX,t.clientY)};
+  const pkb=j.peak,mult=pkb.avg?(pkb.bytes/pkb.avg):0;
+  $("#stNote").textContent=`峰值 ${pkb.hour.slice(5)}:00 · ${fmt(pkb.bytes)}/小时(约 ${fmt(pkb.bytes/3600)}/s)${mult>=1.5?` · 是平均的 ${mult.toFixed(1)} 倍`:""}`;
+  leg.innerHTML=j.series.map((x,k)=>`<span class="it"><span class="pdot" style="background:${stColor(x,k)}"></span>${esc(x.name)} <b>${fmt(x.total)}</b></span>`).join("")}
+/* ---- 网络质量 QoE ---- */
+function spark(vals,w=90,h=22){const v=vals.map(x=>x==null?null:x),m=Math.max(...v.filter(x=>x!=null),1);if(v.filter(x=>x!=null).length<2)return'<span class="sub">–</span>';
+  const pts=v.map((x,i)=>x==null?null:[(i/(v.length-1)*(w-2)+1).toFixed(1),(h-2-(h-4)*x/m).toFixed(1)]).filter(Boolean);
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="${pts.map(p=>p.join(",")).join(" ")}"/></svg>`}
+const dCls=d=>d==null?"":d<120?"good":d<300?"warn":"bad";
+const fCls=f=>f==null?"":f<.02?"good":f<.1?"warn":"bad";
+const rCls=r=>r==null?"":r<1?"good":r<3?"warn":"bad";
+async function loadQoe(){
+  const id=(S.seq.qoe=(S.seq.qoe||0)+1);
+  try{const [q,t]=await Promise.all([get("/api/qoe",{hours:24}),get("/api/tunnels",{...base()})]);if(S.seq.qoe!==id)return;
+    const el=$("#qoeBody"),tc=q.tcp,T=t.rows.reduce((a,r)=>a+r.up+r.down,0);
+    const nodes=q.nodes.filter(r=>r.tests>0||r.delay!=null);
+    const tested=q.nodes.filter(r=>r.avg!=null),avg=tested.length?Math.round(tested.reduce((a,r)=>a+r.avg,0)/tested.length):null;
+    const jit=tested.filter(r=>r.jitter!=null),jv=jit.length?Math.round(jit.reduce((a,r)=>a+r.jitter,0)/jit.length):null;
+    const ff=q.nodes.reduce((a,r)=>a+(r.fail_rate!=null?Math.round(r.fail_rate*r.tests):0),0);
+    const allT=q.nodes.reduce((a,r)=>a+r.tests,0),fr2=allT?ff/allT:null;
+    const stat=(v,l,c)=>`<div><div class="v ${c||""}">${v}</div><div class="l">${l}</div></div>`;
+    let h=`<div class="qstat">${stat(avg==null?"–":avg+" ms","节点平均延迟(24 小时)",dCls(avg))}${stat(jv==null?"–":jv+" ms","平均抖动(延迟标准差)")}${stat(fr2==null?"–":(fr2*100).toFixed(1)+"%","测速超时/失败率",fCls(fr2))}${stat(tc.now&&tc.now.rate!=null?tc.now.rate+"%":"–","TCP 重传率(此刻 · 1 分钟)",rCls(tc.now&&tc.now.rate))}${stat(tc.avg_rate==null?"–":tc.avg_rate+"%","TCP 重传率(24 小时均值)",rCls(tc.avg_rate))}</div>`;
+    if(tc.ok&&tc.hourly.some(x=>x.rate!=null)){const v=tc.hourly.map(x=>x.rate);h+=`<div class="qsec">TCP 重传率走势(每小时,%)</div><div style="width:100%">${spark(v,Math.max(200,(el.clientWidth||600)-4),46)}</div>`}
+    else if(!tc.ok)h+='<div class="sub">读不到路由器的 TCP 统计(/proc/net/snmp),重传率不可用</div>';
+    h+='<div class="qsec">出口隧道协议分布(按节点类型,不是端口)</div>';
+    if(T){const rows=colored(t.rows).map(r=>({...r,_T:T}));h+=colorBar(rows,T,"隧道协议占比")+`<div class="stleg">${rows.map(r=>`<span class="it"><span class="pdot" style="background:${r._c}"></span>${esc(r.key)} <b>${((r.up+r.down)/T*100).toFixed(1)}%</b> ${fmt(r.up+r.down)}</span>`).join("")}</div>`}
+    else h+='<div class="sub">这个范围内没有流量</div>';
+    h+='<div class="qsec">节点延迟 / 抖动(来自 nikki 对节点的测速)</div>';
+    if(!nodes.length||q.test_note)h+=`<div class="sub">${esc(q.test_note||"没有数据")}</div>`;
+    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th><th class="hide-s">类型</th><th class="n">当前</th><th class="n">平均</th><th class="n hide-s">抖动</th><th class="n">超时率</th><th class="hide-s">24 小时</th></tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${spark(r.series)}</td></tr>`).join("")}</tbody></table></div>`;
+    h+='<div class="sub" style="margin-top:8px;line-height:1.6">数据来源说明:延迟 / 抖动 / 超时来自 nikki 对各节点的主动测速(url-test),反映面板所在路由器到节点的链路,不是每台设备、每个应用各自的往返时间。TCP 重传率读的是路由器内核的全局计数(重传报文 ÷ 发出报文),不分设备和应用。应用层丢包率需要抓包/流量镜像,mihomo 接口里没有这项数据,所以这里不提供。</div>';
+    el.innerHTML=h}catch(e){console.warn("qoe",e)}}
 function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direct","直连"]],S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();S.pg.devtop.p=0;loadDevTop()});
   load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:100},j=>{S.dtJ=j;paintDevTop()})}
 function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=S.pg.devtop,n=Math.max(1,Math.ceil(j.rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
@@ -904,13 +1014,13 @@ const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:
 const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
-const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","此刻最活跃的域名或 IP"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],proto:["#protoCard","应用协议分布"],hosts:["#hostsCard","访问目标 Top"]};
+const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","此刻最活跃的域名或 IP"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],stack:["#stackCard","流量堆叠趋势"],proto:["#protoCard","应用协议分布"],apps:["#appsCard","应用识别"],qoe:["#qoeCard","网络质量 QoE"],hosts:["#hostsCard","访问目标 Top"]};
 const LISTS=["rtdev","rtnode","rthost","devtop","hosts"],ROWS={s:5,m:8,l:12};
 const HROWS=[5,8,10,15,20,30,50,100];
 const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.hosts.rows)?+TH.cards.hosts.rows:30):(ROWS[(TH.cards[k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m"},proto:{w:12,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
+const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m"},proto:{w:12,h:"m"},stack:{w:12,h:"m"},apps:{w:12,h:"m"},qoe:{w:12,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","rthost","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
@@ -926,7 +1036,7 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
-  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",rthost:"devtop",proto:"hosts"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
+  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",rthost:"devtop",proto:"hosts",stack:"proto",apps:"hosts",qoe:"hosts"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
   if(!PRESETS[r.preset])r.preset="default";r.v=3;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
@@ -972,7 +1082,7 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
 
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadProto()}}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadProto();loadApps();loadStack();loadQoe()}}}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
   sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
@@ -992,7 +1102,7 @@ function renderLook(){
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
-    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${k==="proto"?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
+    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${["proto","stack","apps","qoe"].includes(k)?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
@@ -1090,7 +1200,7 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["devices","设备名"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1100,6 +1210,7 @@ async function loadSettings(){
   try{
     if(S.set==="look")renderLook();
     else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sMsg").textContent="";renderUpd(st.update)}
+    else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
   }catch(e){console.warn(e)}}
 $("#sSave").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="验证中…";
@@ -1110,6 +1221,7 @@ function renderUpd(u){
   $("#updBox").innerHTML=`<div>版本 <b>${esc(u.current)}</b>${u.latest?` · 最新 <b>${esc(u.latest)}</b>`:""} <button id="uChk">检查更新</button></div>
   ${u.newer?`<div class="msg ok">有新版本。在路由器 compose 目录里执行:</div><pre>docker compose pull &amp;&amp; docker compose up -d</pre><a href="${esc(u.url)}" target="_blank" rel="noopener">查看更新说明</a>`:(u.error?'<div class="msg warn">暂时查不到(路由器访问 GitHub 不通?)</div>':'<div class="sub">已是最新。</div>')}`;
   const b=$("#uChk");if(b)b.onclick=async()=>{b.disabled=true;try{renderUpd(await post("/api/update/check",{}))}catch(e){}}}
+$("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
 $("#iGo").onclick=async()=>{const m=$("#iMsg");m.className="msg";try{const j=await post("/api/devices/import",{text:$("#iTxt").value});m.className="msg ok";m.textContent=`导入 ${j.hosts} 台设备(${j.entries} 条)`;loadDevices()}catch(e){m.className="msg err";m.textContent=e.message}};
 for(const m of document.querySelectorAll(".modal"))m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")});
@@ -1125,7 +1237,7 @@ async function status(){try{const s=await get("/api/status");
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
-  if(S.tab==="overview"){loadTrend();loadHosts();loadDevTop();loadProto();loadRealtime()}
+  if(S.tab==="overview"){loadTrend();loadHosts();loadDevTop();loadProto();loadApps();loadStack();loadQoe();loadRealtime()}
   else if(S.tab==="airports")loadAirports();
   else if(S.tab==="nodes")loadNodes();
   else if(S.tab==="devices")loadDevicesTab();
@@ -1135,7 +1247,7 @@ function refresh(){
 }
 $("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();S.dtOpen.clear();renderChrome();refresh()},300)}})();
 $("#d1").onchange=$("#d2").onchange=refresh;
-window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadRealtime()),200)}})());
+window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadStack(),loadRealtime()),200)}})());
 renderChrome();showTab();status();loadDevices();refresh();
 setInterval(()=>{if(document.hidden)return;status();if(S.tab!=="settings")refresh()},15000);
 </script>

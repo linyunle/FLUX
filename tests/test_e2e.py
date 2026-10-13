@@ -18,7 +18,7 @@ con.execute("INSERT INTO traffic VALUES(?,?,?,?,?,?)", (today, "192.168.1.10", "
 con.execute("INSERT INTO ipmap VALUES('192.168.1.10','aa:bb:cc:dd:ee:01',?)", (int(time.time()),))
 con.commit(); con.close()
 
-env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2",
+env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2", PROXY_SEC="2",
            LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, APP_VERSION="v0.2.0", GITHUB_REPO="")
 proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 B = f"http://127.0.0.1:{WEB_P}"
@@ -125,6 +125,27 @@ try:
     except urllib.error.HTTPError as e:
         ok(e.code == 404, "出口接口已移除(404)")
     ok("tab-egress" not in urllib.request.urlopen(B + "/").read().decode(), "页面里没有出口标签")
+    # v0.8.0 应用识别 / Top Talkers / QoE / 堆叠
+    ap_ = get("/api/apps"); aks = {r["key"]: r for r in ap_["rows"]}
+    ok("YouTube" in aks and "Netflix" in aks and "夸克网盘" in aks and "百度" in aks, f"应用识别 {sorted(aks)}")
+    ok(aks["夸克网盘"]["cat"] == "网盘 / 云存储" and aks["YouTube"]["cat"] == "流媒体", "应用类别")
+    ok(get("/api/apps?by=cat")["rows"][0]["key"], "按类别汇总")
+    ac = get("/api/apps?by=client&app=YouTube")["rows"]
+    ok(ac and ac[0]["key"] and all(r["key"] != "192.168.1.20" for r in ac), f"应用下钻:谁在用 YouTube {[r['key'] for r in ac]}")
+    pc = get("/api/protocols?by=client&proto=HTTP")["rows"]
+    ok(pc and len(pc) >= 1, "协议下钻到设备")
+    sk = get("/api/stack?by=client&hours=24")
+    ok(sk["labels"] and sk["series"] and len(sk["series"][0]["values"]) == len(sk["labels"]) and sk["peak"], "堆叠面积:序列/峰值")
+    ok(get("/api/stack?by=app&hours=24")["series"], "堆叠:按应用")
+    tu = get("/api/tunnels")
+    ok(tu["rows"] and sum(r["down"] for r in tu["rows"]) > 0, f"隧道/出口类型分布 {[r['key'] for r in tu['rows']]}")
+    qo = get("/api/qoe?hours=24")
+    qn = {r["node"]: r for r in qo["nodes"]}
+    ok("HK-01" in qn and qn["HK-01"]["tests"] >= 1 and qn["HK-01"]["avg"] > 0, f"QoE:节点延迟 {qn.get('HK-01')}")
+    ok("tcp" in qo and "ok" in qo["tcp"], "QoE:TCP 重传字段")
+    ok(post("/api/apps/rules", {"text": "mytest.example=我的应用|办公 / 开发"})[1]["rules"] == 1 and "我的应用" in get("/api/apprules")["rules"], "自定义识别规则保存")
+    ok(post("/api/apps/rules", {"text": "乱写"})[0] in (200, 400), "自定义规则容错")
+    post("/api/apps/rules", {"text": ""})
     # 机场
     c, r = post("/api/airports/rules", {"text": "HK-=机场甲\nJP-=机场乙"}); ok(c == 200 and r["rules"] == 2, "保存机场规则")
     ok(post("/api/airports/rules", {"text": "乱写"})[0] == 400, "无效规则报错")

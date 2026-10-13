@@ -8,7 +8,7 @@ import os
 import time
 import urllib.error
 
-from . import config, db, devices
+from . import appsig, config, db, devices, netstat
 from .util import api_call, host_of, log, stop
 
 PROC_NET_DEV = os.environ.get("PROC_NET_DEV", "/proc/net/dev")
@@ -23,6 +23,15 @@ PORTS = {80: "HTTP", 8080: "HTTP", 443: "HTTPS / TLS", 8443: "HTTPS / TLS", 53: 
          993: "邮件 IMAP", 123: "NTP 校时", 3478: "STUN / 语音", 3479: "STUN / 语音", 5222: "即时通讯 XMPP", 1883: "MQTT", 8883: "MQTT",
          3389: "远程桌面 RDP", 445: "SMB 文件共享", 139: "SMB 文件共享", 5353: "mDNS", 1900: "SSDP", 51820: "WireGuard",
          1194: "OpenVPN", 5060: "SIP 电话", 554: "RTSP 视频流", 1935: "RTMP 直播"}
+
+
+def net_port(m):
+    net = str(m.get("network") or "").lower()
+    try:
+        port = int(m.get("destinationPort") or 0)
+    except ValueError:
+        port = 0
+    return net, port
 
 
 def classify(m):
@@ -60,6 +69,7 @@ class Collector:
         self.ndirty = set()
         self.dns = {}
         self.pbuf = {}
+        self.abuf, self.ahbuf, self.phbuf, self.qbuf, self.qlast = {}, {}, {}, {}, {}
         self.wan_last, self.wan_warned = {}, False
         self.live = {"at": 0, "nodes": {}, "clients": {}}
         self.status = {"ok": False, "error": "尚未连接", "last_ok": 0, "rev": -1}
@@ -68,7 +78,7 @@ class Collector:
 
     # ---- /proxies:策略组、节点类型、延迟
     def refresh_proxies(self, force=False):
-        if not force and time.time() - self.proxies_at < 60:
+        if not force and time.time() - self.proxies_at < config.PROXY_EVERY:
             return
         try:
             proxies = api_call("/proxies").get("proxies", {})
@@ -88,7 +98,30 @@ class Collector:
                 hist = p.get("history") or []
                 delay = int(hist[-1].get("delay") or 0) if hist and isinstance(hist[-1], dict) else None
                 nodes[n] = {"type": t, "delay": delay}
+                self.note_qoe(n, hist)
         self.groups, self.ptype, self.nodes, self.proxies_at = groups, ptype, nodes, time.time()
+
+    def note_qoe(self, node, hist):
+        """mihomo 对节点做延迟测试会留 history;只记「新出现」的测试结果,按小时汇总成 次数/总延迟/平方和/失败数。"""
+        entries = [h for h in hist if isinstance(h, dict) and h.get("time")]
+        if not entries:
+            return
+        last = self.qlast.get(node)
+        self.qlast[node] = entries[-1]["time"]
+        if last is None:
+            return
+        hour = time.strftime("%Y-%m-%d %H")
+        for h in entries:
+            if h["time"] <= last:
+                continue
+            d = int(h.get("delay") or 0)
+            a = self.qbuf.setdefault((hour, node), [0, 0.0, 0.0, 0])
+            if d > 0:
+                a[0] += 1
+                a[1] += d
+                a[2] += d * d
+            else:
+                a[3] += 1
 
     def leaf(self, chains):
         name = str(chains[0]) if chains else ""
@@ -177,9 +210,17 @@ class Collector:
             grp = str(chains[-1]) if chains else ""
             r, p = str(c.get("rule") or ""), str(c.get("rulePayload") or "")
             rule = ((r + "," + p) if p else r)[:80] or "unknown"
-            pa = self.pbuf.setdefault((day, client, node, classify(m)), [0, 0])
+            proto = classify(m)
+            pa = self.pbuf.setdefault((day, client, node, proto), [0, 0])
             pa[0] += du
             pa[1] += dd
+            net, port = net_port(m)
+            app, cat = appsig.classify(host, port, net)
+            for store, key in ((self.abuf, (day, client, node, app, cat)), (self.ahbuf, (hour, client, app, cat)),
+                               (self.phbuf, (hour, client, proto))):
+                x = store.setdefault(key, [0, 0])
+                x[0] += du
+                x[1] += dd
             a = self.buf.setdefault((day, client, node, grp, rule, host), [0, 0])
             a[0] += du
             a[1] += dd
@@ -242,7 +283,10 @@ class Collector:
         ipd, nd = self.neigh.dirty, set(self.ndirty)
         dns, self.dns = self.dns, {}
         pbuf, self.pbuf = self.pbuf, {}
-        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns or pbuf):
+        abuf, ahbuf, phbuf, qbuf = self.abuf, self.ahbuf, self.phbuf, self.qbuf
+        self.abuf, self.ahbuf, self.phbuf, self.qbuf = {}, {}, {}, {}
+        tcph = netstat.pop_hourly()
+        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns or pbuf or abuf or ahbuf or phbuf or qbuf or tcph):
             return
         self.buf, self.hbuf, self.wbuf, self.whbuf = {}, {}, {}, {}
         self.neigh.dirty = {}
@@ -267,6 +311,26 @@ class Collector:
                 self.con.executemany(
                     "INSERT INTO ipmap(ip,mac,seen) VALUES(?,?,?) ON CONFLICT(ip) DO UPDATE SET mac=excluded.mac, seen=excluded.seen",
                     [(ip, mac, now) for ip, mac in ipd.items()])
+                self.con.executemany(
+                    "INSERT INTO app(day,client,node,app,cat,up,down) VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(day,client,node,app,cat) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
+                    [(*k, v[0], v[1]) for k, v in abuf.items()])
+                self.con.executemany(
+                    "INSERT INTO app_hourly(hour,client,app,cat,up,down) VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(hour,client,app,cat) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
+                    [(*k, v[0], v[1]) for k, v in ahbuf.items()])
+                self.con.executemany(
+                    "INSERT INTO proto_hourly(hour,client,proto,up,down) VALUES(?,?,?,?,?) "
+                    "ON CONFLICT(hour,client,proto) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
+                    [(*k, v[0], v[1]) for k, v in phbuf.items()])
+                self.con.executemany(
+                    "INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(hour,node) DO UPDATE SET n=n+excluded.n, sum_d=sum_d+excluded.sum_d, sum_sq=sum_sq+excluded.sum_sq, fails=fails+excluded.fails",
+                    [(*k, *v) for k, v in qbuf.items()])
+                self.con.executemany(
+                    "INSERT INTO tcp(hour,out,retrans,resets) VALUES(?,?,?,?) "
+                    "ON CONFLICT(hour) DO UPDATE SET out=out+excluded.out, retrans=retrans+excluded.retrans, resets=resets+excluded.resets",
+                    [(k, *v) for k, v in tcph.items()])
                 self.con.executemany(
                     "INSERT INTO proto(day,client,node,proto,up,down) VALUES(?,?,?,?,?,?) "
                     "ON CONFLICT(day,client,node,proto) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
@@ -295,6 +359,16 @@ class Collector:
                 a = self.pbuf.setdefault(k, [0, 0])
                 a[0] += v[0]
                 a[1] += v[1]
+            for src, dst in ((abuf, self.abuf), (ahbuf, self.ahbuf), (phbuf, self.phbuf)):
+                for k, v in src.items():
+                    a = dst.setdefault(k, [0, 0])
+                    a[0] += v[0]
+                    a[1] += v[1]
+            for k, v in qbuf.items():
+                a = self.qbuf.setdefault(k, [0, 0.0, 0.0, 0])
+                for i in range(4):
+                    a[i] += v[i]
+            netstat.push_back(tcph)
             log("写库失败,稍后重试:", e)
 
     def prune(self):
@@ -304,6 +378,9 @@ class Collector:
             self.con.execute("DELETE FROM traffic WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM wan WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM proto WHERE day < ?", (day_cut,))
+            self.con.execute("DELETE FROM app WHERE day < ?", (day_cut,))
+            for t in ("app_hourly", "proto_hourly", "qoe", "tcp"):
+                self.con.execute(f"DELETE FROM {t} WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM wan_hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM ipmap WHERE seen < ?", (int(time.time()) - 30 * 86400,))

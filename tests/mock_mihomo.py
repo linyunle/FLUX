@@ -55,11 +55,14 @@ class API(BaseHTTPRequestHandler):
             STATE["tick"] += 1
             return self._j(200, {"connections": conns(), "memory": 88000000})
         if p == "/proxies":
+            def hist(d):
+                n = STATE["tick"]
+                return [{"time": "2026-10-13T10:%02d:%02d+08:00" % (n // 60 % 60, n % 60), "delay": (d + n % 7 * 5) if d else (0 if n % 2 else 120)}]
             return self._j(200, {"proxies": {
                 "DIRECT": {"type": "Direct"},
                 "直连": {"type": "Direct"},
-                "HK-01": {"type": "Vless", "history": [{"delay": 88}]},
-                "JP-01": {"type": "Trojan", "history": [{"delay": 0}]},
+                "HK-01": {"type": "Vless", "history": hist(88)},
+                "JP-01": {"type": "Trojan", "history": hist(0)},
                 "Proxy": {"type": "Selector", "now": "HK-01", "all": ["HK-01", "JP-01"]},
                 "egress-probe": {"type": "Selector", "now": STATE["probe_sel"], "all": ["HK-01", "JP-01"]}}})
         if p == "/proxies/egress-probe":
