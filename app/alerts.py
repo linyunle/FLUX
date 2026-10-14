@@ -25,6 +25,8 @@ KINDS = {
     "conn_many": "连接数异常",
     "api_down": "nikki 失联",
     "api_up": "nikki 恢复",
+    "quota": "套餐用量",
+    "report": "周报",
 }
 LEVELS = ("bad", "warn", "info", "ok")
 
@@ -36,6 +38,7 @@ DEFAULT_RULES = {
     "retrans_high": {"on": True, "pct": 5, "cool_min": 30},
     "conn_many": {"on": True, "count": 500, "cool_min": 60},
     "api_down": {"on": True, "after_sec": 120, "cool_min": 30},
+    "quota": {"on": True, "pct": 80, "cool_min": 1440},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
@@ -398,8 +401,13 @@ def check_api(con, cfg, now):
              f"面板已有 {int((now - _api_bad_since) // 60)} 分钟连不上 nikki 的 API:{(c.status.get('error') if c else '')}。这段时间的流量不会被统计。", now)
 
 
+def check_quota(con, cfg, now):
+    from . import insight
+    insight.check_quota(con, cfg, now)
+
+
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)]
 
 
 def evaluate(con, now=None):
@@ -430,6 +438,11 @@ def run():
             evaluate(con)
         except Exception as e:
             log("告警引擎出错", e)
+        try:
+            from . import insight
+            insight.maybe_push_report(con)
+        except Exception as e:
+            log("周报出错", e)
         stop.wait(config.ALERT_EVAL)
 
 

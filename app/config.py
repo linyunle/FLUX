@@ -21,6 +21,7 @@ HOUR_KEEP_DAYS = max(2, int(os.environ.get("HOUR_KEEP_DAYS", "14")))
 
 LISTEN_HOST = os.environ.get("LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8099"))
+METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")  # 非空:/metrics 可用 Bearer / ?t= 这个口令抓取(给 Prometheus)
 PAGE_TOKEN = os.environ.get("PAGE_TOKEN", "")  # 非空则网页和接口都要带 ?t=<token>
 
 _lock = threading.Lock()

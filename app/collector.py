@@ -8,8 +8,8 @@ import os
 import time
 import urllib.error
 
-from . import appsig, config, db, devices, netstat
-from .util import api_call, host_of, log, stop
+from . import appsig, config, db, devices, geo, netstat
+from .util import api_call, host_of, is_public_ip, log, stop
 
 PROC_NET_DEV = os.environ.get("PROC_NET_DEV", "/proc/net/dev")
 WAN_IFACES = [x.strip() for x in os.environ.get("WAN_IFACE", "").split(",") if x.strip()]
@@ -70,6 +70,8 @@ class Collector:
         self.dns = {}
         self.pbuf = {}
         self.abuf, self.ahbuf, self.phbuf, self.qbuf, self.qlast = {}, {}, {}, {}, {}
+        self.gbuf = {}
+        self.pstat = {"ok": 0, "fail": 0, "last_dur": 0.0, "avg_dur": 0.0, "last_fail": "", "since": int(time.time())}
         self.wan_last, self.wan_warned = {}, False
         self.live = {"at": 0, "nodes": {}, "clients": {}}
         self.status = {"ok": False, "error": "尚未连接", "last_ok": 0, "rev": -1}
@@ -227,6 +229,16 @@ class Collector:
                 x = store.setdefault(key, [0, 0])
                 x[0] += du
                 x[1] += dd
+            if geo.available():
+                ip = str(m.get("destinationIP") or "").strip()
+                direct = ptl_direct = (self.ptype.get(node, "").lower() == "direct" or node == "DIRECT")
+                if not is_public_ip(ip) and ptl_direct:
+                    ip = host_of(str(m.get("remoteDestination") or ""))
+                if is_public_ip(ip):
+                    cc, asn = geo.lookup(ip)
+                    g = self.gbuf.setdefault((day, cc, asn, "direct" if direct else "proxy"), [0, 0])
+                    g[0] += du
+                    g[1] += dd
             a = self.buf.setdefault((day, client, node, grp, rule, host), [0, 0])
             a[0] += du
             a[1] += dd
@@ -290,9 +302,10 @@ class Collector:
         dns, self.dns = self.dns, {}
         pbuf, self.pbuf = self.pbuf, {}
         abuf, ahbuf, phbuf, qbuf = self.abuf, self.ahbuf, self.phbuf, self.qbuf
+        gbuf, self.gbuf = self.gbuf, {}
         self.abuf, self.ahbuf, self.phbuf, self.qbuf = {}, {}, {}, {}
         tcph = netstat.pop_hourly()
-        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns or pbuf or abuf or ahbuf or phbuf or qbuf or tcph):
+        if not (buf or hbuf or wbuf or whbuf or ipd or nd or dns or pbuf or abuf or ahbuf or phbuf or qbuf or tcph or gbuf):
             return
         self.buf, self.hbuf, self.wbuf, self.whbuf = {}, {}, {}, {}
         self.neigh.dirty = {}
@@ -334,6 +347,10 @@ class Collector:
                     "ON CONFLICT(hour,node) DO UPDATE SET n=n+excluded.n, sum_d=sum_d+excluded.sum_d, sum_sq=sum_sq+excluded.sum_sq, fails=fails+excluded.fails",
                     [(*k, *v) for k, v in qbuf.items()])
                 self.con.executemany(
+                    "INSERT INTO geo(day,cc,asn,via,up,down) VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(day,cc,asn,via) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
+                    [(*k, v[0], v[1]) for k, v in gbuf.items()])
+                self.con.executemany(
                     "INSERT INTO tcp(hour,out,retrans,resets) VALUES(?,?,?,?) "
                     "ON CONFLICT(hour) DO UPDATE SET out=out+excluded.out, retrans=retrans+excluded.retrans, resets=resets+excluded.resets",
                     [(k, *v) for k, v in tcph.items()])
@@ -365,7 +382,7 @@ class Collector:
                 a = self.pbuf.setdefault(k, [0, 0])
                 a[0] += v[0]
                 a[1] += v[1]
-            for src, dst in ((abuf, self.abuf), (ahbuf, self.ahbuf), (phbuf, self.phbuf)):
+            for src, dst in ((abuf, self.abuf), (ahbuf, self.ahbuf), (phbuf, self.phbuf), (gbuf, self.gbuf)):
                 for k, v in src.items():
                     a = dst.setdefault(k, [0, 0])
                     a[0] += v[0]
@@ -385,6 +402,7 @@ class Collector:
             self.con.execute("DELETE FROM wan WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM proto WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM app WHERE day < ?", (day_cut,))
+            self.con.execute("DELETE FROM geo WHERE day < ?", (day_cut,))
             for t in ("app_hourly", "proto_hourly", "qoe", "tcp"):
                 self.con.execute(f"DELETE FROM {t} WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM hourly WHERE hour < ?", (hour_cut,))
@@ -415,19 +433,28 @@ class Collector:
             if rev != self.conf_rev:
                 self.conf_rev = rev
                 self.on_conf_change()
+            t_poll = time.time()
             try:
                 self.poll()
+                dur = time.time() - t_poll
+                ps = self.pstat
+                ps["ok"] += 1
+                ps["last_dur"] = dur
+                ps["avg_dur"] = dur if ps["ok"] == 1 else ps["avg_dur"] * 0.9 + dur * 0.1
                 self.status.update(ok=True, error="", last_ok=int(time.time()))
                 if fail_logged:
                     log("API 已恢复")
                     fail_logged = False
             except urllib.error.HTTPError as e:
+                self.pstat["fail"] += 1
                 msg = "密钥不对(401)" if e.code == 401 else f"API 返回 {e.code}"
                 self.status.update(ok=False, error=msg)
                 if not fail_logged:
                     log(msg)
                     fail_logged = True
             except Exception as e:
+                self.pstat["fail"] += 1
+                self.pstat["last_fail"] = f"{type(e).__name__}"
                 self.status.update(ok=False, error=f"连不上 API:{e}")
                 if not fail_logged:
                     log("连不上 API:", e)

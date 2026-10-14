@@ -257,6 +257,7 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch{border:1px solid var(--line);border-radius:var(--rs);padding:8px 10px;margin-bottom:8px}
 .alch .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.alch .r2{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .alch .r2 input{flex:1 1 220px;min-width:0}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
 .h3{font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink2)}
 .proto-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--hover);margin:4px 0 8px}
 .proto-bar i{display:block;height:100%;min-width:2px}
@@ -366,11 +367,21 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ndRules"></div></div>
     </div>
   </div>
+  <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">按面板统计的流量估算,与机场后台可能有出入</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
   <div id="nodeListView"><div class="card">
     <h2><span class="seg" id="nview" role="group" aria-label="分组"></span><span class="sub" id="nvHint"></span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"><button id="apRules">归类规则</button></h2>
     <div class="sub" id="apNote" style="margin-bottom:6px"></div>
     <div class="scroll" id="apTbl"></div><div class="scroll" id="nodeTbl"></div>
   </div></div>
+</section>
+
+<section id="tab-security" style="display:none">
+  <div class="card"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
+  <div class="card"><h2>分流检查 <span class="sub">启发式:按内置的常见国内 / 境外域名清单判断,只是排查线索,不是判决</span><span class="sp"></span><span class="sub">近 7 天</span></h2><div id="lkBody"></div></div>
+  <div class="card"><h2>目的地国家 / ASN <span class="sub" id="geoNote"></span></h2><div id="geoBody"></div></div>
+  <div class="card"><h2>活跃时段热力图 <span class="sub">近 14 天,周几 × 几点的平均流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div id="hmBody"></div></div>
+  <div class="card"><h2>周报 <span class="sp"></span><button id="repOpen" class="pri">查看近 7 天周报</button></h2><div class="sub">汇总流量变化、设备 / 域名 / 应用排行、节点质量和告警。可在「设置 → 周报与监控」里设为每周自动推送。</div></div>
+  <div class="card"><h2>数据质量与自检 <span class="sub">面板自己的运行状况</span></h2><div id="qBody"></div></div>
 </section>
 
 <section id="tab-alerts" style="display:none">
@@ -411,6 +422,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <section id="tab-rules" style="display:none">
   <div class="card"><h2>策略组 <span class="sub">点一行 = 只看这个策略组</span></h2><div class="scroll" id="grpTbl"></div></div>
   <div class="card"><h2>命中规则 <span class="sub">点一行 = 只看这条规则</span></h2><div class="scroll" id="ruleTbl"></div></div>
+  <div class="card"><h2>规则健康 <span class="sub" id="rhNote"></span></h2><div id="rhBody"></div></div>
 </section>
 
 <section id="tab-settings" style="display:none">
@@ -487,6 +499,32 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="sub" style="margin-top:8px">渠道里的地址 / Token 属于密钥,只保存在 data 目录的数据库里,页面不会再显示;留空保存 = 沿用原来的。推送由路由器上的面板直接发出,需要这个容器能访问外网(Telegram 通常要走代理,可以在 compose 里给容器设 HTTPS_PROXY)。</div>
   <div class="msg" id="alMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="alCfgSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-dns"><h2>DNS(AdGuard Home)</h2>
+  <div class="sub" style="margin-bottom:10px">只读接入:面板读取 AdGuard Home 的统计和被拦截的查询,不会修改它的任何设置。账号密码只保存在 data 目录的数据库里,页面不会再显示。</div>
+  <div class="fld"><label>地址</label><input id="aghUrl" placeholder="http://192.168.100.1:2000"></div>
+  <div class="fld"><label>用户名</label><input id="aghUser" autocomplete="off"></div>
+  <div class="fld"><label>密码</label><input id="aghPass" type="password" autocomplete="new-password"></div>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="aghOn" checked> 启用</label>
+  <div class="msg" id="aghMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="aghTest">测试连接</button><button id="aghSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-geo"><h2>目的地数据库(GeoIP)</h2>
+  <div class="sub" style="margin-bottom:10px">用来统计流量去了哪些国家 / ASN。数据库放在 data/geoip/(名字里带 country / asn 的 .mmdb 文件,DB-IP Lite 或 MaxMind GeoLite2 均可),也可以在这里一键下载 DB-IP Lite(CC BY 4.0,来源 db-ip.com)。下载由路由器上的面板发出,走容器的 HTTPS_PROXY。注意:经代理的流量看不到真实目的地,只能看到直连和非 fake-ip 的连接。</div>
+  <div id="geoSt"></div>
+  <div class="msg" id="geoMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button id="geoDl" class="pri">下载 / 更新数据库</button></div></div>
+      <div class="card sec" id="sec-quota"><h2>机场套餐</h2>
+  <div class="sub" style="margin-bottom:10px">填每个机场的月流量和重置日,面板按已统计的流量估算用量与预计用完时间;用量到阈值会触发「套餐用量」告警(阈值在「告警与推送」里)。</div>
+  <div id="quotaRows"></div>
+  <div class="msg" id="quotaMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button id="quotaAdd">+ 添加机场</button><button id="quotaSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-report"><h2>周报与监控</h2>
+  <div class="row2"><label class="crow sub" style="cursor:pointer"><input type="checkbox" id="repOn"> 每周自动推送周报到告警渠道</label>
+    <select id="repWd"></select><select id="repHr"></select></div>
+  <div class="msg" id="repMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="repTest">立即发送一份</button><button id="repSave" class="pri">保存</button></div>
+  <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <div class="h3" style="margin-top:0">Prometheus 指标</div>
+  <div class="sub">抓取地址 <code>/metrics</code>(文本格式)。已设置访问密码时,Prometheus 可用环境变量 <code>METRICS_TOKEN</code> 指定的口令抓取:<code>Authorization: Bearer 口令</code> 或 <code>/metrics?t=口令</code>。包含总 / 设备流量、实时速率、连接数、节点延迟、TCP 重传率、告警数。</div></div>
       <div class="card sec" id="sec-security"><h2>安全与隐私</h2>
   <div class="sub" style="margin-bottom:10px">访问密码:设置后,打开面板和调用接口都要先登录。面板里能看到每台设备访问过的域名,建议设置。密码只保存加盐哈希(data/auth.json);连续输错 5 次会锁定 1 分钟。</div>
   <div class="fld" id="authOldRow"><label>当前密码</label><input id="authOld" type="password" autocomplete="current-password"></div>
@@ -506,6 +544,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 </div></main>
 </div>
+<div class="modal" id="rep"><div class="box" style="max-width:640px"><h3><span>近 7 天周报</span><span class="sp"></span><button id="repCopy">复制文本</button><button id="repPrint">打印</button><button id="repX" aria-label="关闭">✕</button></h3><div id="repBody"></div></div></div>
 <div class="modal" id="dtl"><div class="box"><h3><span id="dtlTitle"></span><span class="sp"></span><button id="dtlX" aria-label="关闭">✕</button></h3><div id="dtlLive"></div><div class="sub" id="dtlRange" style="margin-top:2px"></div><div id="dtlBody"></div><div id="dtlAct" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div></div>
 
 <script>
@@ -524,7 +563,7 @@ const S={airport:"",apRules:"",merge:true,domRows:[],range:"today",from:"",to:""
 const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["month","本月"],["custom","自定义"]];
 const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
-const TABS=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["alerts","告警"],["settings","设置"]];
+const TABS=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["security","安全"],["alerts","告警"],["settings","设置"]];
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
  airports:'<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>',
@@ -533,6 +572,7 @@ const ICON={
  devices:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
  domains:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
  rules:'<path d="M4 6h16M4 12h10M4 18h6"/><path d="M17 15l2 2 3-4"/>',
+ security:'<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
  alerts:'<path d="M6 17h12l-1.5-2V10a4.5 4.5 0 00-9 0v5z"/><path d="M10 20a2 2 0 004 0"/>'};
 const svgI=k=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]||""}</svg>`;
 
@@ -571,7 +611,7 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dat
   else if(k==="devs"){S.devs.clear();renderDevList()}
   else{S[k]="";if(k==="q")$("#hostQ").value=""}
   renderChrome();syncAp();refresh()};
-function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
+function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
 function devLabel(d){return d.name||d.ips.find(i=>!i.includes(":"))||d.ips[0]||d.key}
@@ -1037,6 +1077,7 @@ function loadRealtime(){if(document.hidden)return;
 setInterval(loadRealtime,2000);
 const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r.nodes.map(n=>`${esc(n.node)} <span class="sub">${Math.round(n.bytes/Math.max(1,r.up+r.down)*100)}%</span>`).join("<br>")};
 function loadRules(){
+  loadRuleHealth();
   load("grp","/api/summary",{...base(),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
   load("rule","/api/summary",{...base(),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
 
@@ -1290,7 +1331,8 @@ const RULE_META=[
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
- ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]]];
+ ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
+ ["quota","套餐用量","机场套餐用量达到阈值(在「机场套餐」里设置月流量);≥95% 为严重",[["pct","阈值","%"],["cool_min","间隔","分钟"]]]];
 const CH_HINT={bark:"https://api.day.app/你的KEY",wecom:"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…",feishu:"https://open.feishu.cn/open-apis/bot/v2/hook/…",ntfy:"https://ntfy.sh/你的主题",webhook:"https://…(收到 JSON)"};
 let ALR={},ALC=[],ALQ={},ALT={};
 function renderAlertCfg(){
@@ -1322,7 +1364,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["security","安全与隐私"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["security","安全与隐私"],["devices","设备名"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1333,6 +1375,10 @@ async function loadSettings(){
     if(S.set==="look")renderLook();
     else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sMsg").textContent="";renderUpd(st.update)}
     else if(S.set==="alerts")await loadAlertCfg();
+    else if(S.set==="dns")await loadAghCfg();
+    else if(S.set==="geo")await loadGeoSet();
+    else if(S.set==="quota")await loadQuotaSet();
+    else if(S.set==="report")await loadReportSet();
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
       $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
@@ -1356,7 +1402,124 @@ $("#noauth").onclick=()=>openSettings("security");
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
 $("#iGo").onclick=async()=>{const m=$("#iMsg");m.className="msg";try{const j=await post("/api/devices/import",{text:$("#iTxt").value});m.className="msg ok";m.textContent=`导入 ${j.hosts} 台设备(${j.entries} 条)`;loadDevices()}catch(e){m.className="msg err";m.textContent=e.message}};
 for(const m of document.querySelectorAll(".modal"))m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").classList.remove("open");closeM("#dtl")}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").classList.remove("open");closeM("#dtl");closeM("#rep")}});
+
+
+/* ---------- v0.11 安全 / 分析 ---------- */
+const CCN={CN:"中国大陆",HK:"中国香港",TW:"中国台湾",US:"美国",JP:"日本",SG:"新加坡",KR:"韩国",GB:"英国",DE:"德国",FR:"法国",NL:"荷兰",CA:"加拿大",AU:"澳大利亚",RU:"俄罗斯",IN:"印度",SE:"瑞典",IE:"爱尔兰",IT:"意大利",ES:"西班牙",BR:"巴西",TH:"泰国",MY:"马来西亚",VN:"越南",ID:"印尼",PH:"菲律宾",TR:"土耳其",AE:"阿联酋",CH:"瑞士",FI:"芬兰",PL:"波兰",UA:"乌克兰"};
+const flag=cc=>/^[A-Z]{2}$/.test(cc)?String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0))):"🌐";
+const ccName=cc=>cc==="??"?"未知":(CCN[cc]||cc);
+const barR=(p,c)=>`<div style="height:6px;background:var(--hover);border-radius:3px;overflow:hidden;min-width:60px"><div style="height:100%;width:${Math.max(0,Math.min(100,p))}%;background:${c||"var(--accent)"}"></div></div>`;
+const WD=["周一","周二","周三","周四","周五","周六","周日"];
+const miniTbl=(head,rows)=>rows.length?`<div class="scroll"><table><thead><tr>${head.map((h,i)=>`<th class="${i?"n":""}">${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`:"";
+
+function loadSecurity(){loadAgh();loadLeaks();loadGeo();loadHeat();loadQuality()}
+function loadAgh(){load("agh","/api/agh",{},j=>{
+  const el=$("#aghBody");
+  if(!j.configured){$("#aghNote").textContent="";el.innerHTML='<div class="empty">还没接入 AdGuard Home。<a href="#" id="aghSet">去设置</a>(在面板里填账号密码,不要发到聊天里)</div>';const a=$("#aghSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("dns")};return}
+  if(!j.ok){$("#aghNote").textContent=j.url;el.innerHTML=`<div class="msg err">${esc(j.error||"读取失败")}</div>`;return}
+  $("#aghNote").textContent=j.url+" · 近 "+(j.unit==="days"?"天":"24 小时");
+  const t=(l,v,s)=>`<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s||"&nbsp;"}</div></div>`;
+  el.innerHTML=`<div class="tiles" style="position:static;margin-bottom:10px">${t("DNS 查询",j.total.toLocaleString(),"平均 "+j.avg_ms+" ms")}${t("已拦截",j.blocked.toLocaleString(),"拦截率 "+j.rate+"%")}${t("安全浏览 / 家长控制",(j.safebrowsing+j.parental).toLocaleString(),"")}</div>
+  <div class="g2"><div><div class="h3" style="margin-top:0">被拦截最多的域名</div>${miniTbl(["域名","次数"],j.top_blocked.map(r=>`<tr><td class="k pv">${esc(r.d)}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div>
+  <div><div class="h3" style="margin-top:0">查询最多的设备</div>${miniTbl(["设备","查询"],j.top_clients.map(r=>`<tr><td class="k">${esc(r.name||r.ip)}${r.name&&r.name!==r.ip?` <span class="sub">${esc(r.ip)}</span>`:""}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div></div>
+  <div class="h3">最近被拦截的查询${j.log_error?` <span class="sub">(${esc(j.log_error)})</span>`:""}</div>${miniTbl(["时间 / 设备 / 域名","规则"],(j.recent||[]).slice(0,12).map(r=>`<tr><td class="k"><span class="sub">${esc(r.t.slice(5))}</span> ${esc(r.name||r.ip)} → <span class="pv">${esc(r.d)}</span></td><td class="n sub" style="text-align:right">${esc(r.rule||r.reason)}</td></tr>`))||'<div class="empty">最近没有被拦截的查询</div>'}`})}
+$("#aghGo").onclick=()=>openSettings("dns");
+
+function leakBlock(title,hint,rows,total,cols){
+  return `<div class="h3" style="margin-top:${title.startsWith("国内")?0:16}px">${title} <span class="sub">${hint}${total?" · 合计 "+fmt(total):""}</span></div>`+(rows.length?miniTbl(cols,rows):'<div class="sub" style="margin:4px 0 10px">未发现 ✓</div>')}
+function loadLeaks(){load("leaks","/api/leaks",{days:7},j=>{
+  const rowsA=j.cn_proxy.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
+  const rowsB=j.fo_direct.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
+  const rowsC=j.dns_local.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td></tr>`);
+  $("#lkBody").innerHTML=leakBlock("国内站点走了代理","浪费机场流量、增加延迟:检查是否漏了国内规则集",rowsA,j.cn_proxy_bytes,["域名","流量","节点 / 规则"])
+   +leakBlock("境外站点直连","可能被阻断或暴露真实访问:检查是否漏了境外规则",rowsB,j.fo_direct_bytes,["域名","流量","节点 / 规则"])
+   +leakBlock("走代理但在本机用真实 DNS 解析","该域名的连接 dnsMode=normal,没有走 fake-ip / 远程解析,可能把查询暴露给本地 DNS",rowsC,j.dns_local_bytes,["域名","流量"])})}
+
+function loadGeo(){load("geo","/api/geo",{days:7},j=>{
+  const el=$("#geoBody");
+  if(!j.available){$("#geoNote").textContent="";el.innerHTML='<div class="empty">没有 GeoIP 数据库。<a href="#" id="geoSet">去设置下载</a></div>';const a=$("#geoSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("geo")};return}
+  $("#geoNote").textContent=`近 7 天 · 能识别目的地的流量占 ${j.all?Math.round(j.known*100/j.all):0}%(其余是代理流量,看不到真实目的地)`;
+  const mx=Math.max(1,...j.by_cc.map(x=>x.bytes));
+  const nodes=j.nodes.length?`<div class="h3">节点服务器所在地 <span class="sub">代理流量的真实目的地看不到,只能看出口在哪</span></div><div style="display:flex;flex-wrap:wrap;gap:6px">${j.nodes.map(n=>`<span class="lv info" title="${esc(n.asn)}">${flag(n.cc)} ${esc(n.node)}</span>`).join("")}</div>`:"";
+  el.innerHTML=`<div class="g2"><div class="scroll"><table><tbody>${j.by_cc.map(r=>`<tr><td class="k">${flag(r.cc)} ${esc(ccName(r.cc))}</td><td style="width:35%">${barR(r.bytes*100/mx)}</td><td class="n">${fmt(r.bytes)}</td></tr>`).join("")||'<tr><td class="empty">暂无</td></tr>'}</tbody></table></div>
+  <div class="scroll"><table><tbody>${j.by_asn.map(r=>`<tr><td class="k">${esc(r.asn)}</td><td class="n">${fmt(r.bytes)}</td></tr>`).join("")}</tbody></table></div></div>${nodes}`})}
+
+async function loadHeat(){
+  const sel=$("#hmDev");if(!sel.dataset.ok&&S.devices.length){sel.innerHTML='<option value="">全部设备</option>'+S.devices.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))}</option>`).join("");sel.dataset.ok="1"}
+  load("heat","/api/heatmap",{dev:sel.value},j=>{
+    const mx=j.max||1;
+    let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:2px;width:100%;min-width:520px"><thead><tr><th></th>'+[...Array(24).keys()].map(i=>`<th style="font-weight:400;font-size:10px;color:var(--muted)">${i%3===0?i:""}</th>`).join("")+"</tr></thead><tbody>";
+    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}</td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 平均 ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${v?Math.round(8+v*92/mx):0}%,var(--hover))"></td>`).join("")+"</tr>"});
+    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,平均 ${fmt(j.peak.bytes)}</div>`:'<div class="empty">还没有足够的小时数据</div>');
+    $("#hmBody").innerHTML=h})}
+$("#hmDev").onchange=loadHeat;
+
+const ago=n=>n==null?"–":n<90?n+" 秒前":Math.round(n/60)+" 分钟前";
+function loadQuality(){load("quality","/api/quality",{},j=>{
+  const p=j.poll,ok=(c,t)=>`<span class="${c?"":"warnc"}" style="color:var(--${c?"good":"warn"})">${c?"●":"○"}</span> ${t}`;
+  const wan=j.wan.length?miniTbl(["日期","WAN 网卡","面板统计","统计 / WAN"],j.wan.map(r=>`<tr><td class="k">${r.day.slice(5)}</td><td class="n">${fmt(r.wan)}</td><td class="n">${fmt(r.traffic)}</td><td class="n">${r.ratio==null?"–":r.ratio+"%"}</td></tr>`)):`<div class="sub">${j.wan_on?"WAN 计数还没有数据":"未设置 WAN_IFACE,无法和网卡计数对账"}</div>`;
+  const rows=Object.entries(j.rows).map(([k,v])=>`${k} ${v.toLocaleString()}`).join(" · ");
+  $("#qBody").innerHTML=`<div style="display:grid;gap:6px">
+   <div>${ok(p.last_ok_age!=null&&p.last_ok_age<p.interval*3+5,`采集:每 ${p.interval} 秒一次,上次成功 ${ago(p.last_ok_age)};成功 ${p.ok} 次 / 失败 ${p.fail} 次;耗时 ${p.last_dur_ms} ms(均 ${p.avg_dur_ms} ms)${p.last_error?` · ${esc(p.last_error)}`:""}`)}</div>
+   <div>${ok(j.netstat,"TCP 计数(/proc/net/snmp):"+(j.netstat?"可用":"读不到(重传率 / QoE 缺数据)"))}</div>
+   <div>${ok(!!(j.geo.country||j.geo.asn),"GeoIP:"+(j.geo.country?`国家库 ${esc(j.geo.country.file)}(${j.geo.country.built})`:"无国家库")+(j.geo.asn?` · ASN 库 ${j.geo.asn.built}`:""))}</div>
+   <div>${j.agh?ok(j.agh.ok!==false,"AdGuard Home:"+esc(j.agh.url)+(j.agh.error?" · "+esc(j.agh.error):"")):'<span class="sub">○ AdGuard Home:未接入</span>'}</div>
+   <div class="sub">数据库 ${fmt(j.size.db)}(WAL ${fmt(j.size.wal)});保留:明细 ${j.retention.days} 天 / 小时级 ${j.retention.hour_days} 天;${rows}</div></div>
+   <div class="h3">与 WAN 网卡计数对账 <span class="sub">面板只统计经过 nikki 的流量,比值低于 100% 属正常,突然大幅下降才值得查</span></div>${wan}`})}
+
+/* 规则健康 */
+function loadRuleHealth(){load("rh","/api/rulehealth",{days:30},j=>{
+  $("#rhNote").textContent=j.source==="mihomo"?`nikki 共 ${j.rule_count} 条规则${j.has_hits?"(命中次数自 nikki 启动以来)":"(此内核不提供命中次数,按近 30 天有无流量判断)"}`:(j.error||"");
+  const top=j.top.map(r=>`<tr><td class="k">${esc(r.rule)}</td><td class="n">${r.hosts}</td><td class="n">${fmt(r.bytes)}</td><td class="n" style="width:90px">${barR(r.share)}</td><td class="n">${r.share}%</td></tr>`);
+  const m=j.match?`<div class="msg ${j.match.share>=30?"warn":""}" style="margin:6px 0">落到兜底规则(Match)的流量占 ${j.match.share}%(${fmt(j.match.bytes)})。占比高说明有大量域名没被任何规则覆盖,代理 / 直连全靠兜底。主要是:${j.match.hosts.slice(0,5).map(h=>`<span class="pv">${esc(h.host)}</span>`).join("、")}</div>`:"";
+  const zero=j.zero.length?`<div class="h3">从未命中的规则 <span class="sub">共 ${j.zero_total} 条,可考虑清理(新增的规则、备用规则也会出现在这里)</span></div>`+miniTbl(["规则","策略"],j.zero.map(r=>`<tr><td class="k">${esc(r.rule)}</td><td class="n sub" style="text-align:right">${esc(r.proxy)}</td></tr>`)):"";
+  $("#rhBody").innerHTML=m+'<div class="h3" style="margin-top:6px">近 30 天流量最多的规则</div>'+(miniTbl(["规则","域名数","流量","",""],top)||'<div class="empty">暂无</div>')+zero})}
+
+/* 机场套餐 */
+function loadQuota(){load("quota","/api/quota",{},j=>{
+  const c=$("#quotaCard");if(!j.rows.length){c.style.display="none";return}c.style.display="";
+  $("#quotaBody").innerHTML=j.rows.map(q=>{const col=q.pct>=95?"var(--bad)":q.pct>=80?"var(--warn)":"var(--accent)";
+    return `<div style="margin:6px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(q.airport)}</b><span>${fmt(q.used)} / ${q.gb} GB · ${q.pct}%</span><span class="sub">周期 ${q.start.slice(5)} → ${q.end.slice(5)}(还有 ${q.days_left} 天)· 近 7 天日均 ${fmt(q.rate)}${q.exhaust?` · 预计 ${q.exhaust.slice(5)} 用完${q.over?" ⚠ 早于重置日":""}`:""}</span></div>${barR(q.pct,col)}${q.known?"":'<div class="sub">还没有节点归到这个机场(检查机场名是否和「机场归类」一致)</div>'}</div>`}).join("")})}
+$("#quotaGo").onclick=()=>openSettings("quota");
+
+/* 设置:AdGuard */
+async function loadAghCfg(){const j=await get("/api/agh/config");$("#aghUrl").value=j.url||"http://192.168.100.1:2000";$("#aghUser").value=j.user||"";$("#aghPass").value="";$("#aghPass").placeholder=j.has_secret?"已保存(留空 = 不修改)":"";$("#aghOn").checked=j.on!==false;$("#aghMsg").textContent=""}
+function aghBody(){return{url:$("#aghUrl").value,user:$("#aghUser").value,pass:$("#aghPass").value}}
+$("#aghTest").onclick=async()=>{const m=$("#aghMsg");m.className="msg";m.textContent="连接中…";try{const r=await post("/api/agh/test",aghBody());m.className="msg "+(r.ok?"ok":"err");m.textContent=r.ok?"连接成功(AdGuard Home "+r.version+")":r.error}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#aghSave").onclick=async()=>{const m=$("#aghMsg");m.className="msg";try{await post("/api/agh/config",{...aghBody(),on:$("#aghOn").checked});m.className="msg ok";m.textContent="已保存";$("#aghPass").value="";loadAghCfg()}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 设置:GeoIP */
+async function loadGeoSet(){const j=await get("/api/geo/status");paintGeoSet(j);if(j.download.running)setTimeout(()=>S.set==="geo"&&loadGeoSet(),2000)}
+function paintGeoSet(j){const f=(n,k)=>j[k]?`${n}:${esc(j[k].file)}(${j[k].built} · ${fmt(j[k].size)})`:`${n}:未安装`;
+  $("#geoSt").innerHTML=`<div>${f("国家库","country")}</div><div>${f("ASN 库","asn")}</div><div class="sub">目录 ${esc(j.dir)}${j.download.msg?" · 下载:"+esc(j.download.msg):""}</div>`;$("#geoDl").disabled=!!j.download.running}
+$("#geoDl").onclick=async()=>{const m=$("#geoMsg");m.className="msg";try{const r=await post("/api/geo/download",{});m.textContent=r.started?"已开始下载,稍等…":"正在下载中";paintGeoSet(r.status);setTimeout(()=>S.set==="geo"&&loadGeoSet(),1500)}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 设置:套餐 */
+let QC={};
+async function loadQuotaSet(){const j=await get("/api/quota");QC=JSON.parse(JSON.stringify(j.cfg));window.QAP=j.airports;renderQuotaSet();$("#quotaMsg").textContent=""}
+function renderQuotaSet(){const ks=Object.keys(QC);$("#quotaRows").innerHTML=ks.length?ks.map(k=>`<div class="row2" data-q="${esc(k)}"><input data-f="name" value="${esc(k)}" list="qap" style="width:150px" placeholder="机场名"><input data-f="gb" type="number" step="any" value="${QC[k].gb}" style="width:90px"> GB / 月 <span class="sub">重置日</span><input data-f="reset_day" type="number" min="1" max="31" value="${QC[k].reset_day}" style="width:60px"><button data-del="${esc(k)}">删除</button></div>`).join("")+`<datalist id="qap">${(window.QAP||[]).map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`:'<div class="sub">还没有设置。</div>'}
+$("#sec-quota").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(b){syncQuota();delete QC[b.dataset.del];renderQuotaSet()}});
+function syncQuota(){const n={};document.querySelectorAll("#quotaRows .row2").forEach(r=>{const nm=r.querySelector('[data-f=name]').value.trim();if(nm)n[nm]={gb:+r.querySelector('[data-f=gb]').value,reset_day:+r.querySelector('[data-f=reset_day]').value||1}});QC=n}
+$("#quotaAdd").onclick=()=>{syncQuota();QC[(window.QAP||[])[0]&&!QC[window.QAP[0]]?window.QAP[0]:"新机场"+(Object.keys(QC).length+1)]={gb:500,reset_day:1};renderQuotaSet()};
+$("#quotaSave").onclick=async()=>{const m=$("#quotaMsg");m.className="msg";syncQuota();try{const r=await post("/api/quota",{quota:QC});QC=r.cfg;renderQuotaSet();m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 设置:周报 */
+async function loadReportSet(){const j=await get("/api/report/config");$("#repWd").innerHTML=WD.map((w,i)=>`<option value="${i}" ${i===j.weekday?"selected":""}>${w}</option>`).join("");$("#repHr").innerHTML=[...Array(24).keys()].map(i=>`<option value="${i}" ${i===j.hour?"selected":""}>${pad(i)}:00</option>`).join("");$("#repOn").checked=j.on;$("#repMsg").textContent=""}
+$("#repSave").onclick=async()=>{const m=$("#repMsg");m.className="msg";try{await post("/api/report/config",{on:$("#repOn").checked,weekday:+$("#repWd").value,hour:+$("#repHr").value});m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#repTest").onclick=async()=>{const m=$("#repMsg");m.className="msg";m.textContent="发送中…";try{await post("/api/report/send",{});m.className="msg ok";m.textContent="已生成,见「告警」页签(有推送渠道时也会推送)"}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 周报弹窗 */
+let REP=null;
+function repText(r){const t=r.up+r.down,k=r.kinds,L=[`${r.from} ~ ${r.to}(${r.days} 天)`,`总流量 ${fmt(t)}${r.prev?`(${t>=r.prev?"+":"-"}${Math.round(Math.abs(t-r.prev)*100/r.prev)}% 对比上期)`:""}:下行 ${fmt(r.down)} / 上行 ${fmt(r.up)}`,`代理 ${fmt(k.proxy)} · 直连 ${fmt(k.direct)}`];
+  if(r.airports.length)L.push("机场:"+r.airports.map(a=>a.name+" "+fmt(a.bytes)).join("、"));
+  if(r.devices.length)L.push("设备 Top:"+r.devices.slice(0,5).map(a=>a.name+" "+fmt(a.bytes)).join("、"));
+  if(r.domains.length)L.push("域名 Top:"+r.domains.slice(0,5).map(a=>a.host).join("、"));
+  if(r.apps.length)L.push("应用 Top:"+r.apps.map(a=>a.app+" "+fmt(a.bytes)).join("、"));
+  if(r.peak_hour!=null)L.push(`最忙时段 ${pad(r.peak_hour)}:00`);if(r.retrans_pct!=null)L.push(`TCP 重传率 ${r.retrans_pct}%`);
+  L.push("新设备 "+r.new_devices+" 台");
+  const al=Object.entries(r.alerts);if(al.length)L.push("告警:"+al.map(([a,n])=>a+" "+n).join("、"));
+  r.quota.forEach(q=>L.push(`套餐 ${q.airport}:${q.pct}%(${fmt(q.used)} / ${q.gb} GB)`));r.bad_nodes.forEach(b=>L.push(`节点 ${b.node} 测速失败率 ${b.fail_pct}%`));return L.join("\n")}
+$("#repOpen").onclick=async()=>{openM("#rep");$("#repBody").innerHTML='<div class="empty">生成中…</div>';try{REP=await get("/api/report",{days:7});$("#repBody").innerHTML=`<pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(repText(REP))}</pre>`}catch(e){$("#repBody").innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}};
+$("#repX").onclick=()=>closeM("#rep");
+$("#repCopy").onclick=async e=>{try{await navigator.clipboard.writeText(repText(REP));e.target.textContent="已复制"}catch(er){e.target.textContent="复制失败"}setTimeout(()=>e.target.textContent="复制文本",1500)};
+$("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.document.write("<title>FLUX 周报</title><pre style=\"font:14px/1.7 sans-serif;white-space:pre-wrap;padding:24px\">"+esc("FLUX 周报\n\n"+repText(REP))+"</pre>");w.document.close();w.print()};
 
 /* ---------- 状态 ---------- */
 async function status(){try{const s=await get("/api/status");
@@ -1371,8 +1534,9 @@ async function status(){try{const s=await get("/api/status");
 function refresh(){
   if(S.tab==="overview")loadTiles();
   if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(TH.views.dev==="period")loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
-  else if(S.tab==="nodes")loadNodes();
+  else if(S.tab==="nodes"){loadNodes();loadQuota()}
   else if(S.tab==="alerts")loadAlerts();
+  else if(S.tab==="security")loadSecurity();
   else if(S.tab==="devices")loadDevicesTab();
   else if(S.tab==="domains")loadDomains();
   else if(S.tab==="rules")loadRules();

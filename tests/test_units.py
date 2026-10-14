@@ -1,4 +1,4 @@
-import socket, struct, sys, os
+import socket, struct, sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app import devices
 
@@ -92,6 +92,54 @@ def test_alerts():
             con.execute("INSERT INTO hourly VALUES(?,?,?,?,?)", (f"2026-10-13 0{h}", "dev2", "n", 0, 500 + h))
     b, n, how = alerts._baseline(con, "dev2", hn, now)
     assert how == "近 24 小时中位数" and b == 502, (b, how)
+
+
+def test_geo():
+    import gzip, http.server, tempfile, threading, shutil
+    from app import config, geo
+    d = os.path.join(os.path.dirname(__file__), "data")
+    m = geo.MMDB(os.path.join(d, "country-test.mmdb"))
+    assert geo._rec_cc(m.get("89.160.20.112")) == "SE" and geo._rec_cc(m.get("2001:218::1")) == "JP"
+    assert m.get("1.2.3.4") is None and m.get("not-an-ip") is None
+    a = geo.MMDB(os.path.join(d, "asn-test.mmdb"))
+    assert a.get("89.160.20.112")["autonomous_system_number"] == 29518
+    # 在线下载:本地假服务器提供 .mmdb.gz
+    srv_dir = tempfile.mkdtemp()
+    ym = time.strftime("%Y-%m")
+    for k in ("country", "asn"):
+        with open(os.path.join(d, k + "-test.mmdb"), "rb") as f, gzip.open(os.path.join(srv_dir, f"dbip-{k}-lite-{ym}.mmdb.gz"), "wb") as g:
+            g.write(f.read())
+    class H(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k): super().__init__(*a, directory=srv_dir, **k)
+        def log_message(self, *a): pass
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); threading.Thread(target=srv.serve_forever, daemon=True).start()
+    config.DATA_DIR = tempfile.mkdtemp(); geo.BASE = f"http://127.0.0.1:{srv.server_address[1]}"
+    geo.load(); assert not geo.available()
+    assert geo.start_download()
+    for _ in range(50):
+        if not geo.DL["running"]: break
+        time.sleep(0.1)
+    assert geo.DL["msg"] == "完成" and geo.available(), geo.DL
+    assert geo.lookup("89.160.20.112") == ("SE", "AS29518 Bredband2 AB")
+    srv.shutdown()
+
+
+def test_quota_period():
+    import datetime
+    from app import insight
+    D = datetime.date
+    assert insight.period(15, D(2026, 10, 14)) == (D(2026, 9, 15), D(2026, 10, 15))
+    assert insight.period(15, D(2026, 10, 15)) == (D(2026, 10, 15), D(2026, 11, 15))
+    assert insight.period(31, D(2026, 3, 5)) == (D(2026, 2, 28), D(2026, 3, 31))
+    assert insight.period(1, D(2026, 12, 20)) == (D(2026, 12, 1), D(2027, 1, 1))
+    assert insight.period(1, D(2026, 1, 1)) == (D(2026, 1, 1), D(2026, 2, 1))
+
+
+def test_leak_lists():
+    from app import insight
+    assert insight._in_list("www.bilibili.com", insight.CN_SUFFIX) and insight._in_list("a.b.cn", insight.CN_SUFFIX)
+    assert not insight._in_list("notbilibili.com", insight.CN_SUFFIX)
+    assert insight._in_list("r1.googlevideo.com", insight.FOREIGN_SUFFIX)
 
 
 if __name__ == "__main__":

@@ -4,8 +4,11 @@ sys.path.insert(0, HERE)
 import mock_mihomo
 API_P, PROBE_P, WEB_P = 19090, 18999, 18099
 mock_mihomo.start(API_P, PROBE_P)
+mock_mihomo.start_agh(19444)
 
 data = tempfile.mkdtemp()
+import shutil
+os.makedirs(os.path.join(data, "geoip")); shutil.copy(os.path.join(HERE, "data", "country-test.mmdb"), os.path.join(data, "geoip", "country-test.mmdb")); shutil.copy(os.path.join(HERE, "data", "asn-test.mmdb"), os.path.join(data, "geoip", "asn-test.mmdb"))
 neigh = os.path.join(data, "neigh.txt")
 open(neigh, "w").write("192.168.1.10 dev br lladdr aa:bb:cc:dd:ee:01 REACHABLE\nfd00::10 dev br lladdr aa:bb:cc:dd:ee:01 STALE\n192.168.1.20 dev br lladdr aa:bb:cc:dd:ee:02 REACHABLE\n")
 # 旧 v1 库:client 是 IP,hourly 没有设备/节点
@@ -228,6 +231,47 @@ try:
     ok(post("/api/alerts/clear", {})[0] == 200 and get("/api/alerts")["rows"] == [], "告警:清空记录")
     ok(len(got) == n0, "告警:静默时段不推送")
     rsrv.shutdown()
+    # ---- v0.11 安全版
+    ag = get("/api/agh"); ok(ag == {"configured": False}, "AdGuard:未配置")
+    c, r = post("/api/agh/test", {"url": "http://127.0.0.1:19444", "user": "admin", "pass": "bad"}); ok(c == 200 and not r["ok"] and "401" in r["error"], f"AdGuard:密码错误被识别 {r}")
+    c, r = post("/api/agh/test", {"url": "http://127.0.0.1:19444", "user": "admin", "pass": "pw123"}); ok(r["ok"] and r["version"] == "v0.107.50", "AdGuard:测试连接成功")
+    c, r = post("/api/agh/config", {"url": "127.0.0.1:19444", "user": "admin", "pass": "pw123"})
+    ok(c == 200 and r["has_secret"] and r["url"] == "http://127.0.0.1:19444" and "pw123" not in json.dumps(r), "AdGuard:保存配置且不回显密码")
+    ok("pw123" not in json.dumps(get("/api/agh/config")), "AdGuard:读配置不带密码")
+    ag = get("/api/agh"); ok(ag["ok"] and ag["total"] == 2000 and ag["rate"] == 15.0 and ag["top_blocked"][0]["d"] == "ads.tracker.net", f"AdGuard:统计 {ag.get('error')}")
+    ok(ag["top_clients"][0]["name"] not in ("",) and ag["recent"][0]["rule"] == "||tracker.net^" and "pw123" not in json.dumps(ag), "AdGuard:客户端映射为设备名 + 最近拦截")
+    c, r = post("/api/agh/config", {"url": "http://127.0.0.1:19444", "user": "admin"}); ok(r["has_secret"], "AdGuard:密码留空沿用已存")
+    mock_mihomo.STATE["leak"] = True
+    rh = get("/api/rulehealth"); ok(rh["source"] == "mihomo" and rh["has_hits"] and any(z["rule"] == "DomainSuffix,unused.example" for z in rh["zero"]) and not any("youtube" in z["rule"] for z in rh["zero"]), f"规则健康:零命中 {rh['zero']}")
+    ok(rh["top"], "规则健康:流量最多的规则")
+    lk = None
+    for _ in range(30):
+        _t.sleep(1)
+        lk = get("/api/leaks")
+        if any(x["host"] == "www.bilibili.com" for x in lk["cn_proxy"]) and any(x["host"] == "www.google.com" for x in lk["fo_direct"]): break
+    ok(any(x["host"] == "www.bilibili.com" for x in lk["cn_proxy"]) and any(x["host"] == "www.google.com" for x in lk["fo_direct"]), f"分流检查:国内走代理 / 境外直连 {lk['cn_proxy'][:1]} {lk['fo_direct'][:1]}")
+    ok(lk["dns_local"], "分流检查:本地解析的代理域名")
+    rh = get("/api/rulehealth"); ok(rh["match"] and rh["match"]["share"] > 0, f"规则健康:落到兜底的占比 {rh['match']}")
+    gj = None
+    for _ in range(20):
+        gj = get("/api/geo")
+        if {x["cc"] for x in gj["by_cc"]} >= {"SE", "US"}: break
+        _t.sleep(1)
+    ok(gj["available"] and {x["cc"] for x in gj["by_cc"]} >= {"SE", "US"}, f"目的地国家:{gj['by_cc']}")
+    ok(any("Bredband2" in x["asn"] for x in gj["by_asn"]), "目的地国家:ASN 组织")
+    hm = get("/api/heatmap"); ok(len(hm["cells"]) == 7 and len(hm["cells"][0]) == 24 and hm["max"] > 0 and hm["peak"], "热力图:7×24")
+    ok(get("/api/heatmap?dev=aa:bb:cc:dd:ee:01")["max"] > 0, "热力图:按设备过滤")
+    post("/api/airports/rules", {"text": "HK-=测试机场"})
+    c, r = post("/api/quota", {"quota": {"测试机场": {"gb": 0.0001, "reset_day": 1}}})
+    qs = r["rows"][0]; ok(c == 200 and qs["airport"] == "测试机场" and qs["used"] > 0 and qs["pct"] >= 80 and qs["exhaust"], f"套餐:用量 {qs}")
+    qa = wait_kind("quota", 20); ok(qa and qa[0]["key"] == "测试机场", f"套餐:告警 {qa[:1]}")
+    ok(post("/api/quota", {"quota": {"x": {"gb": "abc"}}})[0] == 400, "套餐:非法输入被拒")
+    rp = get("/api/report"); ok(rp["up"] + rp["down"] > 0 and rp["devices"] and rp["kinds"]["proxy"] > 0 and rp["quota"], "周报:数据")
+    ok(post("/api/report/config", {"on": True, "weekday": 2, "hour": 8})[1] == {"on": True, "weekday": 2, "hour": 8}, "周报:计划保存")
+    post("/api/report/send", {}); rr = wait_kind("report", 10); ok(rr and "总流量" in rr[0]["detail"], f"周报:推送 {rr[:1]}")
+    mt = urllib.request.urlopen(B + "/metrics").read().decode()
+    ok("flux_nikki_up 1" in mt and "flux_traffic_bytes_today" in mt and 'flux_node_delay_ms{node="HK-01"}' in mt and "# TYPE flux_connections gauge" in mt, "/metrics:Prometheus 文本")
+    ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")

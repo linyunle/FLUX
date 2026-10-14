@@ -9,7 +9,9 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import alerts, auth, airports, appsig, collector, config, db, devices, netstat, realtime, update
+import hmac
+
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -881,7 +883,67 @@ def p_apprules(body):
     return {"ok": True, "rules": n}
 
 
-GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
+def _days_p(p, d=7, mx=90):
+    try:
+        return max(1, min(mx, int(one(p, "days", str(d)))))
+    except ValueError:
+        return d
+
+
+def _q(fn):
+    def h(p):
+        con = ro()
+        try:
+            return 200, fn(con, p)
+        finally:
+            con.close()
+    return h
+
+
+q_agh = _q(lambda con, p: agh.fetch(con, force=one(p, "force") == "1"))
+q_agh_cfg = _q(lambda con, p: agh.public_cfg(con))
+q_rulehealth = _q(lambda con, p: insight.rule_health(con, _days_p(p, 30)))
+q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7)))
+q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, 14)))
+q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
+q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
+q_report_cfg = _q(lambda con, p: insight.report_cfg(con))
+q_quality = _q(lambda con, p: insight.quality(con))
+q_geo = _q(lambda con, p: insight.geo_summary(con, _days_p(p, 7)))
+
+
+def p_agh_cfg(body):
+    return _wcon(lambda con: agh.save_cfg(con, body))
+
+
+def p_agh_test(body):
+    return _wcon(lambda con: agh.test(con, body))
+
+
+def p_geo_dl(body):
+    return {"started": geo.start_download(), "status": geo.status()}
+
+
+def p_quota(body):
+    _wcon(lambda con: insight.save_quota(con, body))
+    return _wcon(lambda con: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con)})
+
+
+def p_report_cfg(body):
+    return _wcon(lambda con: insight.save_report_cfg(con, body))
+
+
+def p_report_send(body):
+    _wcon(lambda con: insight.send_report(con, 7))
+    return {"ok": True}
+
+
+q_geo_status = lambda p: (200, geo.status())
+
+
+GET_ROUTES = {"/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
+              "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo,
+              "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
               "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
@@ -939,7 +1001,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -997,6 +1059,17 @@ class Handler(BaseHTTPRequestHandler):
             name = "favicon.png" if u.path in ("/favicon.png", "/favicon.ico") else "logo.png"
             with open(os.path.join(STATIC, name), "rb") as f:
                 return self._send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
+        if u.path == "/metrics":
+            tok = config.METRICS_TOKEN
+            given = self.headers.get("Authorization", "")
+            given = given[7:] if given.startswith("Bearer ") else one(params, "t")
+            if not ((tok and given and hmac.compare_digest(given, tok)) or self._authed(params)):
+                return self._deny()
+            con = ro()
+            try:
+                return self._send(200, insight.metrics_text(con).encode(), "text/plain; version=0.0.4; charset=utf-8")
+            finally:
+                con.close()
         if not self._authed(params):
             return self._deny(page=u.path in ("/", "/index.html"))
         if u.path in ("/", "/index.html"):
