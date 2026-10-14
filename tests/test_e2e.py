@@ -18,7 +18,7 @@ con.execute("INSERT INTO traffic VALUES(?,?,?,?,?,?)", (today, "192.168.1.10", "
 con.execute("INSERT INTO ipmap VALUES('192.168.1.10','aa:bb:cc:dd:ee:01',?)", (int(time.time()),))
 con.commit(); con.close()
 
-env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2", PROXY_SEC="2",
+env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2", PROXY_SEC="2", ALERT_EVAL_SEC="2", ALERT_LEARN_SEC="6",
            LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, APP_VERSION="v0.2.0", GITHUB_REPO="")
 proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 B = f"http://127.0.0.1:{WEB_P}"
@@ -187,6 +187,47 @@ try:
     rq("/api/login", {"password": "secret123"})
     ok(rq("/api/auth/set", {"old": "secret123", "new": ""})[0] == 200, "关闭密码")
     ok(get("/api/status")["auth"]["enabled"] is False, "关闭后免登录")
+    # v0.10.0 告警
+    import http.server, threading
+    got = []
+    class Rcv(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0); got.append(json.loads(self.rfile.read(n) or b"{}"))
+            self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"ok")
+    rsrv = http.server.ThreadingHTTPServer(("127.0.0.1", 19377), Rcv); threading.Thread(target=rsrv.serve_forever, daemon=True).start()
+    ac = get("/api/alerts/config")
+    ok(ac["channels"] == [] and ac["rules"]["node_down"]["fails"] == 3 and "new_device" in ac["kinds"], "告警:默认配置")
+    ok(post("/api/alerts/config", {"channels": [{"id": "w1", "type": "webhook", "name": "测试hook", "url": "ftp://x"}]})[0] == 400, "告警:渠道地址必须 http(s)")
+    c, r = post("/api/alerts/config", {"rules": {"traffic_spike": {"on": True, "min_mb": 0.1, "factor": 5, "cool_min": 60}, "node_down": {"on": True, "fails": 3, "cool_min": 1}},
+                                       "channels": [{"id": "w1", "type": "webhook", "name": "测试hook", "url": "http://127.0.0.1:19377/hook?key=SECRETKEY"}],
+                                       "quiet": {"on": False, "start": "23:00", "end": "07:00"}})
+    ok(c == 200 and r["channels"][0]["has_secret"] and "SECRETKEY" not in json.dumps(r), "告警:渠道保存,密钥不回显")
+    ok("SECRETKEY" not in json.dumps(get("/api/alerts/config")), "告警:读配置不带密钥")
+    c, r = post("/api/alerts/test", {"channel": {"id": "w1", "type": "webhook", "name": "测试hook", "url": ""}})
+    ok(c == 200 and r["ok"] and any(g.get("title") == "FLUX 测试消息" for g in got), f"告警:测试推送(密钥留空沿用已存) {r}")
+    def wait_kind(kind, sec=25):
+        for _ in range(sec * 2):
+            rows = get("/api/alerts?kind=" + kind)["rows"]
+            if rows: return rows
+            _t.sleep(.5)
+        return []
+    mock_mihomo.STATE["extra_dev"] = True
+    nd = wait_kind("new_device"); ok(nd and "192.168.1.99" in nd[0]["key"] and "已推送" in nd[0]["sent"], f"告警:新设备 {nd[:1]}")
+    sp = wait_kind("traffic_spike"); ok(sp and sp[0]["level"] == "warn", f"告警:流量突增 {sp[:1]}")
+    mock_mihomo.STATE["hk_down"] = True
+    nn = wait_kind("node_down"); ok(nn and nn[0]["key"] == "HK-01" and nn[0]["level"] == "bad", f"告警:节点故障 {nn[:1]}")
+    mock_mihomo.STATE["hk_down"] = False
+    nu = wait_kind("node_up"); ok(nu and nu[0]["key"] == "HK-01", "告警:节点恢复")
+    ok(any(g.get("kind") == "node_down" for g in got) and any(g.get("kind") == "new_device" for g in got), "告警:Webhook 收到事件 JSON")
+    al = get("/api/alerts"); ok(al["unread"] >= 3 and al["has_channel"] and al["counts"]["bad"] >= 1, f"告警:未读/统计 {al['unread']} {al['counts']}")
+    post("/api/alerts/seen", {}); ok(get("/api/alerts")["unread"] == 0 and get("/api/status")["alerts_unread"] == 0, "告警:标记已读")
+    ok(get("/api/alerts/baseline")["rows"], "告警:设备基线表")
+    post("/api/alerts/config", {"quiet": {"on": True, "start": "00:00", "end": "23:59"}, "channels": [{"id": "w1", "type": "webhook", "url": ""}], "rules": {"node_down": {"on": True, "fails": 3, "cool_min": 1}}})
+    mock_mihomo.STATE["jp_down"] = True; n0 = len(got); _t.sleep(1)
+    ok(post("/api/alerts/clear", {})[0] == 200 and get("/api/alerts")["rows"] == [], "告警:清空记录")
+    ok(len(got) == n0, "告警:静默时段不推送")
+    rsrv.shutdown()
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")

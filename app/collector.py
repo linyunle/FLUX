@@ -97,7 +97,13 @@ class Collector:
             elif t.lower() not in BUILTIN_TYPES:
                 hist = p.get("history") or []
                 delay = int(hist[-1].get("delay") or 0) if hist and isinstance(hist[-1], dict) else None
-                nodes[n] = {"type": t, "delay": delay}
+                fails = 0
+                for h in reversed(hist):  # 末尾连续测速失败的次数(给告警用)
+                    if isinstance(h, dict) and not int(h.get("delay") or 0):
+                        fails += 1
+                    else:
+                        break
+                nodes[n] = {"type": t, "delay": delay, "fails": fails}
                 self.note_qoe(n, hist)
         self.groups, self.ptype, self.nodes, self.proxies_at = groups, ptype, nodes, time.time()
 

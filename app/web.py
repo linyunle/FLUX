@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import auth, airports, appsig, collector, config, db, devices, netstat, realtime, update
+from . import alerts, auth, airports, appsig, collector, config, db, devices, netstat, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -787,13 +787,85 @@ def q_status(p):
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
         "now": int(time.time()), "live_at": live()["at"],
-        "auth": {"enabled": auth.enabled(), "env": auth.is_env()},
+        "auth": {"enabled": auth.enabled(), "env": auth.is_env()}, "alerts_unread": _wcon_ro(alerts.unread),
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
     }
 
 
+def _wcon_ro(fn):
+    con = ro()
+    try:
+        return fn(con)
+    except Exception:
+        return 0
+    finally:
+        con.close()
+
+
 def q_live(p):
     return 200, live()
+
+
+def q_alerts(p):
+    con = ro()
+    try:
+        try:
+            lim = int(one(p, "limit", "50"))
+            before = int(one(p, "before", "0"))
+        except ValueError:
+            lim, before = 50, 0
+        rows = alerts.list_events(con, one(p, "kind"), lim, before)
+        cutoff = time.time() - 86400
+        return 200, {"rows": rows, "unread": alerts.unread(con), "seen": alerts.seen_ts(con), "counts": alerts.counts(con, cutoff),
+                     "kinds": alerts.KINDS, "has_channel": any(c.get("on", True) for c in alerts.load_cfg(con)["channels"])}
+    finally:
+        con.close()
+
+
+def q_alert_cfg(p):
+    con = ro()
+    try:
+        return 200, alerts.public_cfg(con)
+    finally:
+        con.close()
+
+
+def q_alert_base(p):
+    con = ro()
+    try:
+        return 200, {"rows": alerts.baseline_table(con)}
+    finally:
+        con.close()
+
+
+def _wcon(fn):
+    con = db.open_db()
+    try:
+        return fn(con)
+    finally:
+        con.close()
+
+
+def p_alert_cfg(body):
+    _wcon(lambda con: alerts.save_cfg(con, body))
+    return _wcon(alerts.public_cfg)
+
+
+def p_alert_test(body):
+    return _wcon(lambda con: alerts.test_channel(con, body))
+
+
+def p_alert_seen(body):
+    _wcon(alerts.mark_seen)
+    return {"ok": True}
+
+
+def p_alert_clear(body):
+    def f(con):
+        with con:
+            con.execute("DELETE FROM alerts")
+    _wcon(f)
+    return {"ok": True}
 
 
 def q_apprules(p):
@@ -810,7 +882,7 @@ def p_apprules(body):
 
 
 GET_ROUTES = {"/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -867,7 +939,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

@@ -60,6 +60,40 @@ def test_airports():
     a.set_rules("")
 
 
+def test_alerts():
+    import sqlite3, time, tempfile
+    from app import alerts, config, db
+    # 静默时段(跨零点)
+    t = time.mktime((2026, 10, 13, 23, 30, 0, 0, 0, -1))
+    q = {"quiet": {"on": True, "start": "23:00", "end": "07:00"}}
+    assert alerts._in_quiet(q, t) and alerts._in_quiet(q, t + 5 * 3600) and not alerts._in_quiet(q, t - 8 * 3600)
+    assert not alerts._in_quiet({"quiet": {"on": False, "start": "23:00", "end": "07:00"}}, t)
+    # 渠道校验:地址和密钥
+    for bad in ({"type": "bark", "url": "javascript:1"}, {"type": "nope"}, {"type": "telegram", "token": "x"}):
+        try:
+            alerts._norm_channel(bad); assert False, bad
+        except ValueError:
+            pass
+    m = alerts._mask(alerts._norm_channel({"type": "bark", "url": "https://api.day.app/SECRETKEY"}))
+    assert "SECRETKEY" not in str(m) and m["has_secret"]
+    # 基线:同钟点样本够 → 均值;不够 → 近 24 小时中位数
+    config.DB_PATH = tempfile.mkdtemp() + "/t.db"; config.DATA_DIR = os.path.dirname(config.DB_PATH)
+    con = db.init_db()
+    now = time.mktime((2026, 10, 13, 10, 20, 0, 0, 0, -1))
+    hn = time.strftime("%Y-%m-%d %H", time.localtime(now))
+    with con:
+        for d in (10, 11, 12):
+            con.execute("INSERT INTO hourly VALUES(?,?,?,?,?)", (f"2026-10-{d} 10", "dev1", "n", 100, 900))
+    b, n, how = alerts._baseline(con, "dev1", hn, now)
+    assert b == 1000 and n == 3 and how == "同时段均值", (b, n, how)
+    assert alerts._baseline(con, "nobody", hn, now)[2] == "暂无基线"
+    with con:
+        for h in range(5):
+            con.execute("INSERT INTO hourly VALUES(?,?,?,?,?)", (f"2026-10-13 0{h}", "dev2", "n", 0, 500 + h))
+    b, n, how = alerts._baseline(con, "dev2", hn, now)
+    assert how == "近 24 小时中位数" and b == 502, (b, how)
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

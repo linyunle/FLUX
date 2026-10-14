@@ -13,6 +13,8 @@ CONF_PATH = os.path.join(DATA_DIR, "config.json")
 
 INTERVAL = max(2.0, float(os.environ.get("INTERVAL_SEC", "10")))
 FLUSH = max(INTERVAL, float(os.environ.get("FLUSH_SEC", "60")))
+ALERT_EVAL = max(2.0, float(os.environ.get("ALERT_EVAL_SEC", "30")))
+ALERT_LEARN = max(0.0, float(os.environ.get("ALERT_LEARN_SEC", "900")))  # 首次启动后这段时间内见到的设备都算已知,不报新设备
 PROXY_EVERY = max(2.0, float(os.environ.get("PROXY_SEC", "60")))
 KEEP_DAYS = max(1, int(os.environ.get("KEEP_DAYS", "90")))
 HOUR_KEEP_DAYS = max(2, int(os.environ.get("HOUR_KEEP_DAYS", "14")))

@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
 SECRET = "s3cret"
-STATE = {"tick": 0, "probe_sel": "HK-01", "puts": []}
+STATE = {"tick": 0, "probe_sel": "HK-01", "puts": [], "jp_down": False, "hk_down": False, "extra_dev": False, "pt": 0, "hist": {}}
 GEO = {"HK-01": {"ip": "203.0.113.5", "country": "Hong Kong", "city": "Central", "organization": "HKT", "asn": 4760},
        "JP-01": {"ip": "198.51.100.7", "success": True, "country": "Japan", "region": "Tokyo", "city": "Tokyo",
                  "connection": {"org": "IIJ", "asn": 2497}}}
@@ -16,7 +16,8 @@ def conns():
         return {"id": i, "upload": 1000 * k * t, "download": 5000 * k * t, "chains": chains, "rule": rule, "rulePayload": "",
                 "metadata": {"sourceIP": src, "host": host, "destinationIP": "1.1.1.1" if not host.startswith("netflix") else "", "dnsMode": "normal" if not host.startswith("netflix") else "fake-ip", "remoteDestination": "203.0.113.5:443",
                             "inboundName": inbound, "network": "udp" if host.startswith("r1.") else "tcp", "destinationPort": "80" if host.startswith("dl.") else "443", "inboundPort": "7890"}}
-    return [
+    extra = [c("x", "192.168.1.99", ["HK-01", "Proxy"], "RuleSet", "example.org", 1)] if STATE["extra_dev"] else []
+    return extra + [
         c("a", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "youtube.com", 1),
         c("b", "fd00::10", ["HK-01", "Proxy"], "RuleSet", "netflix.com", 2),     # 同一台设备的 IPv6
         c("c", "192.168.1.20", ["直连", "国内"], "GeoIP", "baidu.com", 1),   # 直连出口不叫 DIRECT
@@ -55,14 +56,18 @@ class API(BaseHTTPRequestHandler):
             STATE["tick"] += 1
             return self._j(200, {"connections": conns(), "memory": 88000000})
         if p == "/proxies":
-            def hist(d):
-                n = STATE["tick"]
-                return [{"time": "2026-10-13T10:%02d:%02d+08:00" % (n // 60 % 60, n % 60), "delay": (d + n % 7 * 5) if d else (0 if n % 2 else 120)}]
+            STATE["pt"] += 1
+            n = STATE["pt"]
+            def hist(node, d):
+                h = STATE["hist"].setdefault(node, [])
+                h.append({"time": "2026-10-13T10:%02d:%02d+08:00" % (n // 60 % 60, n % 60), "delay": d})
+                del h[:-10]
+                return list(h)
             return self._j(200, {"proxies": {
                 "DIRECT": {"type": "Direct"},
                 "直连": {"type": "Direct"},
-                "HK-01": {"type": "Vless", "history": hist(88)},
-                "JP-01": {"type": "Trojan", "history": hist(0)},
+                "HK-01": {"type": "Vless", "history": hist("HK-01", 0 if STATE["hk_down"] else 88 + n % 7 * 5)},
+                "JP-01": {"type": "Trojan", "history": hist("JP-01", 0 if STATE["jp_down"] else 120)},
                 "Proxy": {"type": "Selector", "now": "HK-01", "all": ["HK-01", "JP-01"]},
                 "egress-probe": {"type": "Selector", "now": STATE["probe_sel"], "all": ["HK-01", "JP-01"]}}})
         if p == "/proxies/egress-probe":
