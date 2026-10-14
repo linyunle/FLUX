@@ -235,6 +235,14 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .good{color:var(--good)}.bad{color:var(--bad)}
 .qsec{font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:600}
 .spark{vertical-align:middle}
+@keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
+#rtDev:empty,#rtNode:empty,#rtHost:empty,#dtTbl:empty,#hostsTbl:empty,#apBody:empty,#qoeBody:empty,#chart:empty{min-height:110px;border-radius:var(--rs);background:linear-gradient(90deg,var(--hover) 25%,transparent 50%,var(--hover) 75%);background-size:200% 100%;animation:shim 1.4s linear infinite}
+@media(prefers-reduced-motion:reduce){#rtDev:empty,#rtNode:empty,#rtHost:empty,#dtTbl:empty,#hostsTbl:empty,#apBody:empty,#qoeBody:empty,#chart:empty{animation:none}}
+details.adv{margin-top:6px}details.adv>summary{cursor:pointer;color:var(--ink2);padding:6px 0;font-size:13px}details.adv[open]>summary{margin-bottom:8px}
+body.priv .pv{filter:blur(6px);transition:filter .15s}body.priv .pv:hover{filter:none}
+#btnPriv[aria-pressed=true]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+@media(max-width:820px){#viewSeg{display:none!important}}
+.stk #tStyle,.stk #tSplit,.stk #tblToggle,.stk #tLegend{display:none}
 .proto-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--hover);margin:4px 0 8px}
 .proto-bar i{display:block;height:100%;min-width:2px}
 .pdot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
@@ -252,7 +260,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <div class="app">
 <aside class="side">
   <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="badge" id="ver"></span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
-  <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span>
+  <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span><span class="badge new" id="noauth" style="display:none" role="button" tabindex="0" title="面板里能看到每台设备访问的域名,建议设置访问密码">未设密码</span>
   <div id="sideMini" class="sidemini" aria-hidden="true"><div id="smD">–</div><div id="smU">–</div><div id="smC" class="sub">–</div></div>
   <nav class="nav" id="nav" role="tablist" aria-label="页面"></nav>
   <div id="sideRt" class="sidert">
@@ -287,6 +295,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <span id="custom" style="display:none"><input type="date" id="d1"> – <input type="date" id="d2"></span>
   <div class="seg" id="mode" role="group" aria-label="流向"></div>
   <input id="hostQ" placeholder="全局搜索:设备 / 域名 / 节点 / 规则" style="width:230px;max-width:100%">
+  <div class="seg" id="viewSeg" role="group" aria-label="概览视图" title="一键切换概览里显示哪些卡片"></div>
+  <button id="btnPriv" aria-pressed="false" title="隐私模式:模糊显示域名 / 目标 IP(悬停或点按显示)">隐私</button>
 </div>
 <div id="chips"></div>
 <div class="tiles" id="tiles"><div id="tilesData" style="display:contents"></div><div class="tile" id="tConn"><div class="l">连接数</div><div class="v" id="tConnV">–</div><div class="s" id="tConnS">&nbsp;</div></div></div>
@@ -300,29 +310,18 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="chartbox" id="memChart"></div>
   </div>
   <div class="card gcard" id="rtCard">
-    <h2>实时速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
+    <h2>实时速度<span class="seg" id="rtSrc" role="group" aria-label="范围"></span><span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
     <div class="big"><div><span class="sub">下行</span> <b id="rtDown">–</b></div><div><span class="sub">上行</span> <b id="rtUp">–</b></div><div class="sub" id="rtSub"></div></div>
     <div class="chartbox" id="rtChart"></div>
   </div>
-  <div class="card gcard" id="rtdCard">
-    <h2>直连速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtdNote"></span></h2>
-    <div class="big"><div><span class="sub">下行</span> <b id="rtdDown">–</b></div><div><span class="sub">上行</span> <b id="rtdUp">–</b></div><div class="sub" id="rtdSub"></div></div>
-    <div class="chartbox" id="rtdChart"></div>
-  </div>
-  <div class="card gcard" id="rtpCard">
-    <h2>代理速度<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtpNote"></span></h2>
-    <div class="big"><div><span class="sub">下行</span> <b id="rtpDown">–</b></div><div><span class="sub">上行</span> <b id="rtpUp">–</b></div><div class="sub" id="rtpSub"></div></div>
-    <div class="chartbox" id="rtpChart"></div>
-  </div>
-  <div class="card gcard" id="rtdevCard"><h2>此刻最活跃的设备</h2><div id="rtDev" class="lbody"></div></div>
+  <div class="card gcard" id="rtdevCard"><h2>设备<span class="seg" id="devView" role="group" aria-label="视图"></span><span class="seg" id="dtMode" role="group" aria-label="流向"></span><span class="sp"></span><span class="sub" id="devHint"></span></h2>
+    <div id="rtDev" class="lbody"></div><div id="dtBox" style="display:none"><div class="scroll lbody" id="dtTbl"></div><div id="dtPager"></div></div></div>
   <div class="card gcard" id="rtnodeCard"><h2>此刻最活跃的节点</h2><div id="rtNode" class="lbody"></div></div>
-  <div class="card gcard" id="rthostCard"><h2>此刻最活跃的域名或 IP</h2><div id="rtHost" class="lbody"></div></div>
-  <div class="card gcard" id="devtopCard">
-    <h2>设备流量消耗 Top<span class="seg" id="dtMode" role="group" aria-label="流向"></span><span class="sp"></span><span class="sub">点一行看它访问的域名去向</span></h2>
-    <div class="scroll lbody" id="dtTbl"></div><div id="dtPager"></div>
-  </div>
+  <div class="card gcard" id="rthostCard"><h2>访问目标<span class="seg" id="hostView" role="group" aria-label="视图"></span><span class="sp"></span><span class="sub" id="hostHint"></span></h2>
+    <div id="rtHost" class="lbody"></div><div id="hostsBox" style="display:none"><div class="scroll lbody" id="hostsTbl"></div></div></div>
   <div class="card gcard" id="trendCard">
     <h2>流量趋势
+      <span class="seg" id="tDim" role="group" aria-label="堆叠维度"></span>
       <span class="seg" id="grain" role="group"></span>
       <span class="seg" id="tStyle" role="group" aria-label="图表样式"></span>
       <button id="tSplit" aria-pressed="false" title="上行、下行分成两张图">拆分上/下行</button>
@@ -333,23 +332,10 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="sub cl" id="cl1"></div><div class="chartbox" id="chart"></div>
     <div class="sub cl" id="cl2"></div><div class="chartbox" id="chart2"></div>
     <div class="scroll" id="chartTable" style="display:none"></div>
+    <div class="stleg" id="stLeg"></div>
   </div>
-  <div class="card gcard" id="stackCard">
-    <h2>流量堆叠趋势 <span class="seg" id="stBy" role="group" aria-label="堆叠维度"></span><span class="seg" id="stH" role="group" aria-label="时间范围"></span><span class="sp"></span><span class="sub" id="stNote"></span></h2>
-    <div class="chartbox" id="stChart"></div><div class="stleg" id="stLeg"></div>
-  </div>
-  <div class="card gcard" id="protoCard"><h2>应用协议分布 <span class="sub" id="protoNote"></span></h2><div id="protoBody"></div></div>
   <div class="card gcard" id="appsCard"><h2>应用识别 <span class="seg" id="apBy" role="group" aria-label="分组"></span><span class="sp"></span><span class="sub" id="apNote"></span></h2><div id="apBody"></div></div>
-  <div class="card gcard" id="qoeCard"><h2>网络质量 QoE <span class="sp"></span><span class="sub" id="qoeNote">延迟 / 抖动 / 超时 / TCP 重传</span></h2><div id="qoeBody"></div></div>
-  <div class="card gcard" id="hostsCard"><h2>访问目标 Top <span class="sub">点一行看 设备 / 规则 / 节点 / DNS</span></h2><div class="scroll lbody" id="hostsTbl"></div></div>
-</section>
-
-<section id="tab-airports" style="display:none">
-  <div class="card">
-    <h2>机场流量 <span class="sub">点一行 = 只看这个机场(再点一次取消)</span><span class="sp"></span><button id="apRules">归类规则</button></h2>
-    <div class="sub" id="apNote" style="margin-bottom:6px"></div>
-    <div class="scroll" id="apTbl"></div>
-  </div>
+  <div class="card gcard" id="qoeCard"><h2>网络质量 QoE <span class="sp"></span><span class="sub" id="qoeNote">全局数据,不随筛选变化</span></h2><div id="qoeBody"></div></div>
 </section>
 
 <section id="tab-nodes" style="display:none">
@@ -364,12 +350,11 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ndRules"></div></div>
     </div>
   </div>
-  <div id="nodeListView">
-  <div class="card">
-    <h2>节点流量 <span class="sub">点一行 = 只看这个节点</span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"></h2>
-    <div class="scroll" id="nodeTbl"></div>
-  </div>
-  </div>
+  <div id="nodeListView"><div class="card">
+    <h2><span class="seg" id="nview" role="group" aria-label="分组"></span><span class="sub" id="nvHint"></span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"><button id="apRules">归类规则</button></h2>
+    <div class="sub" id="apNote" style="margin-bottom:6px"></div>
+    <div class="scroll" id="apTbl"></div><div class="scroll" id="nodeTbl"></div>
+  </div></div>
 </section>
 
 <section id="tab-devices" style="display:none">
@@ -410,6 +395,12 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card sec" id="sec-look"><h2>外观</h2>
   <div class="row2"><span class="lb">模式</span><div class="seg" id="lkMode"></div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
+  <div class="row2"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
+    <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
+  </div></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
+  <details class="adv"><summary>更多外观选项(颜色 / 密度 / 圆角 / 透明度 / 图表样式)</summary>
   <div class="row2"><span class="lb">自定义色</span>
     <span class="crow"><input type="color" id="cAcc" aria-label="强调色"> <span class="sub">强调色</span></span>
     <span class="crow"><input type="color" id="cDown" aria-label="下行色"> <span class="sub">下行(收)</span></span>
@@ -420,11 +411,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2"><span class="lb">页面宽度</span><div class="seg" id="lkWidth"></div></div>
   <div class="row2"><span class="lb">圆角</span><div class="seg" id="lkRad"></div></div>
   <div class="row2"><span class="lb">字号</span><div class="seg" id="lkFont"></div></div>
-  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「此刻最活跃的设备/节点」和「设备流量消耗 Top」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条);前两张卡片高度固定,并可点「暂停」冻结内容、点一行看详情。访问目标 Top 单独设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
-    <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
-  </div></div>
-  <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
-  <div class="row2"><span class="lb">卡片阴影</span><div class="seg" id="lkShadow"></div></div>
+    <div class="row2"><span class="lb">卡片阴影</span><div class="seg" id="lkShadow"></div></div>
   <div class="row2"><span class="lb wide">手机底栏透明度</span><span class="slrow"><button data-sl="lkNav" data-d="-1" aria-label="减 1%">−</button><input type="range" class="sl" id="lkNav" min="10" max="100" step="1" style="width:170px"><button data-sl="lkNav" data-d="1" aria-label="加 1%">+</button><b class="v" id="lkNavV"></b><span class="navprev" title="预览:半透明导航条盖在条纹背景上"><i></i></span></span></div>
   <div class="row2"><span class="lb wide">卡片透明度</span><span class="slrow"><button data-sl="lkOp" data-d="-1" aria-label="减 1%">−</button><input type="range" class="sl" id="lkOp" min="50" max="100" step="1" style="width:170px"><button data-sl="lkOp" data-d="1" aria-label="加 1%">+</button><b class="v" id="lkOpV"></b></span></div>
   <div class="row2"><span class="lb wide">侧栏速度/连接图</span><div class="seg" id="lkSideViz"></div></div>
@@ -439,6 +426,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <span class="crow"><input type="color" id="cTrDown" aria-label="趋势图下行色"> <span class="sub">下行(收)</span></span>
     <span class="crow"><input type="color" id="cTrUp" aria-label="趋势图上行色"> <span class="sub">上行(发)</span></span>
     <button id="cTrClear">跟随主题色</button></div>
+  
+  </details>
   <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:12px">
     <button id="lkReset">恢复默认</button></div></div>
       <div class="card sec" id="sec-conn"><h2>连接</h2>
@@ -462,6 +451,14 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="sub" id="appCats" style="margin-top:6px"></div>
   <div class="msg" id="appMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="appSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-security"><h2>安全与隐私</h2>
+  <div class="sub" style="margin-bottom:10px">访问密码:设置后,打开面板和调用接口都要先登录。面板里能看到每台设备访问过的域名,建议设置。密码只保存加盐哈希(data/auth.json);连续输错 5 次会锁定 1 分钟。</div>
+  <div class="fld" id="authOldRow"><label>当前密码</label><input id="authOld" type="password" autocomplete="current-password"></div>
+  <div class="fld"><label>新密码(至少 6 位;留空保存 = 关闭密码)</label><input id="authNew" type="password" autocomplete="new-password"></div>
+  <div class="msg" id="authMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authSave" class="pri">保存</button></div>
+  <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label></div>
       <div class="card sec" id="sec-devices"><h2>设备名导入</h2>
   <div class="sub" style="margin-bottom:8px">在路由器上执行 <code>uci show dhcp</code>,把输出粘贴到下面(也可以粘贴 /etc/config/dhcp 全文)。只读取静态绑定里的 名字 / MAC / IP。</div>
   <textarea id="iTxt" rows="9" placeholder="dhcp.@host[0]=host&#10;dhcp.@host[0].name='my-phone'&#10;dhcp.@host[0].mac='aa:bb:cc:dd:ee:ff'"></textarea>
@@ -484,14 +481,14 @@ function fmt(n){n=+n||0;const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&
 const pad=n=>String(n).padStart(2,"0");
 const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 function qs(o){const p=new URLSearchParams();for(const k in o){if(o[k]!==""&&o[k]!=null)p.set(k,o[k])}if(TOKEN)p.set("t",TOKEN);return p.toString()}
-async function get(path,o={}){const r=await fetch(path+"?"+qs(o));const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
-async function post(path,body){const r=await fetch(path+(TOKEN?"?t="+encodeURIComponent(TOKEN):""),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+async function get(path,o={}){const r=await fetch(path+"?"+qs(o));const j=await r.json();if(!r.ok){if(r.status===401&&j.login)location.reload();throw new Error(j.error||r.status)}return j}
+async function post(path,body){const r=await fetch(path+(TOKEN?"?t="+encodeURIComponent(TOKEN):""),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok){if(r.status===401&&j.login)location.reload();throw new Error(j.error||r.status)}return j}
 
-const S={airport:"",apRules:"",merge:true,domRows:[],range:"today",from:"",to:"",devs:new Set(),mode:"",q:"",group:"",rule:"",node:"",tab:"overview",grain:"h24",table:false,devices:[],seq:{},dd:"",nd:"",tr:null};
+const S={airport:"",apRules:"",merge:true,domRows:[],range:"today",from:"",to:"",devs:new Set(),mode:"",q:"",group:"",rule:"",node:"",tab:"overview",grain:"h24",table:false,devices:[],seq:{},dd:"",nd:"",tr:null,tDim:"ud",nview:"airport",stk:null};
 const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["month","本月"],["custom","自定义"]];
 const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
-const TABS=[["overview","概览"],["airports","机场"],["nodes","节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["settings","设置"]];
+const TABS=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["settings","设置"]];
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
  airports:'<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>',
@@ -519,13 +516,24 @@ function renderChrome(){
   seg($("#mode"),MODES,S.mode,k=>{S.mode=k;renderChrome();refresh()});
   seg($("#grain"),GRAINS,S.grain,k=>{S.grain=k;renderChrome();loadTrend()});
   seg($("#tStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;saveTheme();renderChrome();drawTrend()});
+  seg($("#tDim"),TDIMS,S.tDim,k=>{S.tDim=k;renderChrome();loadTrend()});
+  seg($("#rtSrc"),[["all","总"],["direct","直连"],["proxy","代理"]],TH.rtSrc,k=>{TH.rtSrc=k;saveTheme();renderChrome();if(S.rt)paintRt(S.rt)});
+  seg($("#viewSeg"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));
+  $("#viewSeg").style.display=S.tab==="overview"?"":"none";$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   $("#nav").innerHTML=TABS.map(([k,l])=>`<button class="navi ${k==="settings"?"sep":""}" role="tab" title="${l}" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}<span class="nl">${l}</span></button>`).join("");
   $("#nav").onclick=e=>{const b=e.target.closest(".navi");if(b){S.tab=b.dataset.k;if(S.tab==="devices")S.dd="";if(S.tab==="nodes")S.nd="";showTab();refresh()}};
   autoHide();const n=S.devs.size;$("#devBtn").textContent="设备:"+(n?n+" 台":"全部")+" ▾";
-  const ch=[];if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);if(S.airport)ch.push(["airport","机场 "+S.airport]);if(S.q)ch.push(["q","搜索 "+S.q]);
-  $("#chips").innerHTML=ch.map(([k,t])=>`<span class="chip">${esc(t)} <b data-k="${k}" title="取消" role="button" tabindex="0">×</b></span>`).join(" ");
+  const ch=[];if(S.devs.size){const f=S.devices.find(d=>d.key===[...S.devs][0]);ch.push(["devs","设备 "+(S.devs.size===1?(f?devLabel(f):[...S.devs][0]):S.devs.size+" 台")])}
+  if(S.group)ch.push(["group","策略组 "+S.group]);if(S.rule)ch.push(["rule","规则 "+S.rule]);if(S.node)ch.push(["node","节点 "+S.node]);if(S.airport)ch.push(["airport","机场 "+S.airport]);if(S.q)ch.push(["q","搜索 "+S.q]);
+  if(ch.length>1)ch.push(["all","清除全部"]);
+  $("#chips").innerHTML=ch.map(([k,t])=>k==="all"?`<span class="chip"><b data-k="all" role="button" tabindex="0" style="color:var(--accent)">清除全部</b></span>`:`<span class="chip">${esc(t)} <b data-k="${k}" title="取消" role="button" tabindex="0">×</b></span>`).join(" ");
+  applyViews();
 }
-$("#chips").onclick=e=>{const b=e.target.closest("b");if(b){S[b.dataset.k]="";if(b.dataset.k==="q")$("#hostQ").value="";renderChrome();syncAp();refresh()}};
+$("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dataset.k;
+  if(k==="all"){S.devs.clear();S.group=S.rule=S.node=S.airport=S.q="";$("#hostQ").value="";renderDevList()}
+  else if(k==="devs"){S.devs.clear();renderDevList()}
+  else{S[k]="";if(k==="q")$("#hostQ").value=""}
+  renderChrome();syncAp();refresh()};
 function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=S.tab==="settings"?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
@@ -608,7 +616,14 @@ async function fetchTrend(o,g){
   const j=await get("/api/days",{...o,from:"",to:"",days:g.slice(1)});
   return {rows:j.days.map(d=>({...d,label:d.day})),lab:r=>r.day.slice(5),tab:"日期"}}
 function paintTrend(box,t,ser,H){drawChart(box,t.rows,ser,TH.trend.style,H,t.lab,tipUD)}
+const TDIMS=[["ud","上下行"],["client","设备"],["node","节点"],["mode","去向"],["app","应用"],["cat","类别"],["proto","协议"]];
+const stackHours=()=>S.grain[0]==="h"?+S.grain.slice(1):336;
 function drawTrend(){
+  const stk=S.tDim!=="ud";$("#trendCard").classList.toggle("stk",stk);
+  if(stk){if(!S.stk||S.tab!=="overview")return;
+    $("#chart2").style.display="none";$("#chartTable").style.display="none";$("#cl2").style.display="none";$("#chart").style.display="";$("#cl1").style.display="";
+    paintStack(S.stk,$("#chart"),$("#stLeg"),$("#cl1"),HGT.trend[TH.cards.trend.h]||220);return}
+  $("#stLeg").innerHTML="";
   const t=S.tr;if(!t||S.tab!=="overview")return;
   const c=trCols(),tb=$("#tblToggle"),split=!!TH.trend.split,H=HGT.trend[TH.cards.trend.h]||220;
   tb.setAttribute("aria-pressed",S.table);
@@ -625,6 +640,7 @@ function drawTrend(){
 }
 function loadTrend(){
   const id=(S.seq.trend=(S.seq.trend||0)+1);
+  if(S.tDim!=="ud"){get("/api/stack",{...base(),by:S.tDim,hours:stackHours()}).then(j=>{if(S.seq.trend===id){S.stk=j;drawTrend()}}).catch(e=>console.warn("stack",e));return}
   fetchTrend(base(),S.grain).then(t=>{if(S.seq.trend===id){S.tr=t;drawTrend()}}).catch(e=>console.warn("trend",e))}
 $("#tblToggle").onclick=()=>{S.table=!S.table;drawTrend()};
 $("#tSplit").onclick=()=>{TH.trend.split=!TH.trend.split;themeChanged(true)};
@@ -654,19 +670,19 @@ const devName=r=>r.name||(r.ips&&ipTxt(r.ips,r.key))||r.key;
 const dirTag=r=>{const t=r.up+r.down;if(!t)return"";const f=(r.direct||0)/t;return f>=.98?'<span class="tag">直连</span>':f<=.02?'<span class="tag" style="color:var(--accent);border-color:var(--accent)">代理</span>':`<span class="tag">混合 ${Math.round(f*100)}%直连</span>`};
 /* 小表:设备列表 / 域名列表 */
 const miniDevs=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(devName(r))}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
-const miniDoms=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(r.key)}${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td><td>${dirTag(r)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
+const miniDoms=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td><span class="pv">${esc(r.key)}</span>${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td><td>${dirTag(r)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 const KT={direct:'<span class="tag">直连</span>',proxy:'<span class="tag" style="color:var(--accent);border-color:var(--accent)">代理</span>',reject:'<span class="tag" style="color:var(--bad);border-color:var(--bad)">拒绝</span>'};
 const DNSM={"fake-ip":"fake-ip","normal":"正常解析","redir-host":"redir-host","mapping":"映射","hosts":"hosts 文件"};
 const dnsMode=m=>DNSM[m]||m||"未知方式";
-const dnsEntry=e=>e.ip?`${esc(e.ip)} <span class="sub">(${esc(dnsMode(e.mode))})</span>`:`<span class="sub">${esc(dnsMode(e.mode))}:由代理节点端解析,本机没有 IP 记录</span>`;
-const dnsShort=l=>(l||[]).slice(0,2).map(e=>e.ip?esc(e.ip):esc(dnsMode(e.mode))).join("、");
+const dnsEntry=e=>e.ip?`<span class="pv">${esc(e.ip)}</span> <span class="sub">(${esc(dnsMode(e.mode))})</span>`:`<span class="sub">${esc(dnsMode(e.mode))}:由代理节点端解析,本机没有 IP 记录</span>`;
+const dnsShort=l=>`<span class="pv">${(l||[]).slice(0,2).map(e=>e.ip?esc(e.ip):esc(dnsMode(e.mode))).join("、")}</span>`;
 function renderTrace(j){
   const T=j.total.up+j.total.down,K=j.kinds,pc=k=>T?Math.round((K[k].up+K[k].down)/T*100):0,hasH=j.cols.includes("host"),hasC=j.cols.includes("client");
   let h=`<div class="sub">合计 <b>${fmt(T)}</b>(↓${fmt(j.total.down)} ↑${fmt(j.total.up)}) · 直连 ${pc("direct")}% · 代理 ${pc("proxy")}%${K.reject.up+K.reject.down?` · 拒绝 ${pc("reject")}%`:""}</div>`;
   if(!hasH){const hs=Object.entries(j.dns);
     h+=hs.length?`<div class="sub dnsbox"><b>DNS 解析</b>${hs.slice(0,6).map(([host,l])=>`<div>${hs.length>1?esc(host)+" → ":""}${l.slice(0,4).map(dnsEntry).join(";  ")}</div>`).join("")}</div>`:'<div class="sub dnsbox">DNS 解析:暂无记录(升级后新产生的连接才会记)</div>'}
   if(!j.rows.length)return h+'<span class="sub">没有记录</span>';
-  const who=r=>{const hd=hasH?esc(r.host):"",dn=hasH&&j.dns[r.host]?dnsShort(j.dns[r.host]):"";
+  const who=r=>{const hd=hasH?`<span class="pv">${esc(r.host)}</span>`:"",dn=hasH&&j.dns[r.host]?dnsShort(j.dns[r.host]):"";
     if(hasC&&hasH)return `${esc(r.name||r.client)}<div class="sub">${hd}${dn?" → "+dn:""}</div>`;
     if(hasC)return esc(r.name||r.client);return `${hd}${dn?`<div class="sub">→ ${dn}</div>`:""}`};
   return h+`<table class="trace"><thead><tr>${hasC||hasH?`<th>${hasC&&hasH?"设备 / 域名":hasC?"设备":"域名"}</th>`:""}<th>去向 · 命中规则</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th></tr></thead><tbody>${j.rows.map(r=>
@@ -674,61 +690,48 @@ function renderTrace(j){
 const trace=(o,cols,limit)=>get("/api/trace",{...o,cols:cols.join(","),limit:limit||15}).then(renderTrace);
 const cTotal={h:"合计",n:1,f:(r,sh)=>`${fmt(r.up+r.down)}<div class="share"><i style="width:${sh}%"></i></div>`};
 const cDown={h:"下行",n:1,s:1,f:r=>fmt(r.down)},cUp={h:"上行",n:1,s:1,f:r=>fmt(r.up)};
-const cKey=h=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':esc(r.key)});
+const cKey=(h,pv)=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':(pv?`<span class="pv">${esc(r.key)}</span>`:esc(r.key))});
 
 S.ddHostOpen=new Set();S.ddNodeOpen=new Set();S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
-function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标"),cDown,cUp,cTotal],S.hostOpen,
+function loadHosts(){load("hosts","/api/summary",{...base(),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标",1),cDown,cUp,cTotal],S.hostOpen,
   r=>trace(base({host:r.key}),["client","node","group","rule"],20)))}
 S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,snap:null,cur:[],page:[]},rthost:{p:0,pause:false,snap:null,cur:[],page:[]},devtop:{p:0}};
 function pagerBar(k,total,per,paused){const n=Math.max(1,Math.ceil(total/per)),p=Math.max(0,Math.min(S.pg[k].p,n-1));
   return `<div class="pager" data-k="${k}">${paused===undefined?"":`<button data-a="pause" class="${paused?"pri":""}" title="${paused?"继续刷新":"暂停刷新,方便查看内容"}">${paused?"▶ 继续":"⏸ 暂停"}</button>`}<span class="sub">${total} 个</span><span class="sp"></span><button data-a="prev" ${p<=0?"disabled":""} aria-label="上一页">‹</button><span class="sub pgn">${p+1} / ${n}</span><button data-a="next" ${p>=n-1?"disabled":""} aria-label="下一页">›</button></div>`}
-const PCOL=["#4c78a8","#f58518","#54a24b","#e45756","#79706e","#b279a2","#ff9da6","#9d755d","#bab0ac","#72b7b2"];
-S.protoOpen=new Set();S.appOpen=new Set();S.apBy=S.apBy||"app";S.stBy=S.stBy||"client";S.stH=S.stH||24;
+const PCOL=["#4c78a8","#f58518","#72b7b2","#b279a2","#9d755d","#6b9ac4","#c9a227","#79706e","#8c6bb1","#bab0ac"]; /* 分类色:刻意不用红/绿,留给「差 / 好」 */
+S.protoOpen=new Set();S.appOpen=new Set();S.apBy=S.apBy||"app";
 function colored(rows){return rows.map((r,i)=>({...r,_c:PCOL[i%PCOL.length]}))}
 const cShare=r=>`${((r.up+r.down)/(r._T||1)*100).toFixed(1)}%`;
 function colorBar(rows,T,label){return `<div class="proto-bar" role="img" aria-label="${label}">${rows.map(r=>`<i style="width:${(r.up+r.down)/T*100}%;background:${r._c}" title="${esc(r.key)} ${Math.round((r.up+r.down)/T*100)}%"></i>`).join("")}</div>`}
-function loadProto(){load("proto","/api/protocols",{...base(),limit:30},j=>{
-  const T=j.total.up+j.total.down;
-  $("#protoNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始统计 · `:"")+"端口协议判断;点一行看是哪些设备在用";
-  const el=$("#protoBody");
-  if(!j.rows.length||!T){el.innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会统计)</div>';return}
-  const all=colored(j.rows).map(r=>({...r,_T:T}));
-  let bar=all.slice(0,9);const rest=all.slice(9);if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
-  el.innerHTML=colorBar(bar,T,"协议占比")+'<div id="protoTbl"></div>';
-  expTable($("#protoTbl"),{rows:all,total:j.total},[{h:"协议",k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${esc(r.key)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.protoOpen,
-    r=>get("/api/protocols",{...base(),by:"client",proto:r.key,limit:8}).then(x=>miniDevs(x.rows)))})}
 /* ---- 应用识别 ---- */
-const AP_BY=[["app","应用"],["cat","类别"],["client","设备"],["node","出口节点"]];
+const AP_BY=[["app","应用"],["cat","类别"],["client","设备"],["node","出口节点"],["proto","端口协议"]];
 function loadApps(){
   seg($("#apBy"),AP_BY,S.apBy,k=>{S.apBy=k;S.appOpen.clear();loadApps()});
-  load("apps","/api/apps",{...base(),by:S.apBy,limit:30},j=>{
+  const isP=S.apBy==="proto";
+  load("apps",isP?"/api/protocols":"/api/apps",{...base(),...(isP?{}:{by:S.apBy}),limit:30},j=>{
     const T=j.total.up+j.total.down,el=$("#apBody");
     if(!j.rows.length||!T){$("#apNote").textContent="";el.innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会识别)</div>';return}
     let un=0;if(S.apBy==="app"){const u=j.rows.find(r=>r.key==="未识别");un=u?(u.up+u.down)/T:0}
-    $("#apNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始 · `:"")+"按域名/SNI 特征库 + 端口识别,不解密内容"+(S.apBy==="app"?` · 未识别 ${Math.round(un*100)}%`:"");
+    $("#apNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始 · `:"")+(isP?"只按传输层 + 端口判断":"按域名/SNI 特征库 + 端口识别,不解密内容")+(S.apBy==="app"?` · 未识别 ${Math.round(un*100)}%`:"")+" · 点一行展开";
     const all=colored(j.rows).map(r=>({...r,_T:T}));
     let bar=all.slice(0,9);const rest=all.slice(9);if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
     const nm=r=>S.apBy==="client"?esc(devName(r)):esc(r.key)+(r.cat&&S.apBy==="app"?` <span class="tag">${esc(r.cat)}</span>`:"");
-    el.innerHTML=colorBar(bar,T,"应用占比")+'<div id="apTbl"></div>';
+    el.innerHTML=colorBar(bar,T,"占比")+'<div id="apTbl2"></div>';
     const ld=r=>{const o={...base(),limit:10};
+      if(isP)return get("/api/protocols",{...o,by:"client",proto:r.key}).then(x=>miniDevs(x.rows));
       if(S.apBy==="app")return get("/api/apps",{...o,by:"client",app:r.key}).then(x=>miniDevs(x.rows));
       if(S.apBy==="cat")return get("/api/apps",{...o,by:"app",cat:r.key}).then(x=>miniApps(x.rows));
       if(S.apBy==="client")return get("/api/apps",{...o,by:"app",dev:r.key}).then(x=>miniApps(x.rows));
       return get("/api/apps",{...o,by:"app",node:r.key}).then(x=>miniApps(x.rows))};
-    expTable($("#apTbl"),{rows:all,total:j.total},[{h:S.apBy==="client"?"设备":S.apBy==="node"?"出口节点":S.apBy==="cat"?"类别":"应用",k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,ld)})}
+    const hd={client:"设备",node:"出口节点",cat:"类别",proto:"协议",app:"应用"}[S.apBy];
+    expTable($("#apTbl2"),{rows:all,total:j.total},[{h:hd,k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,ld)})}
 const miniApps=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(r.key)} <span class="tag">${esc(r.cat||"")}</span></td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
-/* ---- 堆叠面积图 ---- */
-const ST_BY=[["client","设备"],["node","节点"],["mode","去向"],["app","应用"],["cat","类别"],["proto","协议"]],ST_H=[[24,"24 小时"],[48,"48 小时"],[168,"7 天"]];
+/* ---- 堆叠面积图(流量趋势卡片的「堆叠维度」) ---- */
 function stColor(x,i){return x.other?"#9aa0a6":PCOL[i%PCOL.length]}
-function loadStack(){
-  seg($("#stBy"),ST_BY,S.stBy,k=>{S.stBy=k;loadStack()});
-  seg($("#stH"),ST_H.map(([k,l])=>[String(k),l]),String(S.stH),k=>{S.stH=+k;loadStack()});
-  load("stack","/api/stack",{...base(),by:S.stBy,hours:S.stH},j=>paintStack(j))}
-function paintStack(j){
-  const box=$("#stChart"),leg=$("#stLeg");box.classList.add("stbox");
+function paintStack(j,box,leg,noteEl,H){
   const n=j.labels.length;
-  if(!j.peak){box.style.minHeight="";box.innerHTML='<div class="empty">这段时间没有数据(按小时的明细只保留 14 天;应用/协议维度只统计升级后的流量)</div>';leg.innerHTML="";$("#stNote").textContent="";return}
-  const W=Math.max(320,box.clientWidth||700),H=240,L=52,R=10,T=14,B=24,pw=W-L-R,ph=H-T-B;
+  if(!j.peak){box.style.minHeight="";noteEl.textContent="";box.innerHTML='<div class="empty">这段时间没有数据(按小时的明细只保留 14 天;应用/协议维度只统计升级后的流量)</div>';leg.innerHTML="";return}
+  const W=Math.max(320,box.clientWidth||700),L=52,R=10,T=14,B=24,pw=W-L-R,ph=H-T-B;
   const max=niceMax(Math.max(...j.totals)),X=i=>L+pw*(n>1?i/(n-1):.5),Y=v=>T+ph-ph*v/max;
   let g="";
   for(let i=0;i<=3;i++){const v=max*i/3,y=T+ph-ph*i/3;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${fmt(v)}</text>`}
@@ -737,7 +740,7 @@ function paintStack(j){
     const top=cum.map((v,i)=>`${X(i).toFixed(1)} ${Y(v).toFixed(1)}`),bot=lo.map((v,i)=>`${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).reverse();
     g+=`<path d="M${top.join("L")}L${bot.join("L")}Z" fill="${stColor(x,k)}" fill-opacity=".82" stroke="var(--surface)" stroke-width=".8"/>`});
   const every=Math.ceil(n/Math.max(2,Math.floor(pw/70)));
-  j.labels.forEach((lb,i)=>{if(i%every===0){const hh=lb.slice(11)+":00";g+=`<text x="${X(i)}" y="${H-6}" text-anchor="${i===0?"start":"middle"}">${n>48?lb.slice(5,10):(hh==="00:00"||i===0?lb.slice(5,10)+" ":"")+hh}</text>`}});
+  j.labels.forEach((lb,i)=>{if(i%every===0){const hh=lb.slice(11)+":00";g+=`<text x="${X(i)}" y="${H-6}" text-anchor="${i===0?"start":"middle"}">${n>48?lb.slice(5,10):(hh==="00:00"&&i>0?lb.slice(5,10)+" ":"")+hh}</text>`}});
   const pk=j.totals.indexOf(Math.max(...j.totals)),px=X(pk),py=Y(j.totals[pk]);
   g+=`<circle cx="${px}" cy="${py}" r="3.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>`;
   g+=`<line id="stCur" x1="0" x2="0" y1="${T}" y2="${T+ph}" stroke="var(--ink2)" stroke-dasharray="3 3" style="display:none"/>`;
@@ -751,10 +754,10 @@ function paintStack(j){
   box.onmousemove=e=>show(e.clientX,e.clientY);box.onmouseleave=()=>{tip.style.display="none";cur.style.display="none"};
   box.ontouchstart=box.ontouchmove=e=>{const t=e.touches[0];if(t)show(t.clientX,t.clientY)};
   const pkb=j.peak,mult=pkb.avg?(pkb.bytes/pkb.avg):0;
-  $("#stNote").textContent=`峰值 ${pkb.hour.slice(5)}:00 · ${fmt(pkb.bytes)}/小时(约 ${fmt(pkb.bytes/3600)}/s)${mult>=1.5?` · 是平均的 ${mult.toFixed(1)} 倍`:""}`;
+  noteEl.textContent=(S.grain[0]==="h"?"":"按小时的明细只保留 14 天,已显示最近 14 天 · ")+`峰值 ${pkb.hour.slice(5)}:00 · ${fmt(pkb.bytes)}/小时(约 ${fmt(pkb.bytes/3600)}/s)${mult>=1.5?` · 是平均的 ${mult.toFixed(1)} 倍`:""}`;
   leg.innerHTML=j.series.map((x,k)=>`<span class="it"><span class="pdot" style="background:${stColor(x,k)}"></span>${esc(x.name)} <b>${fmt(x.total)}</b></span>`).join("")}
 /* ---- 网络质量 QoE ---- */
-function spark(vals,w=90,h=22){const v=vals.map(x=>x==null?null:x),m=Math.max(...v.filter(x=>x!=null),1);if(v.filter(x=>x!=null).length<2)return'<span class="sub">–</span>';
+function sparkW(vals,w=90,h=22){const v=vals.map(x=>x==null?null:x),m=Math.max(...v.filter(x=>x!=null),1);if(v.filter(x=>x!=null).length<2)return'<span class="sub">–</span>';
   const pts=v.map((x,i)=>x==null?null:[(i/(v.length-1)*(w-2)+1).toFixed(1),(h-2-(h-4)*x/m).toFixed(1)]).filter(Boolean);
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="${pts.map(p=>p.join(",")).join(" ")}"/></svg>`}
 const dCls=d=>d==null?"":d<120?"good":d<300?"warn":"bad";
@@ -765,21 +768,18 @@ async function loadQoe(){
   try{const [q,t]=await Promise.all([get("/api/qoe",{hours:24}),get("/api/tunnels",{...base()})]);if(S.seq.qoe!==id)return;
     const el=$("#qoeBody"),tc=q.tcp,T=t.rows.reduce((a,r)=>a+r.up+r.down,0);
     const nodes=q.nodes.filter(r=>r.tests>0||r.delay!=null);
-    const tested=q.nodes.filter(r=>r.avg!=null),avg=tested.length?Math.round(tested.reduce((a,r)=>a+r.avg,0)/tested.length):null;
-    const jit=tested.filter(r=>r.jitter!=null),jv=jit.length?Math.round(jit.reduce((a,r)=>a+r.jitter,0)/jit.length):null;
-    const ff=q.nodes.reduce((a,r)=>a+(r.fail_rate!=null?Math.round(r.fail_rate*r.tests):0),0);
-    const allT=q.nodes.reduce((a,r)=>a+r.tests,0),fr2=allT?ff/allT:null;
+    const sm=q.summary||{};
     const stat=(v,l,c)=>`<div><div class="v ${c||""}">${v}</div><div class="l">${l}</div></div>`;
-    let h=`<div class="qstat">${stat(avg==null?"–":avg+" ms","节点平均延迟(24 小时)",dCls(avg))}${stat(jv==null?"–":jv+" ms","平均抖动(延迟标准差)")}${stat(fr2==null?"–":(fr2*100).toFixed(1)+"%","测速超时/失败率",fCls(fr2))}${stat(tc.now&&tc.now.rate!=null?tc.now.rate+"%":"–","TCP 重传率(此刻 · 1 分钟)",rCls(tc.now&&tc.now.rate))}${stat(tc.avg_rate==null?"–":tc.avg_rate+"%","TCP 重传率(24 小时均值)",rCls(tc.avg_rate))}</div>`;
-    if(tc.ok&&tc.hourly.some(x=>x.rate!=null)){const v=tc.hourly.map(x=>x.rate);h+=`<div class="qsec">TCP 重传率走势(每小时,%)</div><div style="width:100%">${spark(v,Math.max(200,(el.clientWidth||600)-4),46)}</div>`}
+    let h=`<div class="qstat">${stat(sm.avg==null?"–":sm.avg+" ms",`节点平均延迟(${sm.basis||"–"})`,dCls(sm.avg))}${stat(sm.jitter==null?"–":sm.jitter+" ms","延迟波动(测速标准差)")}${stat(sm.fail_rate==null?"–":(sm.fail_rate*100).toFixed(1)+"%","测速超时/失败率",fCls(sm.fail_rate))}${stat(tc.now&&tc.now.rate!=null?tc.now.rate+"%":"–","TCP 重传率(此刻 · 1 分钟)",rCls(tc.now&&tc.now.rate))}${stat(tc.avg_rate==null?"–":tc.avg_rate+"%","TCP 重传率(24 小时均值)",rCls(tc.avg_rate))}</div>`;
+        if(tc.ok&&tc.hourly.some(x=>x.rate!=null)){const v=tc.hourly.map(x=>x.rate);h+=`<div class="qsec">TCP 重传率走势(每小时,%)</div><div style="width:100%">${sparkW(v,Math.max(200,(el.clientWidth||600)-4),46)}</div>`}
     else if(!tc.ok)h+='<div class="sub">读不到路由器的 TCP 统计(/proc/net/snmp),重传率不可用</div>';
     h+='<div class="qsec">出口隧道协议分布(按节点类型,不是端口)</div>';
     if(T){const rows=colored(t.rows).map(r=>({...r,_T:T}));h+=colorBar(rows,T,"隧道协议占比")+`<div class="stleg">${rows.map(r=>`<span class="it"><span class="pdot" style="background:${r._c}"></span>${esc(r.key)} <b>${((r.up+r.down)/T*100).toFixed(1)}%</b> ${fmt(r.up+r.down)}</span>`).join("")}</div>`}
     else h+='<div class="sub">这个范围内没有流量</div>';
-    h+='<div class="qsec">节点延迟 / 抖动(来自 nikki 对节点的测速)</div>';
+    h+='<div class="qsec">节点延迟 / 波动(来自 nikki 对节点的测速)</div>';
     if(!nodes.length||q.test_note)h+=`<div class="sub">${esc(q.test_note||"没有数据")}</div>`;
-    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th><th class="hide-s">类型</th><th class="n">当前</th><th class="n">平均</th><th class="n hide-s">抖动</th><th class="n">超时率</th><th class="hide-s">24 小时</th></tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${spark(r.series)}</td></tr>`).join("")}</tbody></table></div>`;
-    h+='<div class="sub" style="margin-top:8px;line-height:1.6">数据来源说明:延迟 / 抖动 / 超时来自 nikki 对各节点的主动测速(url-test),反映面板所在路由器到节点的链路,不是每台设备、每个应用各自的往返时间。TCP 重传率读的是路由器内核的全局计数(重传报文 ÷ 发出报文),不分设备和应用。应用层丢包率需要抓包/流量镜像,mihomo 接口里没有这项数据,所以这里不提供。</div>';
+    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th><th class="hide-s">类型</th><th class="n">当前</th><th class="n">平均</th><th class="n hide-s">波动</th><th class="n">超时率</th><th class="hide-s">24 小时</th></tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${sparkW(r.series)}</td></tr>`).join("")}</tbody></table></div>`;
+    h+='<div class="sub" style="margin-top:8px;line-height:1.6">口径说明:① 这张卡是全局数据,不随顶部筛选变化。② 延迟 / 波动 / 超时来自 nikki 对节点的主动测速(url-test),反映路由器到节点的链路;「平均延迟」按各节点实际流量加权(没有流量数据时退回简单平均);「波动」是测速结果的标准差,反映稳定性,不是严格意义的包间抖动。③ TCP 重传率读的是路由器内核的全局计数(重传报文 ÷ 发出报文),包含局域网和不经过代理的流量,不分设备、不分节点,不能直接当作某个节点的质量。④ 应用层丢包率需要抓包 / 流量镜像,mihomo 接口里没有这项数据,所以不提供。</div>';
     el.innerHTML=h}catch(e){console.warn("qoe",e)}}
 function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direct","直连"]],S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();S.pg.devtop.p=0;loadDevTop()});
   load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:100},j=>{S.dtJ=j;paintDevTop()})}
@@ -788,13 +788,22 @@ function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=
     r=>trace(base({mode:S.dtMode,dev:r.key}),["host","node","group","rule"],15));
   $("#dtPager").innerHTML=j.rows.length>per?pagerBar("devtop",j.rows.length,per):""}
 /* 此刻最活跃的设备 / 节点:固定行数、翻页、可暂停、点一行看详情 */
+const hostView=()=>S.q?"period":TH.views.host;
+function applyViews(){
+  const dp=TH.views.dev==="period",hp=hostView()==="period";
+  seg($("#devView"),[["live","此刻"],["period","时段"]],TH.views.dev,k=>{TH.views.dev=k;saveTheme();applyViews();if(k==="period")loadDevTop()});
+  $("#rtDev").style.display=dp?"none":"";$("#dtBox").style.display=dp?"":"none";$("#dtMode").style.display=dp?"":"none";
+  $("#devHint").textContent=dp?"点一行看它访问的域名去向":"点一行看详情 · 可暂停";
+  seg($("#hostView"),[["live","此刻"],["period","时段"]],hostView(),k=>{if(S.q)return;TH.views.host=k;saveTheme();applyViews();if(k==="period")loadHosts()});
+  $("#rtHost").style.display=hp?"none":"";$("#hostsBox").style.display=hp?"":"none";
+  $("#hostHint").textContent=hp?(S.q?"搜索结果 · 点一行看 设备 / 规则 / 节点 / DNS":"点一行看 设备 / 规则 / 节点 / DNS"):"点一行看详情 · 可暂停"}
 const PGCFG={rtdev:["#rtDev",r=>r.name||r.key],rtnode:["#rtNode",r=>r.node],rthost:["#rtHost",r=>r.host]};
 function paintPg(k){const st=S.pg[k],el=$(PGCFG[k][0]),per=rowsOf(k);
   const rows=(st.pause&&st.snap)?st.snap:(st.cur||[]);
   const n=Math.max(1,Math.ceil(rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
   const page=rows.slice(st.p*per,st.p*per+per);st.page=page;
   const nm=PGCFG[k][1];
-  let h=page.map((r,i)=>`<tr class="click" data-i="${i}"><td class="k" title="${esc(nm(r))}">${esc(nm(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
+  let h=page.map((r,i)=>`<tr class="click" data-i="${i}"><td class="k" title="${esc(nm(r))}">${k==="rthost"?`<span class="pv">${esc(nm(r))}</span>`:esc(nm(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
   if(!page.length)h='<tr><td colspan="4" style="color:var(--muted)">现在没有明显的流量</td></tr>';
   for(let i=Math.max(page.length,1);i<per;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
   el.innerHTML=`<table><tbody>${h}</tbody></table>`+pagerBar(k,rows.length,per,!!st.pause);
@@ -855,7 +864,7 @@ function loadDetail(){
     $("#ddLegend").innerHTML=`<span><i style="background:${c.down}"></i>下行(收)</span><span><i style="background:${c.up}"></i>上行(发)</span>`;
     drawChart($("#ddChart"),t.rows,[{k:"down",c:c.down},{k:"up",c:c.up}],TH.trend.style,200,t.lab,tipUD)}).catch(e=>console.warn(e));
   const lim={...o,limit:15};
-  load("dd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ddHosts"),j,[cKey("目标"),cDown,cUp,cTotal],S.ddHostOpen,r=>trace({...o,host:r.key},["node","group","rule"],12)));
+  load("dd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ddHosts"),j,[cKey("目标",1),cDown,cUp,cTotal],S.ddHostOpen,r=>trace({...o,host:r.key},["node","group","rule"],12)));
   load("dd_n","/api/summary",{...lim,by:"node"},j=>expTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal],S.ddNodeOpen,r=>trace({...o,node:r.key},["host","node","group","rule"],15)));
   load("dd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ddGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
   load("dd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ddRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
@@ -872,7 +881,7 @@ function loadDomains(){$("#domMerge").checked=S.merge;
     const one=S.devs.size===1;
     const ncol=6+(one?0:1);
     $("#domTbl").innerHTML=`<table><thead><tr><th>域名</th>${one?"":'<th class="hide-s">设备</th>'}<th>去向</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th><th class="n hide-s">最近</th></tr></thead><tbody>${j.rows.map((r,i)=>`<tr class="click" data-i="${i}">
-      <td class="k" title="${esc(r.key)}">${esc(r.key)}${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td>
+      <td class="k" title="${esc(r.key)}"><span class="pv">${esc(r.key)}</span>${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td>
       ${one?"":`<td class="hide-s" style="max-width:240px">${devCell(r)}</td>`}
       <td>${direction(r)}</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td><td class="n hide-s">${fmtDay(r.last)}</td></tr>`).join("")}</tbody></table>`;
     const ld=r=>trace(base(S.merge?{dom:r.key}:{host:r.key}),S.merge&&r.subs>1?["client","host","node","group","rule"]:["client","node","group","rule"],25);
@@ -974,9 +983,12 @@ function paintMem(j){const el=$("#memCard");if(!el||el.offsetParent===null)retur
 function paintRt(j){
   const D=j.direct,P=j.proxy,msg=j.ok?"":"实时速度暂时读不到(会自动重试)";
   document.querySelectorAll("[data-vz]").forEach(b=>b.textContent=TH.viz.style==="wave"?"曲线":"水波");
-  for(const k of ["rt","rtd","rtp"])$("#"+k+"Note").textContent=msg;
-  fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
-  fillRt("rtd",D,D.series,`${D.conns} 个连接`);fillRt("rtp",P,P.series,`${P.conns} 个连接`);paintMem(j)}
+  $("#rtNote").textContent=msg;
+  const src=TH.rtSrc||"all";
+  if(src==="direct")fillRt("rt",D,D.series,`直连 ${D.conns} 个连接`);
+  else if(src==="proxy")fillRt("rt",P,P.series,`代理 ${P.conns} 个连接`);
+  else fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
+  paintMem(j)}
 document.addEventListener("click",e=>{if(!e.target.closest("[data-vz]"))return;TH.viz.style=TH.viz.style==="wave"?"line":"wave";saveTheme();if(S.rt)paintRt(S.rt);if(S.tab==="settings")renderLook()});
 function loadRealtime(){if(document.hidden)return;
   load("rt","/api/realtime",{seconds:120,dev:[...S.devs].join(",")},j=>{
@@ -1014,30 +1026,31 @@ const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:
 const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
-const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtd:["#rtdCard","直连速度","rt"],rtp:["#rtpCard","代理速度","rt"],rtdev:["#rtdevCard","此刻最活跃的设备"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","此刻最活跃的域名或 IP"],devtop:["#devtopCard","设备流量消耗 Top"],trend:["#trendCard","流量趋势","trend"],stack:["#stackCard","流量堆叠趋势"],proto:["#protoCard","应用协议分布"],apps:["#appsCard","应用识别"],qoe:["#qoeCard","网络质量 QoE"],hosts:["#hostsCard","访问目标 Top"]};
-const LISTS=["rtdev","rtnode","rthost","devtop","hosts"],ROWS={s:5,m:8,l:12};
+const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtdev:["#rtdevCard","设备(此刻 / 时段)"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","访问目标(此刻 / 时段)"],trend:["#trendCard","流量趋势 / 堆叠","trend"],apps:["#appsCard","应用识别 / 协议"],qoe:["#qoeCard","网络质量 QoE"]};
+const LISTS=["rtdev","rtnode","rthost"],ROWS={s:5,m:8,l:12};
 const HROWS=[5,8,10,15,20,30,50,100];
-const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.hosts.rows)?+TH.cards.hosts.rows:30):(ROWS[(TH.cards[k]||{}).h]||8);
+const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.rthost.rows)?+TH.cards.rthost.rows:30):(ROWS[(TH.cards[k==="devtop"?"rtdev":k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={mem:{w:3,h:"m"},rt:{w:3,h:"m"},rtd:{w:3,h:"m"},rtp:{w:3,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m"},proto:{w:12,h:"m"},stack:{w:12,h:"m"},apps:{w:12,h:"m"},qoe:{w:12,h:"m"},devtop:{w:12,h:"m"},trend:{w:12,h:"m"},hosts:{w:12,h:"m",rows:30}};
+const DEF_CARDS={mem:{w:6,h:"m"},rt:{w:6,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},trend:{w:12,h:"m"},apps:{w:12,h:"m"},qoe:{w:12,h:"m"}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
-const AUTOHIDE=["mem","rt","rtd","rtp","rtdev","rtnode","rthost","devtop"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:3,navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
+const AUTOHIDE=["mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
+const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:4,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
 function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),d=themeDefault();
-  if(!(t.v>=2)){delete t.order;delete t.hide;delete t.cards}
-  const r={...d,...t,custom:{...(t.custom||{})},trend:{...d.trend,...(t.trend||{})},viz:{...d.viz,...(t.viz||{})},cards:{}};
+  if(!(t.v>=4)){const hr=((t.cards||{}).hosts||{}).rows;delete t.order;delete t.hide;delete t.cards;if(hr)t.cards={rthost:{rows:hr}}} /* v0.9.0 合并了一批卡片,旧排版重置一次 */
+  const r={...d,...t,custom:{...(t.custom||{})},trend:{...d.trend,...(t.trend||{})},viz:{...d.viz,...(t.viz||{})},views:{...d.views,...(t.views||{})},cards:{}};
   for(const k in CARDS){const c={...DEF_CARDS[k],...((t.cards||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";r.cards[k]=c}
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
-  if((t.v||0)<3){for(const k of ["rt","rtd","rtp"])if(r.cards[k].w===4)r.cards[k].w=3}
+  if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
+  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
-  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",rthost:"devtop",proto:"hosts",stack:"proto",apps:"hosts",qoe:"hosts"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
-  if(!PRESETS[r.preset])r.preset="default";r.v=3;return r}catch(e){return themeDefault()}}
+  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
+  if(!PRESETS[r.preset])r.preset="default";r.v=4;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
 const effMode=()=>TH.mode==="dark"||(TH.mode==="auto"&&mq.matches)?"dark":"light";
@@ -1072,17 +1085,19 @@ function applyTheme(){
   $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
   $(".footrow").classList.toggle("gone",!TH.sideShow.dev&&!TH.sideShow.theme);
   {const bg=getComputedStyle(R).getPropertyValue("--bg").trim();if(hexOk(bg))$("#tc").content=bg}
+  document.body.classList.toggle("priv",!!TH.priv);$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   autoHide();
   $("#tiles").classList.toggle("gone",!TH.tiles);$("#btnMode").textContent=MODE_LBL[TH.mode]||MODE_LBL.auto;
 }
 /* 概览里只筛了设备时,隐藏和该设备无关的全局内容,改显示「所选设备此刻」 */
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
-    if(k==="hosts"||k==="devtop"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.toggle("autohide",k==="devtop"&&!q&&one)}
+    if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.remove("autohide")}
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
-
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadProto();loadApps();loadStack();loadQoe()}}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe()}}}
+const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","trend"]],ts:["排障",["mem","rt","rtnode","rthost","apps","qoe"]],sec:["安全",["rtdev","rthost","apps"]]};
+function applyView(k){TH.view=k;const v=VIEWS[k];TH.hide=v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[];themeChanged(true);renderChrome()}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
   sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
@@ -1102,7 +1117,7 @@ function renderLook(){
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
-    ${k==="hosts"?`<select data-k="${k}" data-f="rows" aria-label="显示行数" title="显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>${v} 行</option>`).join("")}</select>`:`<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="高度">${["proto","stack","apps","qoe"].includes(k)?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>`}
+    ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${["apps","qoe"].includes(k)?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
@@ -1114,14 +1129,17 @@ function renderLook(){
   seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   $("#lkTiles").checked=TH.tiles;
+  seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
 }
+$("#lkPriv").onchange=e=>{TH.priv=e.target.checked;saveTheme();applyTheme();renderChrome()};
+$("#btnPriv").onclick=()=>{TH.priv=!TH.priv;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()};
 for(const [id,k] of [["#cVzA","a"],["#cVzB","b"]])$(id).oninput=e=>{TH.viz[k]=e.target.value;saveTheme();applyTheme()};
 $("#cVzClear").onclick=()=>{TH.viz.a=TH.viz.b="";themeChanged(true)};
 $("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k,i=TH.order.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=TH.order.length)return;
   TH.order.splice(i,1);TH.order.splice(j,0,k);themeChanged()};
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
-  TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);themeChanged(true)};
+  TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);TH.view="custom";themeChanged(true);renderChrome()};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
 function syncSl(el){const mn=+el.min,mx=+el.max;el.style.setProperty("--p",((+el.value-mn)/(mx-mn)*100)+"%")}
@@ -1162,7 +1180,11 @@ function loadAirports(){load("airports","/api/airports",base({node:"",airport:""
   rowsTable($("#apTbl"),j,[
     {h:"机场",k:1,f:r=>`${esc(r.key)}<div class="sub">${r.nodes} 个节点${r.top.length?" · 最多 "+esc(r.top[0].node):""}</div>`},
     {h:"趋势",s:1,f:r=>spark(r.series)},cDown,cUp,cTotal],r=>{S.airport=S.airport===r.key?"":r.key;renderChrome();syncAp();refresh()},S.airport)})}
-function loadNodes(){$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();load("nodes","/api/summary",base({node:"",by:"node",limit:500}),j=>{S.nodeRows=j;drawNodes()})}
+function loadNodes(){$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();
+  seg($("#nview"),[["airport","按机场"],["node","按节点"]],S.nview,k=>{S.nview=k;loadNodes()});
+  const ap=S.nview==="airport";$("#apTbl").style.display=$("#apNote").style.display=ap?"":"none";$("#nodeTbl").style.display=$("#nodeQ").style.display=ap?"none":"";
+  if(ap)return loadAirports();
+  load("nodes","/api/summary",base({node:"",by:"node",limit:500}),j=>{S.nodeRows=j;drawNodes()})}
 function drawNodes(){const j=S.nodeRows;if(!j)return;const kw=$("#nodeQ").value.trim().toLowerCase();
   const rows=j.rows.filter(r=>!kw||(r.key+" "+(r.airport||"")).toLowerCase().includes(kw));
   rowsTable($("#nodeTbl"),{...j,rows},[
@@ -1186,7 +1208,7 @@ function loadNodeDetail(){
   const lim={...o,limit:20};
   load("nd_d","/api/summary",{...lim,by:"client"},j=>expTable($("#ndDevs"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.ndDevOpen,
     r=>trace({...o,dev:r.key},["host","node","group","rule"],15)));
-  load("nd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ndHosts"),j,[cKey("目标"),cDown,cUp,cTotal],S.ndHostOpen,
+  load("nd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ndHosts"),j,[cKey("目标",1),cDown,cUp,cTotal],S.ndHostOpen,
     r=>trace({...o,host:r.key},["client","node","group","rule"],20)));
   load("nd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ndGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
   load("nd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ndRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
@@ -1200,7 +1222,7 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["security","安全与隐私"],["devices","设备名"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1210,6 +1232,10 @@ async function loadSettings(){
   try{
     if(S.set==="look")renderLook();
     else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sMsg").textContent="";renderUpd(st.update)}
+    else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
+      $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
+      $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
+      $("#authMsg").className="msg"+(a.enabled?" ok":" warn");$("#authMsg").textContent=a.env?"访问密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里修改":a.enabled?"已启用访问密码":"目前没有设置访问密码:局域网里任何人打开这个页面都能看到所有设备的访问记录";$("#lkPriv").checked=!!TH.priv}
     else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
   }catch(e){console.warn(e)}}
@@ -1222,6 +1248,10 @@ function renderUpd(u){
   ${u.newer?`<div class="msg ok">有新版本。在路由器 compose 目录里执行:</div><pre>docker compose pull &amp;&amp; docker compose up -d</pre><a href="${esc(u.url)}" target="_blank" rel="noopener">查看更新说明</a>`:(u.error?'<div class="msg warn">暂时查不到(路由器访问 GitHub 不通?)</div>':'<div class="sub">已是最新。</div>')}`;
   const b=$("#uChk");if(b)b.onclick=async()=>{b.disabled=true;try{renderUpd(await post("/api/update/check",{}))}catch(e){}}}
 $("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#authSave").onclick=async()=>{const m=$("#authMsg");m.className="msg";try{const j=await post("/api/auth/set",{old:$("#authOld").value,new:$("#authNew").value});
+  m.className="msg ok";m.textContent=j.enabled?"访问密码已保存(其他已登录的设备需要重新登录)":"访问密码已关闭";status();loadSettings()}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#authLogout").onclick=async()=>{try{await post("/api/logout",{})}catch(e){}location.reload()};
+$("#noauth").onclick=()=>openSettings("security");
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
 $("#iGo").onclick=async()=>{const m=$("#iMsg");m.className="msg";try{const j=await post("/api/devices/import",{text:$("#iTxt").value});m.className="msg ok";m.textContent=`导入 ${j.hosts} 台设备(${j.entries} 条)`;loadDevices()}catch(e){m.className="msg err";m.textContent=e.message}};
 for(const m of document.querySelectorAll(".modal"))m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")});
@@ -1231,14 +1261,14 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").clas
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
   const c=s.conn;$("#scStatus").title=c.ok?"已连接 nikki":(c.error||"未连接");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
+  {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}
 }catch(e){$("#conn").innerHTML='<span class="dot bad"></span>面板服务无响应'}}
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
-  if(S.tab==="overview"){loadTrend();loadHosts();loadDevTop();loadProto();loadApps();loadStack();loadQoe();loadRealtime()}
-  else if(S.tab==="airports")loadAirports();
+  if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(TH.views.dev==="period")loadDevTop();loadApps();loadQoe();loadRealtime()}
   else if(S.tab==="nodes")loadNodes();
   else if(S.tab==="devices")loadDevicesTab();
   else if(S.tab==="domains")loadDomains();
@@ -1247,7 +1277,7 @@ function refresh(){
 }
 $("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();S.dtOpen.clear();renderChrome();refresh()},300)}})();
 $("#d1").onchange=$("#d2").onchange=refresh;
-window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadStack(),loadRealtime()),200)}})());
+window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadRealtime()),200)}})());
 renderChrome();showTab();status();loadDevices();refresh();
 setInterval(()=>{if(document.hidden)return;status();if(S.tab!=="settings")refresh()},15000);
 </script>

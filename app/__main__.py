@@ -1,12 +1,13 @@
 import signal
 import threading
 
-from . import airports, appsig, collector, config, db, realtime, web
+from . import airports, appsig, auth, collector, config, db, realtime, web
 from .util import log, stop
 
 
 def main():
     config.load()
+    auth.load()
     con = db.init_db()
     airports.load(con)
     appsig.load(con)

@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import airports, appsig, collector, config, db, devices, netstat, realtime, update
+from . import auth, airports, appsig, collector, config, db, devices, netstat, realtime, update
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -420,6 +420,8 @@ def q_qoe(p):
         tcp = {h: (o, r, rs) for h, o, r, rs in con.execute("SELECT hour, out, retrans, resets FROM tcp WHERE hour >= ? AND hour <= ?",
                                                              (labels[0], labels[-1]))}
         types = {nm: t for nm, t in con.execute("SELECT node, type FROM nodeinfo")}
+        nbytes = {nm: b for nm, b in con.execute("SELECT node, SUM(up + down) FROM hourly WHERE hour >= ? AND hour <= ? GROUP BY node",
+                                                  (labels[0], labels[-1]))}
     finally:
         con.close()
     c = collector.COLLECTOR
@@ -434,7 +436,20 @@ def q_qoe(p):
         tests = (a["n"] + a["f"]) if a else 0
         nodes.append({"node": node, "type": lv.get("type") or types.get(node, ""), "airport": airport_of(node), "delay": lv.get("delay"),
                       "avg": round(avg) if avg is not None else None, "jitter": round(jit) if jit is not None else None,
-                      "fail_rate": round(a["f"] / tests, 4) if tests else None, "tests": tests, "series": a["h"] if a else []})
+                      "fail_rate": round(a["f"] / tests, 4) if tests else None, "tests": tests, "series": a["h"] if a else [],
+                      "bytes": int(nbytes.get(node) or 0)})
+    # 汇总:有流量的节点按流量加权(常年不用的坏节点不拉低/拉高整体),没有流量数据时退回简单平均
+    wn = [r for r in nodes if r["avg"] is not None and r["bytes"] > 0]
+    if wn:
+        wsum = sum(r["bytes"] for r in wn)
+        summ = {"basis": "流量加权", "avg": round(sum(r["avg"] * r["bytes"] for r in wn) / wsum),
+                "jitter": round(sum((r["jitter"] or 0) * r["bytes"] for r in wn) / wsum)}
+    else:
+        an = [r for r in nodes if r["avg"] is not None]
+        summ = {"basis": "简单平均", "avg": round(sum(r["avg"] for r in an) / len(an)) if an else None,
+                "jitter": round(sum((r["jitter"] or 0) for r in an) / len(an)) if an else None}
+    allt = sum(r["tests"] for r in nodes)
+    summ["fail_rate"] = round(sum(round((r["fail_rate"] or 0) * r["tests"]) for r in nodes) / allt, 4) if allt else None
     nodes.sort(key=lambda r: (r["avg"] is None, r["avg"] or 0))
     hourly = []
     for h in labels:
@@ -443,7 +458,7 @@ def q_qoe(p):
     tot_o, tot_r = sum(x["out"] for x in hourly), sum(x["retrans"] for x in hourly)
     w = [r for r in list(netstat.SERIES) if r[0] >= now - 60]
     wo, wr = sum(r[1] for r in w), sum(r[2] for r in w)
-    return 200, {"hours": n, "nodes": nodes[:60], "tcp": {"ok": netstat.STATE["ok"], "hourly": hourly,
+    return 200, {"hours": n, "nodes": nodes[:60], "summary": summ, "tcp": {"ok": netstat.STATE["ok"], "hourly": hourly,
                  "avg_rate": round(tot_r / tot_o * 100, 3) if tot_o else None,
                  "now": {"rate": round(wr / wo * 100, 3) if wo else None, "out": wo, "retrans": wr}},
                  "test_note": "" if per else "还没有延迟测试记录(需要 nikki 里的策略组开启 url-test / 自动测速)"}
@@ -772,6 +787,7 @@ def q_status(p):
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
         "now": int(time.time()), "live_at": live()["at"],
+        "auth": {"enabled": auth.enabled(), "env": auth.is_env()},
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
     }
 
@@ -876,11 +892,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _cookie(self):
+        raw = self.headers.get("Cookie", "")
+        for part in raw.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == auth.COOKIE:
+                return v
+        return ""
+
     def _authed(self, params):
         tok = config.PAGE_TOKEN
-        if not tok:
+        if not tok and not auth.enabled():
             return True
-        return one(params, "t") == tok or self.headers.get("X-Token", "") == tok
+        if tok and (one(params, "t") == tok or self.headers.get("X-Token", "") == tok):
+            return True
+        return auth.enabled() and auth.valid_cookie(self._cookie())
+
+    def _deny(self, page=False):
+        if auth.enabled() and page:
+            return self._send(200, auth.LOGIN_HTML.encode(), "text/html; charset=utf-8")
+        if auth.enabled():
+            return self._send(401, {"error": "需要登录", "login": True})
+        return self._send(401, {"error": "需要 ?t=<token>"})
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
@@ -893,7 +926,7 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(STATIC, name), "rb") as f:
                 return self._send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if not self._authed(params):
-            return self._send(401, {"error": "需要 ?t=<token>"})
+            return self._deny(page=u.path in ("/", "/index.html"))
         if u.path in ("/", "/index.html"):
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
@@ -907,14 +940,57 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
         self._send(code, data)
 
+    def _json_body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > 8192:
+            raise ValueError("内容太大")
+        d = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        if not isinstance(d, dict):
+            raise ValueError("需要 JSON 对象")
+        return d
+
+    def _login(self):
+        ip = self.client_address[0]
+        if auth.locked(ip):
+            return self._send(429, {"error": "尝试次数太多,请 1 分钟后再试"})
+        try:
+            pw = str(self._json_body().get("password") or "")
+        except ValueError as e:
+            return self._send(400, {"error": str(e)})
+        if not auth.enabled() or auth.check(pw):
+            auth.ok(ip)
+            return self._send(200, {"ok": True}, extra={"Set-Cookie": auth.cookie_header(auth.make_cookie())} if auth.enabled() else None)
+        auth.fail(ip)
+        log("登录失败", ip)
+        return self._send(401, {"error": "密码不对"})
+
+    def _auth_set(self):
+        try:
+            d = self._json_body()
+            if auth.enabled() and not auth.check(str(d.get("old") or "")):
+                auth.fail(self.client_address[0])
+                return self._send(401, {"error": "当前密码不对"})
+            auth.set_password(str(d.get("new") or ""))
+        except ValueError as e:
+            return self._send(400, {"error": str(e)})
+        log("访问密码已" + ("设置" if auth.enabled() else "关闭"))
+        extra = {"Set-Cookie": auth.cookie_header(auth.make_cookie())} if auth.enabled() else {"Set-Cookie": auth.cookie_header("", clear=True)}
+        return self._send(200, {"ok": True, "enabled": auth.enabled()}, extra=extra)
+
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(u.query)
-        if not self._authed(params):
-            return self._send(401, {"error": "需要 ?t=<token>"})
         origin = self.headers.get("Origin")
         if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host", ""):
             return self._send(403, {"error": "跨站请求被拒绝"})
+        if u.path == "/api/login":
+            return self._login()
+        if not self._authed(params):
+            return self._deny()
+        if u.path == "/api/logout":
+            return self._send(200, {"ok": True}, extra={"Set-Cookie": auth.cookie_header("", clear=True)})
+        if u.path == "/api/auth/set":
+            return self._auth_set()
         fn = POST_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})

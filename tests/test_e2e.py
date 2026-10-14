@@ -143,6 +143,7 @@ try:
     qn = {r["node"]: r for r in qo["nodes"]}
     ok("HK-01" in qn and qn["HK-01"]["tests"] >= 1 and qn["HK-01"]["avg"] > 0, f"QoE:节点延迟 {qn.get('HK-01')}")
     ok("tcp" in qo and "ok" in qo["tcp"], "QoE:TCP 重传字段")
+    ok(qo["summary"]["avg"] and qo["summary"]["basis"] in ("流量加权", "简单平均") and "bytes" in qo["nodes"][0], f"QoE:汇总口径 {qo['summary']}")
     ok(post("/api/apps/rules", {"text": "mytest.example=我的应用|办公 / 开发"})[1]["rules"] == 1 and "我的应用" in get("/api/apprules")["rules"], "自定义识别规则保存")
     ok(post("/api/apps/rules", {"text": "乱写"})[0] in (200, 400), "自定义规则容错")
     post("/api/apps/rules", {"text": ""})
@@ -160,6 +161,32 @@ try:
     ok({r["key"]: r["airport"] for r in nr}.get("HK-01") == "机场甲" and {r["key"]: r["airport"] for r in nr}.get("直连") == "直连", "节点表带机场名")
     ok(get("/api/summary?by=host&airport=%E4%B8%8D%E5%AD%98%E5%9C%A8")["rows"] == [], "不存在的机场 → 空结果")
     ok("机场甲" in get("/api/status")["airports"], "status 里有机场列表")
+    # v0.9.0 访问密码
+    import http.cookiejar
+    cj = http.cookiejar.CookieJar(); op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+    def rq(path, body=None, method=None):
+        req = urllib.request.Request(B + path, data=None if body is None else json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method=method)
+        try:
+            r = op.open(req, timeout=5); return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+    ok(get("/api/status")["auth"]["enabled"] is False, "默认没有密码")
+    ok(rq("/api/auth/set", {"new": "123"})[0] == 400, "密码太短被拒")
+    ok(rq("/api/auth/set", {"new": "secret123"})[0] == 200, "设置密码")
+    ok(urllib.request.build_opener().open(urllib.request.Request(B + "/")).read().find("请输入访问密码".encode()) > 0, "未登录打开首页 → 登录页")
+    try: c401 = urllib.request.urlopen(B + "/api/status").status
+    except urllib.error.HTTPError as e: c401 = e.code
+    ok(c401 == 401, "未登录访问接口 401")
+    ok(urllib.request.urlopen(B + "/health").read() == b"ok", "/health 免登录")
+    ok(rq("/api/login", {"password": "bad"})[0] == 401, "错误密码被拒")
+    ok(rq("/api/status")[0] == 200, "设置后当前会话保持登录")
+    cj.clear(); ok(rq("/api/status")[0] == 401, "清掉 Cookie 后需要登录")
+    ok(rq("/api/login", {"password": "secret123"})[0] == 200 and rq("/api/status")[0] == 200, "正确密码登录")
+    ok(rq("/api/auth/set", {"old": "wrong", "new": ""})[0] == 401, "关密码要验证当前密码")
+    ok(rq("/api/logout", {})[0] == 200 and rq("/api/status")[0] == 401, "退出登录")
+    rq("/api/login", {"password": "secret123"})
+    ok(rq("/api/auth/set", {"old": "secret123", "new": ""})[0] == 200, "关闭密码")
+    ok(get("/api/status")["auth"]["enabled"] is False, "关闭后免登录")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")
