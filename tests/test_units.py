@@ -1,4 +1,4 @@
-import socket, struct, sys, os, time
+import socket, struct, sys, os, time, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app import devices
 
@@ -113,7 +113,7 @@ def test_geo():
         def __init__(self, *a, **k): super().__init__(*a, directory=srv_dir, **k)
         def log_message(self, *a): pass
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); threading.Thread(target=srv.serve_forever, daemon=True).start()
-    config.DATA_DIR = tempfile.mkdtemp(); geo.BASE = f"http://127.0.0.1:{srv.server_address[1]}"
+    config.DATA_DIR = tempfile.mkdtemp(); geo.BASE = f"http://127.0.0.1:{srv.server_address[1]}"; geo.GH = "http://127.0.0.1:1"  # GitHub 源不可达 → 回退到 DB-IP
     geo.load(); assert not geo.available()
     assert geo.start_download()
     for _ in range(50):
@@ -122,6 +122,21 @@ def test_geo():
     assert geo.DL["msg"] == "完成" and geo.available(), geo.DL
     assert geo.lookup("89.160.20.112") == ("SE", "AS29518 Bredband2 AB")
     srv.shutdown()
+    # 代理设置:校验 + 密码不外露
+    for bad in ("ftp://x", "socks5://127.0.0.1:7891", "http://"):
+        try: geo.proxy_set(bad); assert False, bad
+        except ValueError: pass
+    geo.proxy_set("http://nikki:s3cretpw@127.0.0.1:7890")
+    assert geo.proxy_hint() == "http://***@127.0.0.1:7890" and "s3cretpw" not in json.dumps(geo.status())
+    assert oct(os.stat(os.path.join(config.DATA_DIR, "geo_proxy.txt")).st_mode & 0o777) == "0o600"
+    geo.BASE = "http://127.0.0.1:1"
+    geo.proxy_set("http://nikki:s3cretpw@127.0.0.1:1")
+    geo.start_download()
+    for _ in range(100):
+        if not geo.DL["running"]: break
+        time.sleep(0.1)
+    assert "s3cretpw" not in geo.DL["msg"] and geo.DL["msg"].startswith("失败"), geo.DL  # 经不存在的代理,失败信息里不能带密码
+    geo.proxy_set(""); assert geo.proxy_hint() in ("", "环境变量 HTTPS_PROXY")
 
 
 def test_quota_period():

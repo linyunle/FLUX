@@ -1,7 +1,7 @@
 import signal
 import threading
 
-from . import airports, alerts, appsig, auth, collector, config, db, geo, realtime, web
+from . import airports, alerts, appsig, auth, collector, config, db, geo, insight, realtime, web
 from .util import log, stop
 
 
@@ -18,6 +18,7 @@ def main():
     web.serve()
     threading.Thread(target=realtime.run, name="realtime", daemon=True).start()
     threading.Thread(target=alerts.run, name="alerts", daemon=True).start()
+    threading.Thread(target=insight.secsum_loop, name="secsum", daemon=True).start()
     cf = config.get()
     log(f"采集开始 {config.VERSION}  API={cf['api']}({cf['source']})  页面 :{config.LISTEN_PORT}"
         f"{'  (需要 ?t=token)' if config.PAGE_TOKEN else ''}")

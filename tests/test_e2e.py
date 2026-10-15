@@ -272,6 +272,16 @@ try:
     mt = urllib.request.urlopen(B + "/metrics").read().decode()
     ok("flux_nikki_up 1" in mt and "flux_traffic_bytes_today" in mt and 'flux_node_delay_ms{node="HK-01"}' in mt and "# TYPE flux_connections gauge" in mt, "/metrics:Prometheus 文本")
     ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
+    # ---- v0.11.1
+    sc = get("/api/secsum?force=1"); keys = {t["key"] for t in sc["tiles"]}
+    ok({"collect", "alerts", "nodes", "dns", "leak", "quota", "auth"} <= keys, f"安全概览:指标卡 {sorted(keys)}")
+    ok(any(f["go"] == "set:security" for f in sc["findings"]) and sc["warn"] >= 1 and [f["level"] for f in sc["findings"]] == sorted((f["level"] for f in sc["findings"]), key=["bad", "warn", "info", "ok"].index), "安全概览:需要关注按轻重排序,含未设密码")
+    ok(get("/api/status")["sec"]["warn"] >= 1, "状态里带安全待办数(侧栏角标)")
+    ok(post("/api/geo/proxy", {"proxy": "socks5://127.0.0.1:7891"})[0] == 400, "GeoIP:SOCKS 代理被拒")
+    c, r = post("/api/geo/proxy", {"proxy": "http://nikki:pw999@127.0.0.1:7890"})
+    ok(c == 200 and r["proxy"] == "http://***@127.0.0.1:7890" and "pw999" not in json.dumps(r) and "pw999" not in json.dumps(get("/api/geo/status")), "GeoIP:下载代理保存,密码不回显")
+    ok(oct(os.stat(os.path.join(data, "geo_proxy.txt")).st_mode & 0o777) == "0o600", "GeoIP:代理文件 0600")
+    post("/api/geo/proxy", {"proxy": ""}); ok(not get("/api/geo/status")["proxy"] or "环境" in get("/api/geo/status")["proxy"], "GeoIP:清除代理")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")

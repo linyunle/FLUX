@@ -10,6 +10,7 @@ import socket
 import struct
 import threading
 import time
+import urllib.parse
 import urllib.request
 
 from . import config
@@ -17,6 +18,18 @@ from .util import log
 
 MARK = b"\xab\xcd\xefMaxMind.com"
 BASE = os.environ.get("GEO_BASE", "https://download.db-ip.com/free")
+GH = os.environ.get("GEO_GH", "https://github.com/P3TERX/GeoLite.mmdb/raw/download")
+
+
+def sources(kind, t=None):
+    """下载来源,按顺序试:先 GitHub 上的 GeoLite2 镜像,再 DB-IP Lite(本月 / 上月)。返回 [(url, 保存的文件名)]。"""
+    t = t or time.time()
+    out = [(f"{GH}/GeoLite2-{kind.capitalize() if kind == 'country' else kind.upper()}.mmdb", f"GeoLite2-{kind.capitalize() if kind == 'country' else kind.upper()}.mmdb")]
+    for back in range(2):
+        ym = time.strftime("%Y-%m", time.localtime(t - back * 31 * 86400))
+        out.append((f"{BASE}/dbip-{kind}-lite-{ym}.mmdb.gz", f"dbip-{kind}-lite.mmdb"))
+    return out
+
 
 
 class MMDB:
@@ -158,13 +171,19 @@ def dir_():
 def _find(kind):
     d = dir_()
     try:
-        names = sorted(os.listdir(d))
+        names = os.listdir(d)
     except OSError:
         return ""
-    for n in names:
-        if n.lower().endswith(".mmdb") and kind in n.lower() and not n.endswith(".tmp"):
-            return os.path.join(d, n)
-    return ""
+    best, bt = "", -1
+    for n in names:  # 同类有多个文件时用最新的
+        if n.lower().endswith(".mmdb") and kind in n.lower():
+            try:
+                mt = os.path.getmtime(os.path.join(d, n))
+            except OSError:
+                continue
+            if mt > bt:
+                best, bt = os.path.join(d, n), mt
+    return best
 
 
 def load():
@@ -181,7 +200,7 @@ def load():
 
 
 def status():
-    out = {"dir": dir_(), "download": dict(DL), "base": BASE}
+    out = {"dir": dir_(), "download": dict(DL), "proxy": proxy_hint()}
     for kind in ("country", "asn"):
         m = _db[kind]
         out[kind] = ({"file": os.path.basename(m.path), "built": time.strftime("%Y-%m-%d", time.gmtime(m.meta.get("build_epoch", 0))),
@@ -225,9 +244,53 @@ def lookup(ip):
         return cc, asn
 
 
+def proxy_get():
+    try:
+        with open(os.path.join(config.DATA_DIR, "geo_proxy.txt"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def proxy_set(p):
+    """下载用的代理(可带账号密码,例如 http://用户:密码@127.0.0.1:7890)。留空 = 清除,回到环境变量里的 HTTPS_PROXY。"""
+    p = (p or "").strip()
+    path = os.path.join(config.DATA_DIR, "geo_proxy.txt")
+    if p:
+        u = urllib.parse.urlparse(p)
+        if u.scheme not in ("http", "https", "socks5", "socks5h") or not u.hostname or len(p) > 300:
+            raise ValueError("代理地址格式不对,例如 http://127.0.0.1:7890")
+        if u.scheme.startswith("socks"):
+            raise ValueError("暂不支持 SOCKS,请用 HTTP 代理端口(例如 7890)")
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(p)
+    else:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def proxy_hint():
+    p = proxy_get()
+    if not p:
+        return "环境变量 HTTPS_PROXY" if (os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")) else ""
+    u = urllib.parse.urlparse(p)
+    return f"{u.scheme}://{'***@' if u.username else ''}{u.hostname}:{u.port or ''}"
+
+
+def _opener():
+    p = proxy_get()
+    if p:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({"http": p, "https": p}))
+    return urllib.request.build_opener()
+
+
 def _fetch(url, dest):
     req = urllib.request.Request(url, headers={"User-Agent": "FLUX"})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with _opener().open(req, timeout=60) as r:
         raw = r.read(80 * 1024 * 1024)
     data = gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw
     if MARK not in data:
@@ -244,23 +307,28 @@ def _download():
         os.makedirs(dir_(), exist_ok=True)
         t = time.time()
         for kind in ("country", "asn"):
-            err = None
-            for back in range(3):  # 本月没发布就退回上个月
-                lt = time.localtime(t - back * 31 * 86400)
-                url = f"{BASE}/dbip-{kind}-lite-{time.strftime('%Y-%m', lt)}.mmdb.gz"
+            errs = []
+            for url, name in sources(kind, t):
                 DL["msg"] = f"下载 {kind}…"
                 try:
-                    _fetch(url, os.path.join(dir_(), f"dbip-{kind}-lite.mmdb"))
-                    err = None
+                    _fetch(url, os.path.join(dir_(), name))
+                    errs = None
                     break
                 except Exception as e:
-                    err = e
-            if err:
-                raise err
+                    errs.append(f"{type(e).__name__}: {e}")
+            if errs:
+                raise RuntimeError(errs[0])
         load()
         DL["msg"] = "完成"
     except Exception as e:
-        DL["msg"] = f"失败:{type(e).__name__}: {e}"[:160]
+        msg = f"失败:{e}"
+        p = proxy_get()
+        if p:  # 报错里可能带代理账号密码,抹掉
+            u = urllib.parse.urlparse(p)
+            for secret in (p, u.password or "", u.username or ""):
+                if secret:
+                    msg = msg.replace(secret, "***")
+        DL["msg"] = msg[:160]
         log("GeoIP 下载失败", e)
     DL["running"] = False
     DL["at"] = int(time.time())
