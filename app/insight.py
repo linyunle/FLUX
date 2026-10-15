@@ -469,3 +469,112 @@ def geo_summary(con, days=7):
         if cc or asn:
             nodes.append({"node": node, "cc": cc, "asn": asn})
     return {"days": days, "available": geo.available(), "by_cc": by_cc, "by_asn": by_asn, "known": tot, "all": all_, "nodes": nodes[:40]}
+
+
+# ---------------------------------------------------------------- 安全页顶部:指标卡 + 需要关注
+_sec = {"at": 0.0, "v": None}
+_LV = {"bad": 0, "warn": 1, "info": 2, "ok": 3}
+
+
+def secsum(con, force=False):
+    """汇总各处的状态:几张指标卡 + 按轻重排序的「需要关注」。只在打开安全页时计算,结果缓存 45 秒。"""
+    if not force and _sec["v"] and time.time() - _sec["at"] < 45:
+        return _sec["v"]
+    from . import auth
+    tiles, finds = [], []
+
+    def tile(key, label, value, sub, level, go):
+        tiles.append({"key": key, "label": label, "value": value, "sub": sub, "level": level, "go": go})
+
+    def find(level, title, detail, go):
+        finds.append({"level": level, "title": title, "detail": detail, "go": go})
+
+    c = collector.COLLECTOR
+    up = bool(c and c.status.get("ok"))
+    tile("collect", "nikki 采集", "正常" if up else "失联", "每 %g 秒采样" % config.INTERVAL if up else ((c.status.get("error") if c else "") or "未启动"), "ok" if up else "bad", "sec:q")
+    if not up:
+        find("bad", "面板连不上 nikki", (c.status.get("error") if c else "") or "采集器未启动,这段时间的流量不会被统计", "set:conn")
+    try:
+        cnt = alerts.counts(con, time.time() - 86400)
+        unread = alerts.unread(con)
+        lvl = "bad" if cnt["bad"] else "warn" if cnt["warn"] else "ok"
+        tile("alerts", "告警(24 小时)", cnt["bad"] + cnt["warn"], f"严重 {cnt['bad']} · 警告 {cnt['warn']} · 未读 {unread}", lvl, "tab:alerts")
+        if cnt["bad"]:
+            find("bad", f"最近 24 小时有 {cnt['bad']} 条严重告警", "到「告警」页查看详情", "tab:alerts")
+        elif cnt["warn"]:
+            find("warn", f"最近 24 小时有 {cnt['warn']} 条警告", "到「告警」页查看详情", "tab:alerts")
+        nd = con.execute("SELECT COUNT(*) FROM alerts WHERE kind='new_device' AND ts>=?", (int(time.time() - 86400),)).fetchone()[0]
+        if nd:
+            find("info", f"24 小时内出现 {nd} 台新设备", "如果不认识,检查 Wi-Fi 密码或 DHCP 列表", "tab:alerts")
+    except Exception as e:
+        log("安全概览(告警)", e)
+    try:
+        ns = dict(c.nodes) if c else {}
+        if ns:
+            bad = [n for n, v in ns.items() if (v.get("fails") or 0) >= 3]
+            lvl = "bad" if len(bad) == len(ns) else "warn" if bad else "ok"
+            tile("nodes", "节点测速", f"{len(ns) - len(bad)} / {len(ns)}", "可用 / 全部" if not bad else "失败:" + "、".join(bad[:2]), lvl, "tab:nodes")
+            if bad:
+                find("bad" if lvl == "bad" else "warn", f"{len(bad)} 个节点连续测速失败", "、".join(bad[:5]), "tab:nodes")
+    except Exception as e:
+        log("安全概览(节点)", e)
+    try:
+        a = agh.fetch(con)
+        if not a.get("configured"):
+            tile("dns", "DNS 过滤", "未接入", "AdGuard Home", "info", "set:dns")
+        elif a.get("ok"):
+            tile("dns", "DNS 拦截率", f"{a['rate']}%", f"拦截 {a['blocked']:,} / {a['total']:,}", "ok", "sec:agh")
+        else:
+            tile("dns", "DNS 过滤", "读取失败", a.get("error", ""), "warn", "set:dns")
+            find("warn", "读不到 AdGuard Home", a.get("error", ""), "set:dns")
+    except Exception as e:
+        log("安全概览(DNS)", e)
+    try:
+        lk = leaks(con, 7)
+        n = len(lk["cn_proxy"]) + len(lk["fo_direct"])
+        tot = lk["cn_proxy_bytes"] + lk["fo_direct_bytes"]
+        tile("leak", "分流异常(7 天)", n, _b(tot) if n else "未发现", "warn" if tot >= 100 * 1024 * 1024 else "info" if n else "ok", "sec:lk")
+        if lk["cn_proxy_bytes"] >= 100 * 1024 * 1024:
+            find("warn", f"国内站点走了代理 {_b(lk['cn_proxy_bytes'])}", "占用机场流量并增加延迟,检查是否漏了国内规则集", "sec:lk")
+        if lk["fo_direct_bytes"] >= 100 * 1024 * 1024:
+            find("warn", f"境外站点直连 {_b(lk['fo_direct_bytes'])}", "可能被阻断或暴露真实访问,检查是否漏了境外规则", "sec:lk")
+        if lk["dns_local_bytes"] >= 500 * 1024 * 1024:
+            find("info", f"{_b(lk['dns_local_bytes'])} 代理流量的域名在本机解析", "没走 fake-ip / 远程解析,可能把查询暴露给本地 DNS", "sec:lk")
+    except Exception as e:
+        log("安全概览(分流)", e)
+    try:
+        rh = rule_health(con, 30)
+        if rh["match"]:
+            sh = rh["match"]["share"]
+            tile("match", "兜底规则占比", f"{sh}%", "落到 Match 的流量", "warn" if sh >= 30 else "ok", "tab:rules")
+            if sh >= 30:
+                find("warn", f"{sh}% 的流量落到兜底规则", "大量域名没被任何规则覆盖,到「规则策略」页查看", "tab:rules")
+        if rh.get("has_hits") and rh.get("zero_total", 0) >= 20:
+            find("info", f"{rh['zero_total']} 条规则从未命中", "可以考虑清理,到「规则策略」页查看", "tab:rules")
+    except Exception as e:
+        log("安全概览(规则)", e)
+    try:
+        qs = [q for q in quota_status(con) if q["known"]]
+        if qs:
+            q = max(qs, key=lambda x: x["pct"])
+            lvl = "bad" if q["pct"] >= 95 else "warn" if q["pct"] >= 80 or q["over"] else "ok"
+            tile("quota", "套餐用量", f"{q['pct']}%", f"{q['airport']} · 还有 {q['days_left']} 天重置", lvl, "tab:nodes")
+            for q in qs:
+                if q["pct"] >= 80 or q["over"]:
+                    find("bad" if q["pct"] >= 95 else "warn", f"{q['airport']} 套餐已用 {q['pct']}%",
+                         f"{_b(q['used'])} / {q['gb']:g} GB" + (f";按近 7 天速度预计 {q['exhaust']} 用完" if q["exhaust"] else ""), "tab:nodes")
+        else:
+            tile("quota", "套餐用量", "未设置", "机场套餐", "info", "set:quota")
+    except Exception as e:
+        log("安全概览(套餐)", e)
+    on = auth.enabled() or bool(config.PAGE_TOKEN)
+    tile("auth", "面板保护", "已启用" if on else "未设置", "访问密码" if on else "局域网内人人可看", "ok" if on else "warn", "set:security")
+    if not on:
+        find("warn", "面板没有设置访问密码", "局域网里任何人打开页面都能看到每台设备访问过的域名", "set:security")
+    if not geo.available():
+        find("info", "没有 GeoIP 数据库", "装上后「目的地国家 / ASN」才有数据", "set:geo")
+    finds.sort(key=lambda x: _LV[x["level"]])
+    v = {"at": int(time.time()), "tiles": tiles, "findings": finds[:10], "bad": sum(1 for f in finds if f["level"] == "bad"),
+         "warn": sum(1 for f in finds if f["level"] == "warn")}
+    _sec.update(at=time.time(), v=v)
+    return v

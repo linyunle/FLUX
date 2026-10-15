@@ -21,7 +21,7 @@ try:
         import json
         pg.evaluate("fetch('/api/agh/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:19445',user:'admin',pass:'pw123'})})"); pg.wait_for_timeout(500)
         pg.evaluate("S.tab='security';showTab();refresh()"); pg.wait_for_timeout(3000);         bad = [m for m in msgs if "favicon" not in m and "ERR_" not in m and "Failed to load resource" not in m]
-        for sel in ("#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
+        for sel in ("#secTiles", "#secFinds", "#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
             assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
         assert not bad, bad
         print("PASS 安全页各卡片都有内容,浏览器无报错")
