@@ -1,0 +1,29 @@
+"""浏览器冒烟测试(需要 playwright + chromium):打开「安全」页,各卡片都有内容、控制台没有报错。"""
+import os, subprocess, sys, tempfile, time, shutil
+ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT+'/tests')
+import mock_mihomo
+mock_mihomo.start(19091, 18998); mock_mihomo.start_agh(19445); mock_mihomo.STATE["leak"]=True
+data=tempfile.mkdtemp(); neigh=data+"/n"
+os.makedirs(data+"/geoip"); shutil.copy(ROOT+"/tests/data/country-test.mmdb",data+"/geoip/"); shutil.copy(ROOT+"/tests/data/asn-test.mmdb",data+"/geoip/")
+open(neigh,"w").write("192.168.1.10 dev br lladdr aa:bb:cc:dd:ee:01 REACHABLE\n")
+env=dict(os.environ,DATA_DIR=data,NIKKI_API="http://127.0.0.1:19091",NIKKI_SECRET="s3cret",INTERVAL_SEC="2",FLUSH_SEC="2",PROXY_SEC="2",LISTEN_HOST="127.0.0.1",LISTEN_PORT="18101",NEIGH_FILE=neigh,APP_VERSION="v0.11.3")
+p=subprocess.Popen([sys.executable,"-m","app"],cwd=ROOT,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+
+try:
+    time.sleep(25)
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        br=pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",args=["--no-sandbox"])
+        pg=br.new_page(viewport={"width":1200,"height":1000}); msgs=[]
+        pg.on("pageerror",lambda e: msgs.append("ERR "+str(e))); pg.on("console",lambda m: msgs.append(m.type+" "+m.text) if m.type in("warning","error") else None)
+        pg.goto("http://127.0.0.1:18101/"); pg.wait_for_timeout(2000)
+        import json
+        pg.evaluate("fetch('/api/agh/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:19445',user:'admin',pass:'pw123'})})"); pg.wait_for_timeout(500)
+        pg.evaluate("S.tab='security';showTab();refresh()"); pg.wait_for_timeout(3000);         bad = [m for m in msgs if "favicon" not in m and "ERR_" not in m and "Failed to load resource" not in m]
+        for sel in ("#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
+            assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
+        assert not bad, bad
+        print("PASS 安全页各卡片都有内容,浏览器无报错")
+finally:
+    p.terminate()

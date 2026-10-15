@@ -1410,6 +1410,13 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").clas
 
 
 /* ---------- v0.11 安全 / 分析 ---------- */
+const CCN={CN:"中国大陆",HK:"中国香港",TW:"中国台湾",US:"美国",JP:"日本",SG:"新加坡",KR:"韩国",GB:"英国",DE:"德国",FR:"法国",NL:"荷兰",CA:"加拿大",AU:"澳大利亚",RU:"俄罗斯",IN:"印度",SE:"瑞典",IE:"爱尔兰",IT:"意大利",ES:"西班牙",BR:"巴西",TH:"泰国",MY:"马来西亚",VN:"越南",ID:"印尼",PH:"菲律宾",TR:"土耳其",AE:"阿联酋",CH:"瑞士",FI:"芬兰",PL:"波兰",UA:"乌克兰"};
+const flag=cc=>/^[A-Z]{2}$/.test(cc)?String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0))):"🌐";
+const ccName=cc=>cc==="??"?"未知":(CCN[cc]||cc);
+const barR=(p,c)=>`<div style="height:6px;background:var(--hover);border-radius:3px;overflow:hidden;min-width:60px"><div style="height:100%;width:${Math.max(0,Math.min(100,p))}%;background:${c||"var(--accent)"}"></div></div>`;
+const WD=["周一","周二","周三","周四","周五","周六","周日"];
+const miniTbl=(head,rows)=>rows.length?`<div class="scroll"><table><thead><tr>${head.map((h,i)=>`<th class="${i?"n":""}">${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`:"";
+
 function loadSecurity(){loadAgh();loadLeaks();loadGeo();loadHeat();loadQuality()}
 function loadAgh(){load("agh","/api/agh",{},j=>{
   const el=$("#aghBody");

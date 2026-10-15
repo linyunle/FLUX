@@ -60,6 +60,7 @@ cd /mnt/data/docker/flux && docker compose pull && docker compose up -d
 ## 测试
 ```sh
 python3 tests/test_units.py && python3 tests/test_e2e.py
+python3 tests/smoke_ui.py   # 可选:需要 playwright + chromium,检查前端页面渲染
 ```
 
 ## 在 sun-panel 等导航页里用 FLUX 的 logo
