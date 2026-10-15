@@ -113,4 +113,9 @@ def run():
             netstat.sample()
         except Exception:
             pass
+        try:
+            from . import sysinfo
+            sysinfo.sample()
+        except Exception:
+            pass
         stop.wait(INTERVAL)

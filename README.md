@@ -67,3 +67,6 @@ python3 tests/smoke_ui.py   # 可选:需要 playwright + chromium,检查前端�
 ## 在 sun-panel 等导航页里用 FLUX 的 logo
 面板自带公开的 logo 地址(不需要口令):`http://路由器IP:8099/logo.png`(512×512 PNG)。
 仓库里也有一份:`https://raw.githubusercontent.com/linyunle/FLUX/main/assets/logo.png`。
+
+## 路由器状态(v0.12.0)
+概览新增「路由器状态」卡片:CPU / 负载 / 内存 / 连接跟踪 / 温度 / 磁盘 / 运行时长,以及各网卡速度与丢包(约 2 秒刷新)。数据读自 /proc 与 /sys(容器是 host 网络,看到的就是路由器本机),只读。告警新增:连接跟踪占用高、路由器温度高、磁盘空间不足、路由器内存紧张。`/metrics` 增加 CPU、连接跟踪、温度指标。

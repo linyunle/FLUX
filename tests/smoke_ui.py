@@ -24,6 +24,8 @@ try:
         for sel in ("#secTiles", "#secFinds", "#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
             assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
         assert not bad, bad
+        pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(3500)
+        assert pg.inner_text("#sysTiles").strip(), "路由器状态卡片为空"
         # 设置 → 概览卡片:取消 / 重新勾选要真的生效(点名字也行),预设按钮也要生效
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(800)
         pg.locator('#lkCards label[for=lkc_alertc]').click(); pg.wait_for_timeout(400)

@@ -1,0 +1,144 @@
+"""路由器自身的运行状态:CPU / 负载 / 内存 / 温度 / 连接跟踪 / 网卡收发与丢包 / 磁盘 / 运行时长。
+容器是 host 网络,读 /proc 和 /sys 看到的就是路由器本机。全部只读,每次采样只读几个小文件。
+读不到的项(例如没有温度传感器)会直接缺省,页面上不显示。"""
+import collections
+import glob
+import os
+import threading
+import time
+
+from . import config, realtime
+
+PROC = os.environ.get("SYS_PROC", "/proc")
+SYSFS = os.environ.get("SYS_SYSFS", "/sys")
+# (时间戳, CPU%, 内存已用, 连接跟踪数, 最高温度, 总下行B/s, 总上行B/s)
+SERIES = collections.deque(maxlen=600)
+STATE = {"at": 0, "cpu": None, "load": None, "ncpu": os.cpu_count() or 1, "mem": None, "uptime": 0, "temps": [],
+         "ct": None, "ifaces": [], "disk": None}
+_lock = threading.Lock()
+_last = {"cpu": None, "net": None, "t": 0.0}
+SKIP_IF = ("lo", "veth", "docker", "br-", "ifb", "bonding_masters")
+
+
+def _rd(path):
+    with open(path) as f:
+        return f.read()
+
+
+def _cpu():
+    try:
+        v = [int(x) for x in _rd(PROC + "/stat").split("\n", 1)[0].split()[1:]]
+    except Exception:
+        return None
+    idle = v[3] + (v[4] if len(v) > 4 else 0)
+    tot = sum(v[:8]) if len(v) >= 8 else sum(v)
+    last, _last["cpu"] = _last["cpu"], (idle, tot)
+    if not last or tot <= last[1]:
+        return None
+    return round(max(0.0, min(100.0, (1 - (idle - last[0]) / (tot - last[1])) * 100)), 1)
+
+
+def _temps():
+    out = []
+    for p in sorted(glob.glob(SYSFS + "/class/thermal/thermal_zone*/temp")):
+        try:
+            v = int(_rd(p).strip())
+            name = ""
+            try:
+                name = _rd(os.path.dirname(p) + "/type").strip()
+            except OSError:
+                pass
+            out.append({"name": name or os.path.basename(os.path.dirname(p)), "c": round(v / 1000 if abs(v) > 200 else v, 1)})
+        except Exception:
+            continue
+    if not out:
+        for p in sorted(glob.glob(SYSFS + "/class/hwmon/hwmon*/temp*_input")):
+            try:
+                out.append({"name": os.path.basename(os.path.dirname(p)), "c": round(int(_rd(p).strip()) / 1000, 1)})
+            except Exception:
+                continue
+    return [t for t in out if -40 < t["c"] < 150]
+
+
+def _ct():
+    try:
+        n = int(_rd(PROC + "/sys/net/netfilter/nf_conntrack_count").strip())
+        m = int(_rd(PROC + "/sys/net/netfilter/nf_conntrack_max").strip())
+        return {"n": n, "max": m, "pct": round(n * 100 / m, 1) if m else None}
+    except Exception:
+        return None
+
+
+def _net(now):
+    try:
+        lines = _rd(PROC + "/net/dev").split("\n")[2:]
+    except Exception:
+        return []
+    cur = {}
+    for ln in lines:
+        name, _, rest = ln.partition(":")
+        name = name.strip()
+        f = rest.split()
+        if not name or len(f) < 16 or name.startswith(SKIP_IF):
+            continue
+        cur[name] = [int(f[0]), int(f[2]), int(f[3]), int(f[8]), int(f[10]), int(f[11])]  # rxB rxErr rxDrop txB txErr txDrop
+    last, _last["net"] = _last["net"], (now, cur)
+    if not last:
+        return []
+    dt = max(0.5, now - last[0])
+    out = []
+    for k, c in cur.items():
+        o = last[1].get(k)
+        if not o:
+            continue
+        d = [x - y if x >= y else 0 for x, y in zip(c, o)]
+        out.append({"name": k, "down": d[0] / dt, "up": d[3] / dt, "errs": d[1] + d[4], "drops": d[2] + d[5],
+                    "tot_errs": c[1] + c[4], "tot_drops": c[2] + c[5]})
+    out.sort(key=lambda r: -(r["down"] + r["up"]))
+    return out[:8]
+
+
+def _disk():
+    try:
+        st = os.statvfs(config.DATA_DIR if os.path.isdir(config.DATA_DIR) else "/")
+        tot, free = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
+        return {"total": tot, "free": free, "pct": round((tot - free) * 100 / tot, 1) if tot else None}
+    except Exception:
+        return None
+
+
+def sample():
+    now = time.time()
+    cpu = _cpu()
+    load = None
+    try:
+        load = [float(x) for x in _rd(PROC + "/loadavg").split()[:3]]
+    except Exception:
+        pass
+    used, total = realtime.host_mem()
+    up = 0
+    try:
+        up = int(float(_rd(PROC + "/uptime").split()[0]))
+    except Exception:
+        pass
+    temps, ct, ifs = _temps(), _ct(), _net(now)
+    if now - _last["t"] > 30 or STATE["disk"] is None:
+        _last["t"], disk = now, _disk()
+    else:
+        disk = STATE["disk"]
+    with _lock:
+        STATE.update(at=int(now), cpu=cpu if cpu is not None else STATE["cpu"], load=load, mem={"used": used, "total": total} if total else None,
+                     uptime=up, temps=temps, ct=ct, ifaces=ifs, disk=disk)
+        if cpu is not None:
+            SERIES.append((now, cpu, used, ct["n"] if ct else 0, max((t["c"] for t in temps), default=0),
+                           sum(i["down"] for i in ifs), sum(i["up"] for i in ifs)))
+
+
+def snapshot(secs=120):
+    now = time.time()
+    with _lock:
+        s = dict(STATE)
+        rows = [r for r in SERIES if r[0] >= now - secs]
+    s["series"] = [[round(r[0], 1), r[1], r[2], r[3], r[4]] for r in rows]
+    s["tmax"] = max((t["c"] for t in s["temps"]), default=None)
+    return s

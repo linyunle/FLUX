@@ -13,7 +13,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from . import collector, config, db, devices, netstat, realtime
+from . import collector, config, db, devices, netstat, realtime, sysinfo
 from .util import is_mac, log, stop
 
 KINDS = {
@@ -26,6 +26,10 @@ KINDS = {
     "api_down": "nikki 失联",
     "api_up": "nikki 恢复",
     "quota": "套餐用量",
+    "sys_conntrack": "连接跟踪占用高",
+    "sys_temp": "路由器温度高",
+    "sys_disk": "磁盘空间不足",
+    "sys_mem": "路由器内存紧张",
     "report": "周报",
 }
 LEVELS = ("bad", "warn", "info", "ok")
@@ -39,10 +43,14 @@ DEFAULT_RULES = {
     "conn_many": {"on": True, "count": 500, "cool_min": 60},
     "api_down": {"on": True, "after_sec": 120, "cool_min": 30},
     "quota": {"on": True, "pct": 80, "cool_min": 1440},
+    "sys_conntrack": {"on": True, "pct": 85, "cool_min": 60},
+    "sys_temp": {"on": True, "c": 85, "cool_min": 60},
+    "sys_disk": {"on": True, "pct": 90, "cool_min": 1440},
+    "sys_mem": {"on": True, "pct": 92, "cool_min": 120},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
@@ -401,13 +409,34 @@ def check_api(con, cfg, now):
              f"面板已有 {int((now - _api_bad_since) // 60)} 分钟连不上 nikki 的 API:{(c.status.get('error') if c else '')}。这段时间的流量不会被统计。", now)
 
 
+def check_sys(con, cfg, now):
+    s = sysinfo.STATE
+    r = cfg["rules"]
+    ct = s.get("ct")
+    if r["sys_conntrack"]["on"] and ct and ct.get("pct") is not None and ct["pct"] >= r["sys_conntrack"]["pct"] and _allow("sys_conntrack", "ct", r["sys_conntrack"]["cool_min"], now):
+        fire(con, cfg, "sys_conntrack", "warn", "ct", f"连接跟踪占用 {ct['pct']:.0f}%",
+             f"路由器当前有 {ct['n']} 条连接跟踪记录,上限 {ct['max']}(阈值 {r['sys_conntrack']['pct']:g}%)。满了以后新连接会被丢弃,表现为网页突然打不开。常见原因:BT/PT、扫描、被入侵的设备。", now)
+    tm = max((t["c"] for t in s.get("temps") or []), default=None)
+    if r["sys_temp"]["on"] and tm is not None and tm >= r["sys_temp"]["c"] and _allow("sys_temp", "temp", r["sys_temp"]["cool_min"], now):
+        fire(con, cfg, "sys_temp", "warn", "temp", f"路由器温度 {tm:.0f}℃",
+             f"最高温度传感器读数 {tm:.1f}℃(阈值 {r['sys_temp']['c']:g}℃)。检查散热、通风,或是否长时间满载。", now)
+    d = s.get("disk")
+    if r["sys_disk"]["on"] and d and d.get("pct") is not None and d["pct"] >= r["sys_disk"]["pct"] and _allow("sys_disk", "disk", r["sys_disk"]["cool_min"], now):
+        fire(con, cfg, "sys_disk", "warn", "disk", f"磁盘已用 {d['pct']:.0f}%",
+             f"面板数据所在的磁盘已用 {d['pct']:.1f}%,剩余 {d['free'] // 1048576} MB(阈值 {r['sys_disk']['pct']:g}%)。", now)
+    m = s.get("mem")
+    if r["sys_mem"]["on"] and m and m["total"] and m["used"] * 100 / m["total"] >= r["sys_mem"]["pct"] and _allow("sys_mem", "mem", r["sys_mem"]["cool_min"], now):
+        fire(con, cfg, "sys_mem", "warn", "mem", f"路由器内存已用 {m['used'] * 100 // m['total']}%",
+             f"已用 {m['used'] // 1048576} MB / 共 {m['total'] // 1048576} MB(阈值 {r['sys_mem']['pct']:g}%,已扣除缓存)。内存持续偏高可能是某个服务泄漏,可到「内存使用」卡片看趋势。", now)
+
+
 def check_quota(con, cfg, now):
     from . import insight
     insight.check_quota(con, cfg, now)
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys)]
 
 
 def evaluate(con, now=None):
@@ -422,7 +451,7 @@ def evaluate(con, now=None):
                 con.execute("INSERT INTO kv(k,v) VALUES('alert_start',?)", (str(now),))
     cfg = load_cfg(con)
     for kind, fn in CHECKS:
-        if kind != "new_device" and not cfg["rules"][kind]["on"]:
+        if kind in cfg["rules"] and kind != "new_device" and not cfg["rules"][kind]["on"]:
             continue
         try:
             fn(con, cfg, now)

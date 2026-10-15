@@ -231,7 +231,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .stleg{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:var(--ink2)}.stleg .it{white-space:nowrap}.stleg b{color:var(--ink);font-weight:600}
 .stbox svg text{fill:var(--muted);font-size:11px}
 .qstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:2px 0 10px}.qstat>div{background:var(--hover);border-radius:var(--rs);padding:8px 10px}
-.qstat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}.qstat .l{font-size:12px;color:var(--muted)}
+.qstat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}.qstat .l{font-size:12px;color:var(--muted)}.qstat .v.good{color:var(--good)}.qstat .v.warn{color:var(--warn)}.qstat .v.bad{color:var(--bad)}.qstat .sb{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .good{color:var(--good)}.bad{color:var(--bad)}
 .qsec{font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:600}
 .spark{vertical-align:middle}
@@ -338,6 +338,12 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <h2>内存使用<span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>系统</span><span><i style="background:var(--vzu,var(--up))"></i>nikki</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="memNote"></span></h2>
     <div class="big"><div><span class="sub">系统</span> <b id="memUsed">–</b></div><div><span class="sub">nikki</span> <b id="memMi">–</b></div><div class="sub" id="memSub"></div></div>
     <div class="chartbox" id="memChart"></div>
+  </div>
+  <div class="card gcard" id="sysCard">
+    <h2>路由器状态<span class="sp"></span><span class="sub" id="sysNote"></span></h2>
+    <div class="qstat" id="sysTiles"></div>
+    <div class="chartbox" id="sysChart"></div>
+    <div id="sysIf"></div>
   </div>
   <div class="card gcard" id="rtCard">
     <h2>实时速度<span class="seg" id="rtSrc" role="group" aria-label="范围"></span><span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
@@ -1089,11 +1095,29 @@ function paintRt(j){
   else fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
   paintMem(j)}
 document.addEventListener("click",e=>{if(!e.target.closest("[data-vz]"))return;TH.viz.style=TH.viz.style==="wave"?"line":"wave";saveTheme();if(S.rt)paintRt(S.rt);if(S.tab==="settings")renderLook()});
+const sysCls=(v,w,b)=>v==null?"":v>=b?"bad":v>=w?"warn":"";
+function paintSys(j){
+  const el=$("#sysCard");if(!el||el.offsetParent===null)return;
+  const m=j.mem,mp=m&&m.total?Math.round(m.used*100/m.total):null,ct=j.ct,dk=j.disk,ld=j.load;
+  const dur=n=>{const d=Math.floor(n/86400),h=Math.floor(n%86400/3600),mi=Math.floor(n%3600/60);return d?`${d} 天 ${h} 小时`:h?`${h} 小时 ${mi} 分`:`${mi} 分钟`};
+  const st=(v,l,sb,c)=>`<div><div class="v ${c||""}">${v}</div><div class="l">${l}</div><div class="sb">${sb||"&nbsp;"}</div></div>`;
+  setH($("#sysTiles"),st(j.cpu==null?"–":j.cpu+"%","CPU",ld?`负载 ${ld[0]} / ${j.ncpu} 核`:"",sysCls(j.cpu,70,90))
+    +st(mp==null?"–":mp+"%","内存",m?`${fmt(m.used)} / ${fmt(m.total)}`:"",sysCls(mp,85,92))
+    +st(ct?ct.n:"–","连接跟踪",ct&&ct.max?`上限 ${ct.max} · ${ct.pct}%`:"读不到",ct?sysCls(ct.pct,70,85):"")
+    +st(j.tmax==null?"–":j.tmax+"℃","温度",j.tmax==null?"没有温度传感器":j.temps.map(t=>t.name).slice(0,2).join(" / "),sysCls(j.tmax,75,85))
+    +st(dk&&dk.pct!=null?dk.pct+"%":"–","磁盘",dk?`剩余 ${fmt(dk.free)}`:"",dk?sysCls(dk.pct,85,95):"")
+    +st(dur(j.uptime||0),"已运行","&nbsp;"));
+  $("#sysNote").textContent=j.cpu==null?"刚启动,等几秒":"";
+  drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),HGT.rt[TH.cards.sys.h]||80,{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
+  const rows=(j.ifaces||[]).slice(0,4);let h=rows.map(r=>`<tr><td class="k">${esc(r.name)}</td><td class="n">↓ ${rate(r.down)}</td><td class="n hide-s">↑ ${rate(r.up)}</td><td class="n hide-s ${r.drops||r.errs?"warn":"sub"}">${r.drops||r.errs?`丢包 ${r.drops} · 错误 ${r.errs}`:"无丢包"}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
+  setH($("#sysIf"),`<table><tbody>${h}</tbody></table>`)}
+function loadSys(){const el=$("#sysCard");if(!el||el.offsetParent===null)return;load("sys","/api/sys",{seconds:120},paintSys)}
 function loadRealtime(){if(document.hidden)return;
   load("rt","/api/realtime",{seconds:120,dev:[...S.devs].join(",")},j=>{
     S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;$("#tConnS").textContent=`直连 ${j.conns.direct} · 代理 ${j.conns.proxy}`;updDetailLive();if(S.tab!=="overview")return;
     if(Date.now()-S.scrollAt<1500)return; /* 正在滑动时不重绘,手机上否则页面会跳 */
-    paintRt(j);
+    paintRt(j);loadSys();
     S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
     for(const k of ["rtdev","rtnode","rthost"])if(!S.pg[k].pause||!S.pg[k].snap)paintPg(k);
     rtList($("#rtSel"),j.devices.filter(d=>S.devs.has(d.key)),r=>r.name||r.key,"这台设备现在没有流量")})}
@@ -1127,18 +1151,18 @@ const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:
 const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
-const CARDS={mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtdev:["#rtdevCard","设备(此刻 / 时段)"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","访问目标(此刻 / 时段)"],alertc:["#alertCard","最近告警"],trend:["#trendCard","流量趋势 / 堆叠","trend"],apps:["#appsCard","应用识别 / 协议"],qoe:["#qoeCard","网络质量 QoE"]};
+const CARDS={sys:["#sysCard","路由器状态","rt"],mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtdev:["#rtdevCard","设备(此刻 / 时段)"],rtnode:["#rtnodeCard","此刻最活跃的节点"],rthost:["#rthostCard","访问目标(此刻 / 时段)"],alertc:["#alertCard","最近告警"],trend:["#trendCard","流量趋势 / 堆叠","trend"],apps:["#appsCard","应用识别 / 协议"],qoe:["#qoeCard","网络质量 QoE"]};
 const LISTS=["rtdev","rtnode","rthost"],ROWS={s:5,m:8,l:12};
 const HROWS=[5,8,10,15,20,30,50,100];
 const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.rthost.rows)?+TH.cards.rthost.rows:30):(ROWS[(TH.cards[k==="devtop"?"rtdev":k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={mem:{w:6,h:"m"},rt:{w:6,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"m",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"m",rows:30},qoe:{w:12,h:"m",rows:50}};
+const DEF_CARDS={sys:{w:12,h:"s"},mem:{w:6,h:"m"},rt:{w:6,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"m",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"m",rows:30},qoe:{w:12,h:"m",rows:50}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
-const AUTOHIDE=["mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
+const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:4,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
@@ -1199,7 +1223,7 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
-const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
+const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
 function applyView(k){TH.view=k;TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
@@ -1361,6 +1385,10 @@ const RULE_META=[
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
  ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
+ ["sys_conntrack","连接跟踪占用高","路由器的连接跟踪表快满了(满了新连接会被丢弃,网页打不开)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
+ ["sys_temp","路由器温度高","最高温度传感器读数达到阈值(没有传感器的路由器不会触发)",[["c","阈值","℃"],["cool_min","间隔","分钟"]]],
+ ["sys_disk","磁盘空间不足","面板数据所在磁盘的使用率",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
+ ["sys_mem","路由器内存紧张","系统已用内存(已扣除缓存)占比",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["quota","套餐用量","机场套餐用量达到阈值(在「机场套餐」里设置月流量);≥95% 为严重",[["pct","阈值","%"],["cool_min","间隔","分钟"]]]];
 const CH_HINT={bark:"https://api.day.app/你的KEY",wecom:"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…",feishu:"https://open.feishu.cn/open-apis/bot/v2/hook/…",ntfy:"https://ntfy.sh/你的主题",webhook:"https://…(收到 JSON)"};
 let ALR={},ALC=[],ALQ={},ALT={};

@@ -393,6 +393,14 @@ def metrics_text(con):
     s = [x for x in list(netstat.SERIES) if now - x[0] <= 300]
     out_, rt = sum(x[1] for x in s), sum(x[2] for x in s)
     add("flux_tcp_retrans_ratio", "gauge", "最近 5 分钟路由器 TCP 重传率(0~1)", [({}, round(rt / out_, 5) if out_ else 0)])
+    from . import sysinfo
+    sy = sysinfo.STATE
+    if sy.get("cpu") is not None:
+        add("flux_router_cpu_percent", "gauge", "路由器 CPU 使用率", [({}, sy["cpu"])])
+    if sy.get("ct"):
+        add("flux_router_conntrack", "gauge", "连接跟踪条目数", [({}, sy["ct"]["n"])])
+    if sy.get("temps"):
+        add("flux_router_temp_celsius", "gauge", "路由器温度", [({"sensor": t["name"]}, t["c"]) for t in sy["temps"]])
     add("flux_alerts_24h", "gauge", "最近 24 小时告警数", [({"level": lv_}, n) for lv_, n in alerts.counts(con, now - 86400).items()])
     return "\n".join(L) + "\n"
 

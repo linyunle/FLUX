@@ -271,6 +271,8 @@ try:
     post("/api/report/send", {}); rr = wait_kind("report", 10); ok(rr and "总流量" in rr[0]["detail"], f"周报:推送 {rr[:1]}")
     mt = urllib.request.urlopen(B + "/metrics").read().decode()
     ok("flux_nikki_up 1" in mt and "flux_traffic_bytes_today" in mt and 'flux_node_delay_ms{node="HK-01"}' in mt and "# TYPE flux_connections gauge" in mt, "/metrics:Prometheus 文本")
+    sy = get("/api/sys"); ok(sy["mem"] and sy["mem"]["total"] > 0 and sy["cpu"] is not None and len(sy["series"]) > 1 and sy["ncpu"] >= 1, "路由器状态:CPU/内存/曲线")
+    ok(all(k in alerts_rules for k in ("sys_conntrack", "sys_temp", "sys_disk", "sys_mem")) if (alerts_rules := get("/api/alerts/config")["rules"]) else False, "路由器状态:四条告警规则默认存在")
     ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
     # ---- v0.11.1
     sc = get("/api/secsum?force=1"); keys = {t["key"] for t in sc["tiles"]}
