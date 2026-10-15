@@ -445,7 +445,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2"><span class="lb">模式</span><div class="seg" id="lkMode"></div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
   <div class="row2"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
-  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div>
+  <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div><div class="sub" id="lkCardMsg" style="margin:6px 0"></div>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
@@ -1209,10 +1209,12 @@ function renderLook(){
   sg("#lkRad",Object.entries(RADS).map(([k,v])=>[k,v[0]]),TH.rad,k=>{TH.rad=k;themeChanged()});
   sg("#lkFont",Object.entries(FONTS).map(([k,v])=>[k,v[0]]),TH.font,k=>{TH.font=k;themeChanged(true)});
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
-    return `<div class="ord"><input type="checkbox" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><span>${CARDS[k][1]}</span>
+    return `<div class="ord"><input type="checkbox" id="lkc_${k}" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><label style="cursor:pointer;flex:1" for="lkc_${k}">${CARDS[k][1]}</label>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
     ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${["apps","qoe","alertc"].includes(k)?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
+  {const n=Object.keys(CARDS).length-TH.hide.length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${Object.keys(CARDS).length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>`;
+   $("#lkGoOv").onclick=e=>{e.preventDefault();S.tab="overview";showTab();refresh()}}
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
   $("#lkSideItems").innerHTML=SIDE_ITEMS.map(([k,l])=>`<label class="crow sub" style="cursor:pointer"><input type="checkbox" data-s="${k}" ${TH.sideShow[k]?"checked":""}> ${l}</label>`).join("");

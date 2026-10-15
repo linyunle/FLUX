@@ -7,7 +7,7 @@ mock_mihomo.start(19091, 18998); mock_mihomo.start_agh(19445); mock_mihomo.STATE
 data=tempfile.mkdtemp(); neigh=data+"/n"
 os.makedirs(data+"/geoip"); shutil.copy(ROOT+"/tests/data/country-test.mmdb",data+"/geoip/"); shutil.copy(ROOT+"/tests/data/asn-test.mmdb",data+"/geoip/")
 open(neigh,"w").write("192.168.1.10 dev br lladdr aa:bb:cc:dd:ee:01 REACHABLE\n")
-env=dict(os.environ,DATA_DIR=data,NIKKI_API="http://127.0.0.1:19091",NIKKI_SECRET="s3cret",INTERVAL_SEC="2",FLUSH_SEC="2",PROXY_SEC="2",LISTEN_HOST="127.0.0.1",LISTEN_PORT="18101",NEIGH_FILE=neigh,APP_VERSION="v0.11.3")
+env=dict(os.environ,DATA_DIR=data,NIKKI_API="http://127.0.0.1:19091",NIKKI_SECRET="s3cret",INTERVAL_SEC="2",FLUSH_SEC="2",PROXY_SEC="2",LISTEN_HOST="127.0.0.1",LISTEN_PORT="18101",NEIGH_FILE=neigh,APP_VERSION="v0.11.5")
 p=subprocess.Popen([sys.executable,"-m","app"],cwd=ROOT,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
 
 try:
@@ -24,6 +24,21 @@ try:
         for sel in ("#secTiles", "#secFinds", "#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
             assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
         assert not bad, bad
+        # 设置 → 概览卡片:取消 / 重新勾选要真的生效(点名字也行),预设按钮也要生效
+        pg.evaluate("openSettings('look')"); pg.wait_for_timeout(800)
+        pg.locator('#lkCards label[for=lkc_alertc]').click(); pg.wait_for_timeout(400)
+        assert pg.evaluate("TH.hide.includes('alertc')"), "取消勾选没进 TH.hide"
+        pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(600)
+        assert pg.evaluate("getComputedStyle(document.querySelector('#alertCard')).display")=="none", "取消勾选后卡片还在"
+        pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
+        pg.locator('#lkCards input[data-k=alertc]').click(); pg.wait_for_timeout(400)
+        pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(600)
+        assert pg.evaluate("getComputedStyle(document.querySelector('#alertCard')).display")!="none", "重新勾选后卡片没出现"
+        pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
+        pg.locator('#lkView button').nth(1).click(); pg.wait_for_timeout(400)
+        assert pg.evaluate("TH.hide.includes('apps')"), "预设「总览」没生效"
+        pg.locator('#lkView button').nth(0).click(); pg.wait_for_timeout(400)
+        assert pg.evaluate("TH.hide.length")==0, "预设「全部」没生效"
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
     p.terminate()
