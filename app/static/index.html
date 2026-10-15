@@ -805,13 +805,13 @@ const AP_BY=[["app","应用"],["cat","类别"],["client","设备"],["node","出�
 function loadApps(){
   seg($("#apBy"),AP_BY,S.apBy,k=>{S.apBy=k;S.appOpen.clear();loadApps()});
   const isP=S.apBy==="proto";
-  load("apps",isP?"/api/protocols":"/api/apps",{...base(),...(isP?{}:{by:S.apBy}),limit:30},j=>{
+  load("apps",isP?"/api/protocols":"/api/apps",{...base(),...(isP?{}:{by:S.apBy}),limit:60},j=>{
     const T=j.total.up+j.total.down,el=$("#apBody");
     if(!j.rows.length||!T){$("#apNote").textContent="";el.innerHTML='<div class="empty">这个范围内没有数据(升级后新产生的流量才会识别)</div>';return}
     let un=0;if(S.apBy==="app"){const u=j.rows.find(r=>r.key==="未识别");un=u?(u.up+u.down)/T:0}
     $("#apNote").textContent=(j.since&&j.since>j.from?`从 ${j.since} 开始 · `:"")+(isP?"只按传输层 + 端口判断":"按域名/SNI 特征库 + 端口识别,不解密内容")+(S.apBy==="app"?` · 未识别 ${Math.round(un*100)}%`:"")+" · 点一行展开";
     const all=colored(j.rows).map(r=>({...r,_T:T}));
-    let bar=all.slice(0,9);const rest=all.slice(9);if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
+    let bar=all.slice(0,9);const rest=all.slice(9);const tblRows=all.slice(0,crows("apps"));if(rest.length)bar=bar.concat({key:"其他",up:rest.reduce((a,r)=>a+r.up,0),down:rest.reduce((a,r)=>a+r.down,0),_c:"#9aa0a6"});
     const nm=r=>S.apBy==="client"?esc(devName(r)):esc(r.key)+(r.cat&&S.apBy==="app"?` <span class="tag">${esc(r.cat)}</span>`:"");
     el.innerHTML=colorBar(bar,T,"占比")+'<div id="apTbl2"></div>';
     const ld=r=>{const o={...base(),limit:10};
@@ -821,7 +821,7 @@ function loadApps(){
       if(S.apBy==="client")return get("/api/apps",{...o,by:"app",dev:r.key}).then(x=>miniApps(x.rows));
       return get("/api/apps",{...o,by:"app",node:r.key}).then(x=>miniApps(x.rows))};
     const hd={client:"设备",node:"出口节点",cat:"类别",proto:"协议",app:"应用"}[S.apBy];
-    expTable($("#apTbl2"),{rows:all,total:j.total},[{h:hd,k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,ld)})}
+    expTable($("#apTbl2"),{rows:tblRows,total:j.total},[{h:hd,k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,ld)})}
 const miniApps=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td>${esc(r.key)} <span class="tag">${esc(r.cat||"")}</span></td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 /* ---- 堆叠面积图(流量趋势卡片的「堆叠维度」) ---- */
 function stColor(x,i){return x.other?"#9aa0a6":PCOL[i%PCOL.length]}
@@ -864,7 +864,7 @@ async function loadQoe(){
   const id=(S.seq.qoe=(S.seq.qoe||0)+1);
   try{const [q,t]=await Promise.all([get("/api/qoe",{hours:24}),get("/api/tunnels",{...base()})]);if(S.seq.qoe!==id)return;
     const el=$("#qoeBody"),tc=q.tcp,T=t.rows.reduce((a,r)=>a+r.up+r.down,0);
-    const nodes=q.nodes.filter(r=>r.tests>0||r.delay!=null);
+    const nodes=q.nodes.filter(r=>r.tests>0||r.delay!=null).slice(0,crows("qoe"));
     const sm=q.summary||{};
     const stat=(v,l,c)=>`<div><div class="v ${c||""}">${v}</div><div class="l">${l}</div></div>`;
     let h=`<div class="qstat">${stat(sm.avg==null?"–":sm.avg+" ms",`节点平均延迟(${sm.basis||"–"})`,dCls(sm.avg))}${stat(sm.jitter==null?"–":sm.jitter+" ms","延迟波动(测速标准差)")}${stat(sm.fail_rate==null?"–":(sm.fail_rate*100).toFixed(1)+"%","测速超时/失败率",fCls(sm.fail_rate))}${stat(tc.now&&tc.now.rate!=null?tc.now.rate+"%":"–","TCP 重传率(此刻 · 1 分钟)",rCls(tc.now&&tc.now.rate))}${stat(tc.avg_rate==null?"–":tc.avg_rate+"%","TCP 重传率(24 小时均值)",rCls(tc.avg_rate))}</div>`;
@@ -1133,12 +1133,14 @@ const HROWS=[5,8,10,15,20,30,50,100];
 const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.rthost.rows)?+TH.cards.rthost.rows:30):(ROWS[(TH.cards[k==="devtop"?"rtdev":k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={mem:{w:6,h:"m"},rt:{w:6,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"m"},trend:{w:12,h:"m"},apps:{w:12,h:"m"},qoe:{w:12,h:"m"}};
+const DEF_CARDS={mem:{w:6,h:"m"},rt:{w:6,h:"m"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"m",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"m",rows:30},qoe:{w:12,h:"m",rows:50}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
+const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
+const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:4,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
-  order:Object.keys(CARDS),hide:[],tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
+  order:Object.keys(CARDS),hide:[],vh:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 let TH=loadTheme();
 function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),d=themeDefault();
   if(!(t.v>=4)){const hr=((t.cards||{}).hosts||{}).rows;delete t.order;delete t.hide;delete t.cards;if(hr)t.cards={rthost:{rows:hr}}} /* v0.9.0 合并了一批卡片,旧排版重置一次 */
@@ -1150,7 +1152,7 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
-  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",alertc:"trend"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);
+  const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",alertc:"trend"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);{const vh={};for(const v in VIEWS)if(Array.isArray((t.vh||{})[v]))vh[v]=t.vh[v].filter(k=>CARDS[k]);r.vh=vh}
   if(!PRESETS[r.preset])r.preset="default";r.v=4;return r}catch(e){return themeDefault()}}
 function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
@@ -1196,9 +1198,10 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.remove("autohide")}
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe()}}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
-function applyView(k){TH.view=k;const v=VIEWS[k];TH.hide=v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[];themeChanged(true);renderChrome()}
+const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
+function applyView(k){TH.view=k;TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
   sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
@@ -1218,9 +1221,10 @@ function renderLook(){
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" id="lkc_${k}" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><label style="cursor:pointer;flex:1" for="lkc_${k}">${CARDS[k][1]}</label>
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
-    ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${["apps","qoe","alertc"].includes(k)?"<option>—</option>":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
+    ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}${ROWOPT[k]?`<select data-k="${k}" data-f="rows" aria-label="${CARDS[k][1]}显示行数" title="显示行数">${ROWOPT[k].map(v=>`<option value="${v}" ${crows(k)===v?"selected":""}>显示 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${["apps","qoe","alertc"].includes(k)?"":(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
     <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
-  {const n=Object.keys(CARDS).length-TH.hide.length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${Object.keys(CARDS).length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>`;
+  {const n=Object.keys(CARDS).length-TH.hide.length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${Object.keys(CARDS).length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>${VIEWS[TH.view]?` · 当前「${VIEWS[TH.view][0]}」预设,改动会记在这个预设里 · <a href="#" id="lkVDef">恢复该预设默认</a>`:""}`;
+   if($("#lkVDef"))$("#lkVDef").onclick=e=>{e.preventDefault();delete TH.vh[TH.view];applyView(TH.view)};
    $("#lkGoOv").onclick=e=>{e.preventDefault();S.tab="overview";showTab();refresh()}}
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
   $("#lkSplit").checked=!!TH.trend.split;
@@ -1242,7 +1246,7 @@ $("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const 
   TH.order.splice(i,1);TH.order.splice(j,0,k);themeChanged()};
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
-  TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);TH.view="custom";themeChanged(true);renderChrome()};
+  TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);if(VIEWS[TH.view])TH.vh[TH.view]=[...TH.hide];else TH.view="custom";themeChanged(true);renderChrome()};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
 function syncSl(el){const mn=+el.min,mx=+el.max;el.style.setProperty("--p",((+el.value-mn)/(mx-mn)*100)+"%")}
@@ -1344,7 +1348,7 @@ async function loadAlerts(){
 $("#alKind").onchange=e=>{S.alKind=e.target.value;loadAlerts()};
 $("#alSeen").onclick=async()=>{try{await post("/api/alerts/seen",{});S.unread=0;renderChrome();loadAlerts()}catch(e){}};
 $("#alClear").onclick=async()=>{if(!confirm("清空全部告警记录?"))return;try{await post("/api/alerts/clear",{});S.unread=0;renderChrome();loadAlerts();loadAlertCard()}catch(e){alert(e.message)}};
-function loadAlertCard(){load("alertc","/api/alerts",{limit:5},j=>{
+function loadAlertCard(){load("alertc","/api/alerts",{limit:crows("alertc")},j=>{
   $("#alcNote").textContent=j.has_channel?"":"还没配置推送渠道";
   $("#alcBody").innerHTML=j.rows.length?`<table><tbody>${j.rows.map(r=>`<tr><td class="n" style="white-space:nowrap;text-align:left">${fmtTs(r.ts)}</td><td><span class="lv ${r.level}">${LV[r.level]||r.level}</span></td><td class="k" title="${esc(r.detail)}">${esc(r.title)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">没有告警 · 一切正常</div>'})}
 $("#alcGo").onclick=()=>{S.tab="alerts";showTab();refresh()};

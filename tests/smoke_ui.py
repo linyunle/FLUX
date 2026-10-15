@@ -45,6 +45,19 @@ try:
         y0=pg.evaluate("[scrollY,document.documentElement.scrollHeight]")
         for _ in range(8):
             pg.wait_for_timeout(1000); assert pg.evaluate("[scrollY,document.documentElement.scrollHeight]")==y0, "手机上页面在实时刷新时跳动"
+        # 预设里的勾选要记在该预设里;三张卡片有行数设置
+        pg.set_viewport_size({"width":1200,"height":1000}); pg.evaluate("openSettings('look')"); pg.wait_for_timeout(800)
+        pg.locator('#lkView button').nth(2).click(); pg.wait_for_timeout(400)   # 排障
+        pg.locator('#lkCards input[data-k=trend]').click(); pg.wait_for_timeout(300)
+        pg.locator('#lkView button').nth(1).click(); pg.wait_for_timeout(300)   # 总览
+        pg.locator('#lkView button').nth(2).click(); pg.wait_for_timeout(300)   # 回到排障
+        assert pg.evaluate("TH.view")=="ts" and not pg.evaluate("TH.hide.includes('trend')"), "预设里的修改没有被记住"
+        pg.locator('#lkView button').nth(0).click(); pg.wait_for_timeout(300)
+        assert pg.evaluate("TH.hide.length")==0, "「全部」应显示所有卡片"
+        for k in ("alertc","apps","qoe"):
+            assert pg.locator(f'#lkCards select[data-k={k}][data-f=rows]').count()==1, "缺少行数设置:"+k
+        pg.locator('#lkCards select[data-k=alertc][data-f=rows]').select_option("3"); pg.wait_for_timeout(300)
+        assert pg.evaluate("TH.cards.alertc.rows")==3
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
     p.terminate()
