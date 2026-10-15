@@ -543,6 +543,13 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div id="quotaRows"></div>
   <div class="msg" id="quotaMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="quotaAdd">+ 添加机场</button><button id="quotaSave" class="pri">保存</button></div></div>
+      <div class="card sec" id="sec-backup"><h2>备份与恢复</h2>
+  <div class="sub" style="margin-bottom:10px;line-height:1.7">外观(卡片显示 / 顺序 / 主题)会自动同步一份到服务器,换浏览器或清缓存后会自动取回。下面可以把全部设置导出成一个文件存着,设置丢了就导入它。备份包含:外观、告警规则与推送渠道、AdGuard、机场套餐、周报、机场归类规则、应用识别规则、设备名。流量统计数据不在其中(它们存在 data 目录里,更新容器不会丢)。</div>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="bkSec"> 包含密钥(推送地址 / Token、AdGuard 密码)——备份文件会含明文密钥,请自己妥善保管</label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button id="bkDl" class="pri">下载备份文件</button><button id="bkUp">从文件恢复…</button><input type="file" id="bkFile" accept=".json,application/json" style="display:none"></div>
+  <div class="msg" id="bkMsg"></div>
+  <div class="sub" id="bkInfo"></div>
+</div>
       <div class="card sec" id="sec-report"><h2>周报与监控</h2>
   <div class="row2"><label class="crow sub" style="cursor:pointer"><input type="checkbox" id="repOn"> 每周自动推送周报到告警渠道</label>
     <select id="repWd"></select><select id="repHr"></select></div>
@@ -1165,8 +1172,10 @@ const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:D
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:4,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
+const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
+let THEME_RAW=null;
 let TH=loadTheme();
-function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),d=themeDefault();
+function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}catch(e){}THEME_RAW=raw;try{const t=JSON.parse(raw||"{}"),d=themeDefault();
   if(!(t.v>=4)){const hr=((t.cards||{}).hosts||{}).rows;delete t.order;delete t.hide;delete t.cards;if(hr)t.cards={rthost:{rows:hr}}} /* v0.9.0 合并了一批卡片,旧排版重置一次 */
   const r={...d,...t,custom:{...(t.custom||{})},trend:{...d.trend,...(t.trend||{})},viz:{...d.viz,...(t.viz||{})},views:{...d.views,...(t.views||{})},cards:{}};
   for(const k in CARDS){const c={...DEF_CARDS[k],...((t.cards||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";r.cards[k]=c}
@@ -1177,8 +1186,14 @@ function loadTheme(){try{const t=JSON.parse(localStorage.getItem("nt.theme.v1")|
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
   const ord=(Array.isArray(r.order)?r.order:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",alertc:"trend"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}r.order=ord;r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);{const vh={};for(const v in VIEWS)if(Array.isArray((t.vh||{})[v]))vh[v]=t.vh[v].filter(k=>CARDS[k]);r.vh=vh}
-  if(!PRESETS[r.preset])r.preset="default";r.v=4;return r}catch(e){return themeDefault()}}
-function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}}
+  if(!PRESETS[r.preset])r.preset="default";r.v=4;return r}catch(e){console.error("读取外观设置失败,先用默认值(原内容已另存):",e);try{if(raw)localStorage.setItem("nt.theme.bad",raw)}catch(_){}return themeDefault()}}
+let uiTimer=0;
+function saveTheme(){try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}
+  clearTimeout(uiTimer);uiTimer=setTimeout(()=>{post("/api/ui",{theme:TH}).catch(()=>{})},1200)}
+/* 外观设置同步到服务器:浏览器里没有(换浏览器/清缓存)就从服务器取回;服务器还没有就推一份上去 */
+async function syncUi(){try{const j=await get("/api/ui");
+  if(THEME_RAW===null&&j.theme){try{localStorage.setItem("nt.theme.v1",JSON.stringify(j.theme))}catch(e){}TH=loadTheme();themeChanged(true);renderChrome()}
+  else if(!j.theme)post("/api/ui",{theme:TH}).catch(()=>{})}catch(e){console.warn("ui sync",e)}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
 const effMode=()=>TH.mode==="dark"||(TH.mode==="auto"&&mq.matches)?"dark":"light";
 const hexOk=h=>/^#[0-9a-f]{6}$/i.test(h||"");
@@ -1223,7 +1238,6 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
-const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
 function applyView(k){TH.view=k;TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
@@ -1421,7 +1435,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["security","安全与隐私"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["devices","设备名"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1436,6 +1450,7 @@ async function loadSettings(){
     else if(S.set==="geo")await loadGeoSet();
     else if(S.set==="quota")await loadQuotaSet();
     else if(S.set==="report")await loadReportSet();
+    else if(S.set==="backup"){const j=await get("/api/ui");$("#bkInfo").textContent=j.at?"服务器上的外观设置最近同步:"+new Date(j.at*1000).toLocaleString():"服务器上还没有外观设置(改一下外观就会同步)"}
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
       $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
@@ -1443,6 +1458,20 @@ async function loadSettings(){
     else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
   }catch(e){console.warn(e)}}
+$("#bkDl").onclick=async()=>{const m=$("#bkMsg");m.className="msg";m.textContent="";
+  try{const sec=$("#bkSec").checked,j=await get("/api/backup",{secrets:sec?1:0});
+    j.ui=TH; /* 以此刻浏览器里的外观为准 */
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(j,null,1)],{type:"application/json"}));
+    a.download="flux-backup-"+new Date().toISOString().slice(0,10)+(sec?"-with-secrets":"")+".json";document.body.appendChild(a);a.click();a.remove();
+    m.className="msg ok";m.textContent="已下载"+(sec?"(含密钥,请妥善保管)":"(不含密钥)")}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#bkUp").onclick=()=>$("#bkFile").click();
+$("#bkFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;const m=$("#bkMsg");m.className="msg";m.textContent="";
+  try{const d=JSON.parse(await f.text());if(!d||d.flux_backup!==1)throw new Error("这不是 FLUX 的备份文件");
+    if(!confirm("用这个备份覆盖当前设置?(文件里有的部分会被替换)"))return;
+    const r=await post("/api/restore",{backup:d});
+    if(d.ui){try{localStorage.setItem("nt.theme.v1",JSON.stringify(d.ui))}catch(_){}}
+    m.className="msg ok";m.textContent="已恢复:"+r.done.join("、")+(r.skipped.length?"。未恢复:"+r.skipped.join(";"):"")+" — 2 秒后刷新页面";
+    setTimeout(()=>location.reload(),2000)}catch(er){m.className="msg err";m.textContent=er.message}};
 $("#sSave").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="验证中…";
   try{const body={api:$("#sApi").value};if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="已保存,连接成功"+(j.version?"(mihomo "+j.version+")":"");status()}
   catch(e){m.className="msg err";m.textContent=e.message}};
@@ -1614,7 +1643,7 @@ function refresh(){
 $("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();S.dtOpen.clear();renderChrome();refresh()},300)}})();
 $("#d1").onchange=$("#d2").onchange=refresh;
 window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadRealtime()),200)}})());
-renderChrome();showTab();status();loadDevices();refresh();
+renderChrome();showTab();status();loadDevices();refresh();syncUi();
 setInterval(()=>{if(document.hidden)return;status();if(S.tab!=="settings")refresh()},15000);
 </script>
 </body>

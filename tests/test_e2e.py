@@ -273,6 +273,16 @@ try:
     ok("flux_nikki_up 1" in mt and "flux_traffic_bytes_today" in mt and 'flux_node_delay_ms{node="HK-01"}' in mt and "# TYPE flux_connections gauge" in mt, "/metrics:Prometheus 文本")
     sy = get("/api/sys"); ok(sy["mem"] and sy["mem"]["total"] > 0 and sy["cpu"] is not None and len(sy["series"]) > 1 and sy["ncpu"] >= 1, "路由器状态:CPU/内存/曲线")
     ok(all(k in alerts_rules for k in ("sys_conntrack", "sys_temp", "sys_disk", "sys_mem")) if (alerts_rules := get("/api/alerts/config")["rules"]) else False, "路由器状态:四条告警规则默认存在")
+    # 备份与恢复
+    post("/api/ui", {"theme": {"v": 4, "view": "ts", "vh": {"ts": ["trend"]}}}); ok(get("/api/ui")["theme"]["view"] == "ts", "外观同步到服务器")
+    bk = get("/api/backup"); bks = get("/api/backup?secrets=1")
+    ok(bk["flux_backup"] == 1 and bk["ui"]["view"] == "ts" and "alerts" in bk and "devices" in bk, "备份:结构完整")
+    ok(all("token" not in c and "url" not in c for c in bk["alerts"]["channels"]) and "pass" not in bk["agh"], "备份:默认不含密钥")
+    ok("pass" in bks["agh"], "备份:勾选后含密钥")
+    c, r = post("/api/restore", {"backup": {"flux_backup": 1, "report": {"on": True, "weekday": 3, "hour": 8}, "devices": {"aa:bb:cc:dd:ee:77": "备份还原机"}}})
+    ok(c == 200 and "周报" in r["done"] and get("/api/report/config")["weekday"] == 3, "恢复:周报设置")
+    ok(post("/api/restore", {"backup": {"nope": 1}})[0] == 400, "恢复:拒绝不是备份的文件")
+    post("/api/report/config", {"on": False, "weekday": 0, "hour": 9})
     ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
     # ---- v0.11.1
     sc = get("/api/secsum?force=1"); keys = {t["key"] for t in sc["tiles"]}

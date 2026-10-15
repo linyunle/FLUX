@@ -26,6 +26,17 @@ try:
         assert not bad, bad
         pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(3500)
         assert pg.inner_text("#sysTiles").strip(), "路由器状态卡片为空"
+        # 外观设置:刷新后要还在;浏览器清空后要从服务器取回
+        pg.evaluate("applyView('ts');TH.vh.ts=['trend'];TH.hide=['trend'];themeChanged(true)"); pg.wait_for_timeout(2500)
+        pg.reload(); pg.wait_for_timeout(2500)
+        assert pg.evaluate("TH.view")=="ts" and pg.evaluate("TH.vh.ts&&TH.vh.ts.includes('trend')"), "刷新后外观设置丢了"
+        pg.evaluate("localStorage.removeItem('nt.theme.v1')"); pg.reload(); pg.wait_for_timeout(3500)
+        assert pg.evaluate("TH.view")=="ts", "浏览器清空后没有从服务器取回外观设置"
+        pg.evaluate("S.set='backup';openSettings('backup')"); pg.wait_for_timeout(1200)
+        with pg.expect_download() as dl: pg.click("#bkDl")
+        import json as _j; bk=_j.load(open(dl.value.path())); assert bk["flux_backup"]==1 and bk["ui"]["view"]=="ts", "备份下载内容不对"
+        pg.once("dialog", lambda d: d.accept()); pg.set_input_files("#bkFile", dl.value.path()); pg.wait_for_timeout(1000)
+        assert "已恢复" in pg.inner_text("#bkMsg"), pg.inner_text("#bkMsg")
         # 设置 → 概览卡片:取消 / 重新勾选要真的生效(点名字也行),预设按钮也要生效
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(800)
         pg.locator('#lkCards label[for=lkc_alertc]').click(); pg.wait_for_timeout(400)
