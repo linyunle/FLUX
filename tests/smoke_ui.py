@@ -39,6 +39,12 @@ try:
         assert pg.evaluate("TH.hide.includes('apps')"), "预设「总览」没生效"
         pg.locator('#lkView button').nth(0).click(); pg.wait_for_timeout(400)
         assert pg.evaluate("TH.hide.length")==0, "预设「全部」没生效"
+        # 手机尺寸:访问目标卡片附近,页面高度/滚动位置不应随实时刷新变化
+        pg.set_viewport_size({"width":390,"height":800}); pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)
+        pg.evaluate("document.querySelector('#rthostCard').scrollIntoView()"); pg.wait_for_timeout(500)
+        y0=pg.evaluate("[scrollY,document.documentElement.scrollHeight]")
+        for _ in range(8):
+            pg.wait_for_timeout(1000); assert pg.evaluate("[scrollY,document.documentElement.scrollHeight]")==y0, "手机上页面在实时刷新时跳动"
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
     p.terminate()

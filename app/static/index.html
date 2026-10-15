@@ -242,6 +242,10 @@ details.adv{margin-top:6px}details.adv>summary{cursor:pointer;color:var(--ink2);
 body.priv .pv{filter:blur(6px);transition:filter .15s}body.priv .pv:hover{filter:none}
 #btnPriv[aria-pressed=true]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 @media(max-width:820px){#viewSeg{display:none!important}}
+/* 手机:所有会实时变化的块高度固定,内容变化不再把页面顶来顶去 */
+.tile .v,.tile .s,.tile .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rtDev tr,#rtNode tr,#rtHost tr{height:34px}#rtDev td,#rtNode td,#rtHost td{white-space:nowrap}.pager{height:36px;box-sizing:border-box;flex:none}
+@media(max-width:820px){html,body{overflow-anchor:none}}
 .stk #tStyle,.stk #tSplit,.stk #tblToggle,.stk #tLegend{display:none}
 .navi{position:relative}.nb{position:absolute;top:3px;right:8px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--bad);color:#fff;font:600 10px/16px system-ui;font-style:normal;text-align:center}
 .app.collapsed .nb{right:4px}
@@ -891,6 +895,8 @@ function applyViews(){
   $("#rtHost").style.display=hp?"none":"";$("#hostsBox").style.display=hp?"":"none";
   $("#hostHint").textContent=hp?(S.q?"搜索结果 · 点一行看 设备 / 规则 / 节点 / DNS":"点一行看 设备 / 规则 / 节点 / DNS"):"点一行看详情 · 可暂停"}
 const PGCFG={rtdev:["#rtDev",r=>r.name||r.key],rtnode:["#rtNode",r=>r.node],rthost:["#rtHost",r=>r.host]};
+const setH=(el,h)=>{if(el._h!==h){el._h=h;el.innerHTML=h}};
+S.scrollAt=0;for(const ev of["scroll","touchmove","wheel"])addEventListener(ev,()=>{S.scrollAt=Date.now()},{passive:true});
 function paintPg(k){const st=S.pg[k],el=$(PGCFG[k][0]),per=rowsOf(k);
   const rows=(st.pause&&st.snap)?st.snap:(st.cur||[]);
   const n=Math.max(1,Math.ceil(rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
@@ -899,7 +905,7 @@ function paintPg(k){const st=S.pg[k],el=$(PGCFG[k][0]),per=rowsOf(k);
   let h=page.map((r,i)=>`<tr class="click" data-i="${i}"><td class="k" title="${esc(nm(r))}">${k==="rthost"?`<span class="pv">${esc(nm(r))}</span>`:esc(nm(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
   if(!page.length)h='<tr><td colspan="4" style="color:var(--muted)">现在没有明显的流量</td></tr>';
   for(let i=Math.max(page.length,1);i<per;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
-  el.innerHTML=`<table><tbody>${h}</tbody></table>`+pagerBar(k,rows.length,per,!!st.pause);
+  setH(el,`<table><tbody>${h}</tbody></table>`+pagerBar(k,rows.length,per,!!st.pause));
   el.classList.toggle("paused",!!st.pause)}
 document.addEventListener("click",e=>{const b=e.target.closest(".pager button[data-a]");if(!b||b.disabled)return;
   const k=b.closest(".pager").dataset.k,st=S.pg[k],a=b.dataset.a;
@@ -1040,7 +1046,7 @@ function rtList(el,rows,nameFn,empty,pad){
   rows=pad?rows.slice(0,pad):rows;
   let h=rows.map(r=>`<tr><td class="k" title="${esc(nameFn(r))}">${esc(nameFn(r))}</td><td class="n">↓ ${rate(r.down_rate)}</td><td class="n hide-s">↑ ${rate(r.up_rate)}</td><td class="n hide-s sub">${r.conns} 连接</td></tr>`).join("");
   if(!rows.length)h=`<tr><td class="sub" colspan="4">${empty||"现在没有明显的流量"}</td></tr>`;
-  el.innerHTML=`<table><tbody>${h}</tbody></table>`}
+  setH(el,`<table><tbody>${h}</tbody></table>`)}
 /* 侧栏小折线:arrs = [数组, ...],cols 对应颜色 */
 function mini(el,arrs,cols){const W=200,H=30,a=arrs.map(x=>x.slice(-60)),m=Math.max(...a.flat(),1),len=Math.max(...a.map(x=>x.length)),wave=TH.sideViz==="wave";
   const P=x=>x.map((v,k)=>[k/Math.max(len-1,1)*W,H-2-(H-4)*v/m]);
@@ -1086,6 +1092,7 @@ document.addEventListener("click",e=>{if(!e.target.closest("[data-vz]"))return;T
 function loadRealtime(){if(document.hidden)return;
   load("rt","/api/realtime",{seconds:120,dev:[...S.devs].join(",")},j=>{
     S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;$("#tConnS").textContent=`直连 ${j.conns.direct} · 代理 ${j.conns.proxy}`;updDetailLive();if(S.tab!=="overview")return;
+    if(Date.now()-S.scrollAt<1500)return; /* 正在滑动时不重绘,手机上否则页面会跳 */
     paintRt(j);
     S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
     for(const k of ["rtdev","rtnode","rthost"])if(!S.pg[k].pause||!S.pg[k].snap)paintPg(k);
