@@ -151,12 +151,28 @@ def heatmap(con, devs=None, days=14):
 
 
 # ---------------------------------------------------------------- 机场套餐
+def _date_or_empty(v, label):
+    v = str(v or "").strip()
+    if not v:
+        return ""
+    try:
+        return datetime.date.fromisoformat(v).isoformat()
+    except ValueError:
+        raise ValueError(f"{label}要写成 2026-12-31 这样的日期")
+
+
 def quota_cfg(con):
+    """每个机场一个套餐:type=monthly(每月重置,reset_day 重置日)或 once(一次性总量,start 起算日,可不填);
+    expire 是到期日(留空 = 永不过期),到期前会提醒续费。gb 一律按 GB 存(1 TB = 1024 GB)。"""
     d = _kv_get(con, "quota", {}) or {}
     out = {}
     for ap, v in d.items():
         if isinstance(v, dict) and v.get("gb"):
-            out[str(ap)[:40]] = {"gb": float(v["gb"]), "reset_day": int(v.get("reset_day") or 1)}
+            try:
+                out[str(ap)[:40]] = {"type": "once" if v.get("type") == "once" else "monthly", "gb": float(v["gb"]),
+                                     "reset_day": int(v.get("reset_day") or 1), "start": str(v.get("start") or ""), "expire": str(v.get("expire") or "")}
+            except (TypeError, ValueError):
+                continue
     return out
 
 
@@ -165,14 +181,18 @@ def save_quota(con, body):
     for ap, v in (body.get("quota") or {}).items():
         if not isinstance(v, dict) or not str(ap).strip():
             continue
+        name = str(ap).strip()[:40]
         try:
             gb = float(v.get("gb") or 0)
             rd = int(v.get("reset_day") or 1)
         except (TypeError, ValueError):
-            raise ValueError(f"「{ap}」的流量或重置日不是数字")
+            raise ValueError(f"「{name}」的流量或重置日不是数字")
         if gb <= 0:
             continue
-        out[str(ap).strip()[:40]] = {"gb": min(gb, 1e6), "reset_day": max(1, min(31, rd))}
+        t = "once" if v.get("type") == "once" else "monthly"
+        out[name] = {"type": t, "gb": min(gb, 1e8), "reset_day": max(1, min(31, rd)),
+                     "start": _date_or_empty(v.get("start"), f"「{name}」的起算日") if t == "once" else "",
+                     "expire": _date_or_empty(v.get("expire"), f"「{name}」的到期日")}
     _kv_set(con, "quota", out)
     return out
 
@@ -198,31 +218,66 @@ def quota_status(con, today=None):
     cfg = quota_cfg(con)
     t = today or datetime.date.today()
     nodes = w.all_nodes()
-    d, r = w.kind_names()
     out = []
     for ap, c in sorted(cfg.items()):
         ns = [n for n in nodes if w.airport_of(n) == ap]
-        start, end = period(c["reset_day"], t)
+        once = c["type"] == "once"
+        exp = datetime.date.fromisoformat(c["expire"]) if c["expire"] else None
+        if once:
+            start, end = None, exp
+        else:
+            start, end = period(c["reset_day"], t)
         used = rate = 0
         if ns:
             ph = ",".join("?" * len(ns))
-            used = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND day<? AND node IN ({ph})",
-                               [start.isoformat(), end.isoformat()] + ns).fetchone()[0]
-            ws = max(start, t - datetime.timedelta(days=6))
-            n = (t - ws).days + 1
-            rate = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND day<? AND node IN ({ph})",
-                               [ws.isoformat(), end.isoformat()] + ns).fetchone()[0] / n
+            if once:
+                sd = c["start"]
+                if not sd:
+                    r0 = con.execute(f"SELECT MIN(day) FROM traffic WHERE node IN ({ph})", ns).fetchone()[0]
+                    sd = r0 or t.isoformat()
+                start = datetime.date.fromisoformat(sd)
+                used = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND node IN ({ph})", [sd] + ns).fetchone()[0]
+            else:
+                used = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND day<? AND node IN ({ph})",
+                                   [start.isoformat(), end.isoformat()] + ns).fetchone()[0]
+            ws = max(start, t - datetime.timedelta(days=6)) if start else t - datetime.timedelta(days=6)
+            n = max(1, (t - ws).days + 1)
+            rate = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND node IN ({ph})", [ws.isoformat()] + ns).fetchone()[0] / n
+        elif once:
+            start = datetime.date.fromisoformat(c["start"]) if c["start"] else t
         limit = c["gb"] * 1024 ** 3
         left = max(0.0, limit - used)
         exhaust = None
-        if rate > 0 and left > 0:
-            exhaust = (t + datetime.timedelta(days=int(left / rate))).isoformat()
-        elif left <= 0:
+        if left <= 0:
             exhaust = t.isoformat()
-        out.append({"airport": ap, "gb": c["gb"], "reset_day": c["reset_day"], "used": used, "pct": round(used * 100 / limit, 1) if limit else 0,
-                    "start": start.isoformat(), "end": end.isoformat(), "days_left": (end - t).days, "rate": round(rate),
-                    "exhaust": exhaust, "over": bool(exhaust and exhaust < end.isoformat()), "known": bool(ns)})
+        elif rate > 0:
+            days = left / rate
+            if days < 36500:   # 速度太小算出来的日期没有意义,还会越界
+                try:
+                    exhaust = (t + datetime.timedelta(days=int(days))).isoformat()
+                except OverflowError:
+                    exhaust = None
+        over = bool(exhaust and end and exhaust < end.isoformat())
+        out.append({"airport": ap, "type": c["type"], "gb": c["gb"], "reset_day": c["reset_day"], "used": used,
+                    "pct": round(used * 100 / limit, 1) if limit else 0,
+                    "start": start.isoformat() if start else "", "end": end.isoformat() if end else "",
+                    "days_left": (end - t).days if end else None, "expire": c["expire"], "expire_days": (exp - t).days if exp else None,
+                    "rate": round(rate), "exhaust": exhaust, "over": over, "known": bool(ns)})
     return out
+
+
+def quota_when(q):
+    """一句话:这个套餐什么时候重置 / 到期。"""
+    if q["type"] == "monthly":
+        s = f"每月 {q['reset_day']} 日重置,还有 {q['days_left']} 天"
+    else:
+        s = "一次性流量"
+    if q["expire"]:
+        d = q["expire_days"]
+        s += f";{q['expire']} 到期" + (f"(还有 {d} 天)" if d >= 0 else "(已到期)")
+    elif q["type"] == "once":
+        s += ",永不过期"
+    return s
 
 
 # ---------------------------------------------------------------- 周报
@@ -310,7 +365,7 @@ def report_text(rp):
     if rp["alerts"]:
         L.append("告警:" + "、".join(f"{alerts.KINDS.get(a, a)} {n}" for a, n in rp["alerts"].items()))
     for q in rp["quota"]:
-        L.append(f"套餐 {q['airport']}:{q['pct']}%({_b(q['used'])} / {q['gb']:g} GB)")
+        L.append(f"套餐 {q['airport']}:{q['pct']}%({_b(q['used'])} / {q['gb']:g} GB){';' + quota_when(q) if q['expire'] else ''}")
     for b in rp["bad_nodes"][:3]:
         L.append(f"节点 {b['node']} 测速失败率 {b['fail_pct']}%")
     return "\n".join(L)
@@ -337,6 +392,23 @@ def maybe_push_report(con, now=None):
 
 
 # ---------------------------------------------------------------- 套餐告警
+def check_quota_expire(con, cfg, now):
+    """套餐到期前提醒续费:7 / 3 / 1 天各一次,到期当天和已到期再各一次。"""
+    r = cfg["rules"].get("quota_expire")
+    if not r or not r["on"]:
+        return
+    for q in quota_status(con):
+        d = q["expire_days"]
+        if d is None or d > r["days"]:
+            continue
+        stage = "过期" if d < 0 else "0" if d == 0 else "1" if d == 1 else "3" if d <= 3 else "7"
+        if alerts._allow("quota_expire", f"{q['airport']}|{q['expire']}|{stage}", r["cool_min"], now):
+            lvl = "bad" if d <= 1 else "warn"
+            title = f"套餐已到期:{q['airport']}" if d < 0 else f"套餐今天到期:{q['airport']}" if d == 0 else f"套餐 {d} 天后到期:{q['airport']}"
+            alerts.fire(con, cfg, "quota_expire", lvl, q["airport"], title,
+                        f"{q['airport']} 的到期日是 {q['expire']}。记得续费;续费后到「设置 → 机场套餐」把到期日改成新的日期。", now)
+
+
 def check_quota(con, cfg, now):
     r = cfg["rules"].get("quota")
     if not r or not r["on"]:
@@ -346,7 +418,7 @@ def check_quota(con, cfg, now):
             continue
         lvl = "bad" if q["pct"] >= 95 else "warn"
         if alerts._allow("quota", q["airport"] + ("95" if lvl == "bad" else ""), r["cool_min"], now):
-            extra = f"按近 7 天速度,预计 {q['exhaust']} 用完(重置日 {q['end']})。" if q["exhaust"] else ""
+            extra = f"按近 7 天速度,预计 {q['exhaust']} 用完({quota_when(q)})。" if q["exhaust"] else ""
             alerts.fire(con, cfg, "quota", lvl, q["airport"], f"套餐用量 {q['pct']}%:{q['airport']}",
                         f"本周期已用 {_b(q['used'])} / {q['gb']:g} GB。{extra}", now)
 
@@ -566,8 +638,11 @@ def secsum(con, force=False):
         if qs:
             q = max(qs, key=lambda x: x["pct"])
             lvl = "bad" if q["pct"] >= 95 else "warn" if q["pct"] >= 80 or q["over"] else "ok"
-            tile("quota", "套餐用量", f"{q['pct']}%", f"{q['airport']} · 还有 {q['days_left']} 天重置", lvl, "tab:nodes")
+            tile("quota", "套餐用量", f"{q['pct']}%", f"{q['airport']} · {quota_when(q)}", lvl, "tab:nodes")
             for q in qs:
+                if q["expire_days"] is not None and q["expire_days"] <= 7:
+                    find("bad" if q["expire_days"] <= 1 else "warn", f"{q['airport']} 套餐" + (f"{q['expire_days']} 天后到期" if q["expire_days"] >= 0 else "已到期"),
+                         f"到期日 {q['expire']},记得续费", "tab:nodes")
                 if q["pct"] >= 80 or q["over"]:
                     find("bad" if q["pct"] >= 95 else "warn", f"{q['airport']} 套餐已用 {q['pct']}%",
                          f"{_b(q['used'])} / {q['gb']:g} GB" + (f";按近 7 天速度预计 {q['exhaust']} 用完" if q["exhaust"] else ""), "tab:nodes")

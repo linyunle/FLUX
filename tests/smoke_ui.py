@@ -91,6 +91,23 @@ try:
             assert pg.locator(f'#lkCards select[data-k={k}][data-f=rows]').count()==1, "缺少行数设置:"+k
         pg.locator('#lkCards select[data-k=alertc][data-f=rows]').select_option("3"); pg.wait_for_timeout(300)
         assert pg.evaluate("TH.cards.alertc.rows")==3
+        # 各预设的大小/顺序互相独立;卡片等高
+        pg.evaluate("applyView('all')"); pg.wait_for_timeout(200)
+        pg.evaluate("TH.cards.trend.w=3;TH.order=TH.order.filter(k=>k!=='trend');TH.order.unshift('trend');saveTheme();applyTheme()")
+        pg.evaluate("applyView('ov')"); pg.wait_for_timeout(200)
+        assert pg.evaluate("TH.cards.trend.w")!=3 and pg.evaluate("TH.order[0]")!="trend", "预设之间的大小/顺序串了"
+        pg.evaluate("applyView('all')"); pg.wait_for_timeout(200)
+        assert pg.evaluate("TH.cards.trend.w==3&&TH.order[0]=='trend'"), "切回全部后自己的布局丢了"
+        pg.evaluate("location.reload()"); pg.wait_for_timeout(1500)
+        assert pg.evaluate("TH.cards.trend.w==3&&TH.order[0]=='trend'"), "刷新后每预设布局没保留"
+        pg.evaluate("S.tab='overview';showTab();applyView('all');for(const k in TH.cards){TH.cards[k].w=3;TH.cards[k].h='s'}themeChanged(true)"); pg.wait_for_timeout(1500)
+        hs=pg.evaluate("[...document.querySelectorAll('.gcard:not(.gone)')].map(e=>Math.round(e.getBoundingClientRect().height))")
+        assert len(set(hs))<=3 and min(hs)>=270, ("1/4宽时卡片高度不统一", hs)
+        os.makedirs(ROOT+"/tests/shots",exist_ok=True); pg.screenshot(path=ROOT+"/tests/shots/quarter.png",full_page=True)
+        pg.evaluate("S.set='quota';openSettings('quota')"); pg.wait_for_timeout(1200)
+        qt=pg.inner_text("#qBody") if pg.query_selector("#qBody") else pg.inner_text("body")
+        assert "OverflowError" not in qt
+        print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
     p.terminate()

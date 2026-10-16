@@ -85,4 +85,4 @@ def check_quota_forecast(con, cfg, now):
             continue
         if alerts._allow("quota_forecast", q["airport"] + q["start"], r["cool_min"] * 30, now):
             alerts.fire(con, cfg, "quota_forecast", "warn", q["airport"], f"套餐预计超额:{q['airport']}",
-                        f"本周期已用 {q['pct']}%,按近 7 天速度预计 {q['exhaust']} 用完,早于重置日 {q['end']}。可以适当减少大流量下载,或换别的机场分担。", now)
+                        f"本周期已用 {q['pct']}%,按近 7 天速度预计 {q['exhaust']} 用完,早于{'重置日' if q['type'] == 'monthly' else '到期日'} {q['end']}。可以适当减少大流量下载,或换别的机场分担。", now)
