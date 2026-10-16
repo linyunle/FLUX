@@ -394,6 +394,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div>
   <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span></h2><div class="scroll" id="nsBody"></div></div>
   <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">按面板统计的流量估算,与机场后台可能有出入</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
+  <div class="card" id="provCard" style="display:none"><h2>机场官方数据 <span class="sub">来自 nikki 的订阅信息(机场后台的已用/总量/到期),只读</span></h2><div id="provBody"></div></div>
   <div id="nodeListView"><div class="card">
     <h2><span class="seg" id="nview" role="group" aria-label="分组"></span><span class="sub" id="nvHint"></span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"><button id="apRules">归类规则</button></h2>
     <div class="sub" id="apNote" style="margin-bottom:6px"></div>
@@ -744,10 +745,10 @@ function drawTrend(){
   const stk=S.tDim!=="ud";$("#trendCard").classList.toggle("stk",stk);
   if(stk){if(!S.stk||S.tab!=="overview")return;
     $("#chart2").style.display="none";$("#chartTable").style.display="none";$("#cl2").style.display="none";$("#chart").style.display="";$("#cl1").style.display="";
-    paintStack(S.stk,$("#chart"),$("#stLeg"),$("#cl1"),HGT.trend[TH.cards.trend.h]||220);return}
+    paintStack(S.stk,$("#chart"),$("#stLeg"),$("#cl1"),fitH($("#chart"),HGT.trend[TH.cards.trend.h]||220));return}
   $("#stLeg").innerHTML="";
   const t=S.tr;if(!t||S.tab!=="overview")return;
-  const c=trCols(),tb=$("#tblToggle"),split=!!TH.trend.split,H=HGT.trend[TH.cards.trend.h]||220;
+  const c=trCols(),tb=$("#tblToggle"),split=!!TH.trend.split,H=split||S.table?(HGT.trend[TH.cards.trend.h]||220):fitH($("#chart"),HGT.trend[TH.cards.trend.h]||220);
   tb.setAttribute("aria-pressed",S.table);
   $("#chart").style.display=S.table?"none":"";$("#chart2").style.display=S.table||!split?"none":"";
   $("#cl1").style.display=$("#cl2").style.display=S.table||!split?"none":"";
@@ -1038,6 +1039,9 @@ setInterval(()=>{if(document.hidden||!WAVES.size)return;const ph=Date.now()/450;
 function smooth(p){if(p.length<2)return"";let d=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
   for(let i=1;i<p.length;i++){const [x0,y0]=p[i-1],[x1,y1]=p[i],mx=(x0+x1)/2;d+=` C${mx.toFixed(1)} ${y0.toFixed(1)} ${mx.toFixed(1)} ${y1.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`}return d}
 /* o: {fmtY, max(固定上限,内存用), tip(样本)->html};样式取 TH.viz.style:line=曲线 / wave=水波 */
+/* 图表高度撑满卡片剩余空间(卡片高度由「高度」档位和同行的卡片决定);手机上卡片不定高,用基础高度 */
+function fitH(box,base){if(!box||matchMedia("(max-width:820px)").matches){if(box){box.style.flex="";box.style.minHeight=""}return base}
+  box.innerHTML="";box.style.flex="1 1 0";box.style.minHeight=base+"px";return Math.max(base,Math.floor(box.clientHeight))}
 function drawRt(box,samples,H,o={}){
   const W=Math.max(200,box.clientWidth||700),L=W<300?50:56,R=8,T=8,B=20,pw=W-L-R,ph=H-T-B,fy=o.fmtY||(W<300?fmt:rate);
   const now=Date.now()/1000,t0=now-120,wave=TH.viz.style==="wave",gid="wg"+(box.id||"x");
@@ -1105,12 +1109,12 @@ function drawSide(j){
 function fillRt(id,d,series,sub){
   const el=$("#"+id+"Card");if(!el||el.offsetParent===null)return;
   $("#"+id+"Down").textContent=rate(d.down);$("#"+id+"Up").textContent=rate(d.up);$("#"+id+"Sub").textContent=sub;
-  drawRt($("#"+id+"Chart"),series,HGT.rt[TH.cards[id].h]||130)}
+  drawRt($("#"+id+"Chart"),series,fitH($("#"+id+"Chart"),HGT.rt[TH.cards[id].h]||130))}
 function paintMem(j){const el=$("#memCard");if(!el||el.offsetParent===null)return;const m=j.mem||{total:0,used:0,mihomo:0,series:[]};
   $("#memUsed").textContent=m.total?fmt(m.used):"–";$("#memMi").textContent=m.mihomo?fmt(m.mihomo):"–";
   $("#memSub").textContent=m.total?`共 ${fmt(m.total)} · 已用 ${Math.round(m.used/m.total*100)}%`:"读不到系统内存";
   $("#memNote").textContent=j.ok?"":"暂时读不到(会自动重试)";
-  drawRt($("#memChart"),m.series,HGT.rt[TH.cards.mem.h]||130,{fmtY:fmt,max:m.total,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>系统 ${fmt(b[2])}<br>nikki ${fmt(b[1])}`})}
+  drawRt($("#memChart"),m.series,fitH($("#memChart"),HGT.rt[TH.cards.mem.h]||130),{fmtY:fmt,max:m.total,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>系统 ${fmt(b[2])}<br>nikki ${fmt(b[1])}`})}
 function paintRt(j){
   const D=j.direct,P=j.proxy,msg=j.ok?"":"实时速度暂时读不到(会自动重试)";
   document.querySelectorAll("[data-vz]").forEach(b=>b.textContent=TH.viz.style==="wave"?"曲线":"水波");
@@ -1134,7 +1138,7 @@ function paintSys(j){
     +st(dk&&dk.pct!=null?dk.pct+"%":"–","磁盘",dk?`剩余 ${fmt(dk.free)}`:"",dk?sysCls(dk.pct,85,95):"")
     +st(dur(j.uptime||0),"已运行","&nbsp;"));
   $("#sysNote").textContent=j.cpu==null?"刚启动,等几秒":"";
-  drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),Math.max(70,(HGT.rt[TH.cards.sys.h]||150)-60),{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
+  drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),fitH($("#sysChart"),Math.max(70,(HGT.rt[TH.cards.sys.h]||150)-60)),{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
   const rows=(j.ifaces||[]).slice(0,4);let h=rows.map(r=>`<tr><td class="k">${esc(r.name)}</td><td class="n">↓ ${rate(r.down)}</td><td class="n hide-s">↑ ${rate(r.up)}</td><td class="n hide-s ${r.drops||r.errs?"warn":"sub"}">${r.drops||r.errs?`丢包 ${r.drops} · 错误 ${r.errs}`:"无丢包"}</td></tr>`).join("");
   for(let i=rows.length;i<4;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
   setH($("#sysIf"),`<table><tbody>${h}</tbody></table>`)}
@@ -1637,6 +1641,13 @@ function loadRuleHealth(){load("rh","/api/rulehealth",{days:30},j=>{
 
 /* 机场套餐 */
 const fmtGB=g=>g>=1024&&g%1024===0?(g/1024)+" TB":(+g.toFixed(2))+" GB";
+function loadProv(){load("prov","/api/providers",{},j=>{
+  const c=$("#provCard"),rows=(j.rows||[]).filter(r=>r.has_info);if(!j.ok||!rows.length){c.style.display="none";return}c.style.display="";
+  $("#provBody").innerHTML=rows.map(r=>{const pct=r.total?Math.round(r.used*1000/r.total)/10:0,col=pct>=95?"var(--bad)":pct>=80?"var(--warn)":"var(--accent)",ex=r.expire_days;
+    const exTag=r.expire?`<span class="lv ${ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${new Date(r.expire*1000).toLocaleDateString("sv")}</span>`:`<span class="lv note">无到期日</span>`;
+    const m=r.cmp,cm=m.rows.length?`近 ${m.rows.length} 天:机场官方 ${fmt(m.official)} · 面板 ${fmt(m.flux)} · 面板是官方的 <b>${m.ratio}%</b>${m.ratio>=90&&m.ratio<=110?"(基本一致)":m.ratio<90?"(面板偏少:可能有流量没经过 nikki,或 nikki 重启时丢了几秒)":"(面板偏多:可能含本机之外的计费口径差异)"}`:"对比数据还在积累(需要连续两天的官方读数,明天起就有)";
+    return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.name)}</b>${r.airport!==r.name?`<span class="sub">面板里归为「${esc(r.airport)}」</span>`:""}<span>${fmt(r.used)} / ${r.total?fmt(r.total):"不限"}${r.total?" · "+pct+"%":""}</span>${exTag}</div>
+    ${r.total?barR(pct,col):""}<div class="sub">${cm} · ${r.nodes} 个节点${r.updated?" · nikki 更新于 "+esc(r.updated.slice(0,16).replace("T"," ")):""}</div></div>`}).join("")})}
 function loadQuota(){load("quota","/api/quota",{},j=>{
   const c=$("#quotaCard");if(!j.rows.length){c.style.display="none";return}c.style.display="";
   $("#quotaBody").innerHTML=j.rows.map(q=>{const col=q.pct>=95?"var(--bad)":q.pct>=80?"var(--warn)":"var(--accent)";
@@ -1708,7 +1719,7 @@ async function status(){try{const s=await get("/api/status");
 function refresh(){
   if(S.tab==="overview")loadTiles();
   if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(TH.views.dev==="period")loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
-  else if(S.tab==="nodes"){loadNodes();loadQuota()}
+  else if(S.tab==="nodes"){loadNodes();loadQuota();loadProv()}
   else if(S.tab==="alerts")loadAlerts();
   else if(S.tab==="security")loadSecurity();
   else if(S.tab==="devices")loadDevicesTab();

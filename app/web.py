@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -905,6 +905,7 @@ q_agh_cfg = _q(lambda con, p: agh.public_cfg(con))
 q_rulehealth = _q(lambda con, p: insight.rule_health(con, _days_p(p, 30)))
 q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7)))
 q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, 14)))
+q_providers = _q(lambda con, p: providers.status(con))
 q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
 q_report_cfg = _q(lambda con, p: insight.report_cfg(con))
@@ -1004,7 +1005,7 @@ q_sys = lambda p: (200, sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", 
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST

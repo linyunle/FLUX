@@ -195,6 +195,23 @@ def test_advisor():
     assert fired == [("geo_new", "BR")], fired
 
 
+def test_providers_compare():
+    import sqlite3, time
+    from app import providers, db, insight
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    D = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+    insight._kv_set(con, "prov_hist", {"X": {D(3): 100, D(2): 300, D(1): 700, D(0): 50}})   # 最后一天读数变小 = 重置
+    for n, v in ((2, 180), (1, 400), (0, 9)):
+        con.execute("INSERT INTO traffic(day,node,up,down) VALUES(?,?,?,?)", (D(n), "n1", v, 0)) if False else None
+    cols = [r[1] for r in con.execute("PRAGMA table_info(traffic)")]
+    for n, v in ((2, 180), (1, 400)):
+        row = {c: 0 for c in cols}; row.update(day=D(n), node="n1", up=v)
+        con.execute(f"INSERT INTO traffic({','.join(cols)}) VALUES({','.join('?' * len(cols))})", [row[c] if c in row else "" if c in ("conn", "src", "host") else 0 for c in cols])
+    c = providers.compare(con, "X", ["n1"])
+    assert [r["official"] for r in c["rows"]] == [200, 400], c   # 重置那天被跳过
+    assert c["flux"] == 580 and c["ratio"] == 96.7, c
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

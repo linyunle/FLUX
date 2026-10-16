@@ -266,6 +266,9 @@ try:
     qs = r["rows"][0]; ok(c == 200 and qs["airport"] == "测试机场" and qs["used"] > 0 and qs["pct"] >= 80 and qs["exhaust"], f"套餐:用量 {qs}")
     qa = wait_kind("quota", 20); ok(qa and qa[0]["key"] == "测试机场", f"套餐:告警 {qa[:1]}")
     ok(post("/api/quota", {"quota": {"x": {"gb": "abc"}}})[0] == 400, "套餐:非法输入被拒")
+    pv = get("/api/providers"); r0 = (pv.get("rows") or [{}])[0]
+    ok(pv["ok"] and r0.get("name") == "MyAir" and r0["used"] == 6 << 30 and r0["total"] == 100 << 30 and r0["expire"] == 1893456000 and r0["nodes"] == 2, f"机场官方数据:读到订阅信息 {r0}")
+    ok("default" not in [x["name"] for x in pv["rows"]], "机场官方数据:跳过 default")
     rp = get("/api/report"); ok(rp["up"] + rp["down"] > 0 and rp["devices"] and rp["kinds"]["proxy"] > 0 and rp["quota"], "周报:数据")
     ok(post("/api/report/config", {"on": True, "weekday": 2, "hour": 8})[1] == {"on": True, "weekday": 2, "hour": 8}, "周报:计划保存")
     post("/api/report/send", {}); rr = wait_kind("report", 10); ok(rr and "总流量" in rr[0]["detail"], f"周报:推送 {rr[:1]}")

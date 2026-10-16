@@ -107,6 +107,11 @@ try:
         pg.evaluate("S.set='quota';openSettings('quota')"); pg.wait_for_timeout(1200)
         qt=pg.inner_text("#qBody") if pg.query_selector("#qBody") else pg.inner_text("body")
         assert "OverflowError" not in qt
+        # 图表撑满卡片:内存卡的图表底部离卡片底部不超过 40px
+        gap=pg.evaluate("(()=>{const c=document.querySelector('#memCard').getBoundingClientRect(),b=document.querySelector('#memChart').getBoundingClientRect();return c.bottom-b.bottom})()")
+        assert gap<45, ("内存图表没有撑满卡片", gap)
+        pg.evaluate("S.tab='nodes';showTab();refresh()"); pg.wait_for_timeout(2500)
+        assert "MyAir" in pg.inner_text("#provBody"), "机场官方数据卡没有显示"
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
