@@ -42,6 +42,8 @@ try:
         pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,mode:'dark',dens:'compact',view:'sec',hide:['apps','qoe'],vh:{sec:['apps','qoe']},order:['trend','mem','rt'],cards:{apps:{w:6,h:'m',rows:10}}}))")
         pg.reload(); pg.wait_for_timeout(2500)
         assert pg.evaluate("[TH.mode,TH.dens,TH.view,TH.hide.join(),TH.vh.sec.join(),(TH.order.indexOf('trend')<TH.order.indexOf('mem')&&TH.order.indexOf('mem')<TH.order.indexOf('rt')),TH.cards.apps.rows,TH.cards.apps.w].join('|')")=="dark|compact|sec|apps,qoe|apps,qoe|true|10|6", "旧外观设置升级后没有原样保留"
+        pg.evaluate("S.tab='nodes';S.nd='';showTab();refresh()"); pg.wait_for_timeout(2500)
+        assert pg.inner_text("#nsBody").strip(), "节点评分卡片为空"
         # 设备分组、白名单设置、时间线
         pg.evaluate("S.tab='devices';S.dd='';showTab();refresh()"); pg.wait_for_timeout(2500)
         assert pg.locator("#devTbl select.grp").count()>=1, "设备页没有分组选择"

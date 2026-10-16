@@ -293,6 +293,8 @@ try:
     ok(any(x["kind"] == "audit" for x in get("/api/alerts?limit=100")["rows"]), "时间线:设置变更被记录")
     ok(get("/api/backup")["dev_groups"].get("aa:bb:cc:dd:ee:01") == "IoT", "备份:包含设备分组")
     post("/api/groups/set", {"dev": "aa:bb:cc:dd:ee:01", "group": ""}); post("/api/groups/policy", {"group": "IoT", "on": False, "allow": ""})
+    ok(isinstance(get("/api/nodescore")["rows"], list), "节点评分接口")
+    ok(all(k in get("/api/alerts/config")["rules"] for k in ("node_degrade", "geo_new", "quota_forecast")), "告警:节点变差/新国家/套餐预计超额规则存在")
     ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
     # ---- v0.11.1
     sc = get("/api/secsum?force=1"); keys = {t["key"] for t in sc["tiles"]}

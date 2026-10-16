@@ -32,6 +32,9 @@ KINDS = {
     "sys_mem": "路由器内存紧张",
     "report": "周报",
     "group_policy": "分组白名单",
+    "node_degrade": "节点变差",
+    "geo_new": "新目的地国家",
+    "quota_forecast": "套餐预计超额",
     "audit": "设置变更",
     "boot": "面板启动",
     "router_reboot": "路由器重启",
@@ -48,6 +51,9 @@ DEFAULT_RULES = {
     "api_down": {"on": True, "after_sec": 120, "cool_min": 30},
     "quota": {"on": True, "pct": 80, "cool_min": 1440},
     "group_policy": {"on": True, "cool_min": 1440},
+    "node_degrade": {"on": True, "drop": 20, "cool_min": 1440},
+    "geo_new": {"on": True, "min_mb": 50, "cool_min": 1440},
+    "quota_forecast": {"on": True, "cool_min": 1440},
     "sys_conntrack": {"on": True, "pct": 85, "cool_min": 60},
     "sys_temp": {"on": True, "c": 85, "cool_min": 60},
     "sys_disk": {"on": True, "pct": 90, "cool_min": 1440},
@@ -55,7 +61,7 @@ DEFAULT_RULES = {
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
@@ -448,13 +454,28 @@ def check_sys(con, cfg, now):
              f"已用 {m['used'] // 1048576} MB / 共 {m['total'] // 1048576} MB(阈值 {r['sys_mem']['pct']:g}%,已扣除缓存)。内存持续偏高可能是某个服务泄漏,可到「内存使用」卡片看趋势。", now)
 
 
+def check_degrade(con, cfg, now):
+    from . import advisor
+    advisor.check_degrade(con, cfg, now)
+
+
+def check_geo_new(con, cfg, now):
+    from . import advisor
+    advisor.check_geo_new(con, cfg, now)
+
+
+def check_forecast(con, cfg, now):
+    from . import advisor
+    advisor.check_quota_forecast(con, cfg, now)
+
+
 def check_quota(con, cfg, now):
     from . import insight
     insight.check_quota(con, cfg, now)
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast)]
 
 
 def evaluate(con, now=None):

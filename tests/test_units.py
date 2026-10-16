@@ -165,6 +165,36 @@ def test_groups():
     assert groups._norm_domains("Apple.com\n*.a.org, b.net\n bad/x") == ["apple.com", "a.org", "b.net"]
 
 
+def test_advisor():
+    import sqlite3, time
+    from app import advisor, alerts, db
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    now = time.time(); H = lambda back: time.strftime("%Y-%m-%d %H", time.localtime(now - back * 3600))
+    for back in range(30, 24 * 6):   # 过去一周:两个节点都正常(100ms,0 失败)
+        for node in ("A", "B"):
+            con.execute("INSERT INTO qoe VALUES(?,?,?,?,?,?)", (H(back), node, 5, 500.0, 50000.0, 0))
+    for back in range(0, 20):        # 最近 24h:B 变差(600ms + 一半超时)
+        con.execute("INSERT INTO qoe VALUES(?,?,?,?,?,?)", (H(back), "A", 5, 500.0, 50000.0, 0))
+        con.execute("INSERT INTO qoe VALUES(?,?,?,?,?,?)", (H(back), "B", 3, 1800.0, 1100000.0, 3))
+        con.execute("INSERT INTO hourly VALUES(?,?,?,?,?)", (H(back), "c1", "B", 1 << 20, 1 << 22))
+    rows = {r["node"]: r for r in advisor.node_scores(con, now)}
+    assert rows["A"]["score"] >= 85 and rows["B"]["score"] < 50 and rows["B"]["delta"] < -30, rows
+    assert rows["B"]["advice"] and rows["B"]["level"] == "bad"
+    fired = []
+    alerts.fire = lambda con, cfg, kind, level, key, title, detail, now=None: fired.append((kind, key))
+    alerts._allow = lambda *a, **k: True
+    cfg = {"rules": {"node_degrade": {"drop": 20, "cool_min": 1}, "geo_new": {"min_mb": 1, "cool_min": 1}}}
+    advisor.check_degrade(con, cfg, now)
+    assert fired == [("node_degrade", "B")], fired
+    fired.clear()
+    for d in range(1, 8):
+        con.execute("INSERT INTO geo VALUES(?,?,?,?,?,?)", (time.strftime("%Y-%m-%d", time.localtime(now - d * 86400)), "US", "x", "direct", 1 << 20, 1 << 20))
+    con.execute("INSERT INTO geo VALUES(?,?,?,?,?,?)", (time.strftime("%Y-%m-%d", time.localtime(now)), "US", "x", "direct", 1, 1))
+    con.execute("INSERT INTO geo VALUES(?,?,?,?,?,?)", (time.strftime("%Y-%m-%d", time.localtime(now)), "BR", "y", "direct", 3 << 20, 3 << 20))
+    advisor.check_geo_new(con, cfg, now)
+    assert fired == [("geo_new", "BR")], fired
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

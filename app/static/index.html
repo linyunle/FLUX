@@ -392,6 +392,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ndRules"></div></div>
     </div>
   </div>
+  <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span></h2><div class="scroll" id="nsBody"></div></div>
   <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">按面板统计的流量估算,与机场后台可能有出入</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
   <div id="nodeListView"><div class="card">
     <h2><span class="seg" id="nview" role="group" aria-label="分组"></span><span class="sub" id="nvHint"></span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"><button id="apRules">归类规则</button></h2>
@@ -1341,7 +1342,11 @@ function loadAirports(){load("airports","/api/airports",base({node:"",airport:""
   rowsTable($("#apTbl"),j,[
     {h:"机场",k:1,f:r=>`${esc(r.key)}<div class="sub">${r.nodes} 个节点${r.top.length?" · 最多 "+esc(r.top[0].node):""}</div>`},
     {h:"趋势",s:1,f:r=>spark(r.series)},cDown,cUp,cTotal],r=>{S.airport=S.airport===r.key?"":r.key;renderChrome();syncAp();refresh()},S.airport)})}
-function loadNodes(){$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();
+function loadNodeScore(){load("nscore","/api/nodescore",{},j=>{
+  const c=$("#nsCard"),rows=j.rows;c.style.display=S.nd?"none":"";
+  const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
+  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th><th class="n">评分</th><th class="n hide-s">变化</th><th class="n">延迟</th><th class="n hide-s">超时率</th><th class="hide-s">建议</th></tr></thead><tbody>${rows.slice(0,15).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>15?`<div class="sub" style="margin-top:6px">只显示最差的 15 个,共 ${rows.length} 个</div>`:""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')})}
+function loadNodes(){loadNodeScore();$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();
   seg($("#nview"),[["airport","按机场"],["node","按节点"]],S.nview,k=>{S.nview=k;loadNodes()});
   const ap=S.nview==="airport";$("#apTbl").style.display=$("#apNote").style.display=ap?"":"none";$("#nodeTbl").style.display=$("#nodeQ").style.display=ap?"none":"";
   if(ap)return loadAirports();
@@ -1424,6 +1429,9 @@ const RULE_META=[
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
  ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
+ ["node_degrade","节点变差","正在使用的节点,近 24 小时评分比过去一周平时低了阈值以上,且评分低于 70(评分见「机场节点」页)",[["drop","下降","分"],["cool_min","同一节点间隔","分钟"]]],
+ ["geo_new","新目的地国家","今天出现了过去 30 天没去过的国家,且流量达到下限(需要先有 5 天以上的历史;只统计能看到真实目的地的流量)",[["min_mb","下限","MB"],["cool_min","同一国家间隔","分钟"]]],
+ ["quota_forecast","套餐预计超额","按近 7 天速度,预计在重置日之前就用完机场套餐(每个周期只提醒一次)",[]],
  ["group_policy","分组白名单","给设备分组设了白名单后,组内设备访问名单之外的域名时告警(在「设置 → 设备分组」里设置名单)",[["cool_min","同一设备同一域名间隔","分钟"]]],
  ["sys_conntrack","连接跟踪占用高","路由器的连接跟踪表快满了(满了新连接会被丢弃,网页打不开)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["sys_temp","路由器温度高","最高温度传感器读数达到阈值(没有传感器的路由器不会触发)",[["c","阈值","℃"],["cool_min","间隔","分钟"]]],
