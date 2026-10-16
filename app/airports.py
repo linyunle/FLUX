@@ -15,6 +15,7 @@ SPECIAL = {DIRECT, REJECT, UNKNOWN}
 _lock = threading.Lock()
 _rules = []  # [(关键字, 机场名)]
 _text = ""
+_prov = {}   # 节点名 -> 订阅(provider)名,由 providers 模块从 nikki 读来;只在前面几步都没认出机场时才用
 
 
 def parse_rules(text):
@@ -43,6 +44,12 @@ def set_rules(text):
     with _lock:
         _rules, _text = rules, "\n".join(f"{k}={n}" for k, n in rules)
     return len(rules)
+
+
+def set_providers(m):
+    global _prov
+    with _lock:
+        _prov = dict(m)
 
 
 def rules_text():
@@ -82,4 +89,5 @@ def of(node, kind="proxy"):
     m = SEP.search(node)
     if m and m.start() > 0:
         return re.sub(r"\s+", " ", node[:m.start()]).strip() or NONE
-    return NONE
+    with _lock:
+        return _prov.get(node) or NONE

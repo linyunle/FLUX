@@ -201,8 +201,6 @@ def test_providers_compare():
     con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
     D = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
     insight._kv_set(con, "prov_hist", {"X": {D(3): 100, D(2): 300, D(1): 700, D(0): 50}})   # 最后一天读数变小 = 重置
-    for n, v in ((2, 180), (1, 400), (0, 9)):
-        con.execute("INSERT INTO traffic(day,node,up,down) VALUES(?,?,?,?)", (D(n), "n1", v, 0)) if False else None
     cols = [r[1] for r in con.execute("PRAGMA table_info(traffic)")]
     for n, v in ((2, 180), (1, 400)):
         row = {c: 0 for c in cols}; row.update(day=D(n), node="n1", up=v)

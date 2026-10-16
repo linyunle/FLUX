@@ -263,8 +263,10 @@ try:
     ok(get("/api/heatmap?dev=aa:bb:cc:dd:ee:01")["max"] > 0, "热力图:按设备过滤")
     post("/api/airports/rules", {"text": "HK-=测试机场"})
     c, r = post("/api/quota", {"quota": {"测试机场": {"gb": 0.0001, "reset_day": 1}}})
-    qs = r["rows"][0]; ok(c == 200 and qs["airport"] == "测试机场" and qs["used"] > 0 and qs["pct"] >= 80 and qs["exhaust"], f"套餐:用量 {qs}")
+    qs = next(x for x in r["rows"] if x["airport"] == "测试机场"); ok(c == 200 and qs["airport"] == "测试机场" and qs["used"] > 0 and qs["pct"] >= 80 and qs["exhaust"], f"套餐:用量 {qs}")
     qa = wait_kind("quota", 20); ok(qa and qa[0]["key"] == "测试机场", f"套餐:告警 {qa[:1]}")
+    mo = next((x for x in get("/api/quota")["rows"] if x["airport"] == "MyAir"), {})
+    ok(mo.get("src") == "official" and mo.get("auto") and mo["used"] == 6 << 30 and mo["gb"] == 100 and mo["expire"] == "2030-01-01", f"套餐:官方数据自动加入 {mo}")
     ok(post("/api/quota", {"quota": {"x": {"gb": "abc"}}})[0] == 400, "套餐:非法输入被拒")
     pv = get("/api/providers"); r0 = (pv.get("rows") or [{}])[0]
     ok(pv["ok"] and r0.get("name") == "MyAir" and r0["used"] == 6 << 30 and r0["total"] == 100 << 30 and r0["expire"] == 1893456000 and r0["nodes"] == 2, f"机场官方数据:读到订阅信息 {r0}")

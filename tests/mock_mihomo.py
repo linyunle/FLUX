@@ -81,7 +81,7 @@ class API(BaseHTTPRequestHandler):
                 "default": {"type": "Proxy", "vehicleType": "Compatible", "proxies": []},
                 "MyAir": {"type": "Proxy", "vehicleType": "HTTP", "updatedAt": "2026-10-16T08:00:00+08:00",
                           "subscriptionInfo": {"Upload": 1 << 30, "Download": 5 << 30, "Total": 100 << 30, "Expire": 1893456000},
-                          "proxies": [{"name": "HK-01"}, {"name": "JP-01"}]}}})
+                          "proxies": [{"name": "XX-01"}, {"name": "XX-02"}]}}})
         if p == "/rules":
             ex = lambda n: {"disabled": False, "hitCount": n, "hitAt": "2026-10-13T10:00:00+08:00", "missCount": 3}
             return self._j(200, {"rules": [

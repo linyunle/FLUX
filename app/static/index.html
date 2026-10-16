@@ -393,7 +393,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     </div>
   </div>
   <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span></h2><div class="scroll" id="nsBody"></div></div>
-  <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">按面板统计的流量估算,与机场后台可能有出入</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
+  <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">已用/总量/到期优先取机场官方数据(来自 nikki);读不到官方数据的才按面板统计估算</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
   <div class="card" id="provCard" style="display:none"><h2>机场官方数据 <span class="sub">来自 nikki 的订阅信息(机场后台的已用/总量/到期),只读</span></h2><div id="provBody"></div></div>
   <div id="nodeListView"><div class="card">
     <h2><span class="seg" id="nview" role="group" aria-label="分组"></span><span class="sub" id="nvHint"></span><span class="sp"></span><input id="nodeQ" placeholder="搜索节点或机场" style="width:150px"><button id="apRules">归类规则</button></h2>
@@ -546,7 +546,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="msg" id="geoMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="geoDl" class="pri">下载 / 更新数据库</button></div></div>
       <div class="card sec" id="sec-quota"><h2>机场套餐</h2>
-  <div class="sub" style="margin-bottom:10px">每个机场选套餐类型:「每月重置」(填月流量和重置日)或「一次性总量」(填总量,可填起算日,不填就从有记录的第一天算)。「到期日」留空 = 永不过期;填了会在到期前 7 / 3 / 1 天提醒续费。流量单位可选 GB 或 TB(1 TB = 1024 GB)。面板按已统计的流量估算用量与预计用完时间,和机场后台可能有出入;用量到阈值会触发「套餐用量」告警。</div>
+  <div class="sub" style="margin-bottom:10px"><b>nikki 里读得到机场官方数据的(已用、总量、到期),会自动加进套餐用量,不用在这里填。</b>下面只在读不到官方数据、或想指定「每月重置日」让面板预测超额时才需要设置(总量填 0 = 用官方的数字)。每个机场选套餐类型:「每月重置」(填月流量和重置日)或「一次性总量」(填总量,可填起算日,不填就从有记录的第一天算)。「到期日」留空 = 永不过期;填了会在到期前 7 / 3 / 1 天提醒续费。流量单位可选 GB 或 TB(1 TB = 1024 GB)。面板按已统计的流量估算用量与预计用完时间,和机场后台可能有出入;用量到阈值会触发「套餐用量」告警。</div>
   <div id="quotaRows"></div>
   <div class="msg" id="quotaMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="quotaAdd">+ 添加机场</button><button id="quotaSave" class="pri">保存</button></div></div>
@@ -1644,7 +1644,7 @@ const fmtGB=g=>g>=1024&&g%1024===0?(g/1024)+" TB":(+g.toFixed(2))+" GB";
 function loadProv(){load("prov","/api/providers",{},j=>{
   const c=$("#provCard"),rows=(j.rows||[]).filter(r=>r.has_info);if(!j.ok||!rows.length){c.style.display="none";return}c.style.display="";
   $("#provBody").innerHTML=rows.map(r=>{const pct=r.total?Math.round(r.used*1000/r.total)/10:0,col=pct>=95?"var(--bad)":pct>=80?"var(--warn)":"var(--accent)",ex=r.expire_days;
-    const exTag=r.expire?`<span class="lv ${ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${new Date(r.expire*1000).toLocaleDateString("sv")}</span>`:`<span class="lv note">无到期日</span>`;
+    const exTag=r.expire?`<span class="lv ${ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${new Date(r.expire*1000).toLocaleDateString("sv")}</span>`:`<span class="lv note">永不过期</span>`;
     const m=r.cmp,cm=m.rows.length?`近 ${m.rows.length} 天:机场官方 ${fmt(m.official)} · 面板 ${fmt(m.flux)} · 面板是官方的 <b>${m.ratio}%</b>${m.ratio>=90&&m.ratio<=110?"(基本一致)":m.ratio<90?"(面板偏少:可能有流量没经过 nikki,或 nikki 重启时丢了几秒)":"(面板偏多:可能含本机之外的计费口径差异)"}`:"对比数据还在积累(需要连续两天的官方读数,明天起就有)";
     return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.name)}</b>${r.airport!==r.name?`<span class="sub">面板里归为「${esc(r.airport)}」</span>`:""}<span>${fmt(r.used)} / ${r.total?fmt(r.total):"不限"}${r.total?" · "+pct+"%":""}</span>${exTag}</div>
     ${r.total?barR(pct,col):""}<div class="sub">${cm} · ${r.nodes} 个节点${r.updated?" · nikki 更新于 "+esc(r.updated.slice(0,16).replace("T"," ")):""}</div></div>`}).join("")})}
@@ -1652,8 +1652,8 @@ function loadQuota(){load("quota","/api/quota",{},j=>{
   const c=$("#quotaCard");if(!j.rows.length){c.style.display="none";return}c.style.display="";
   $("#quotaBody").innerHTML=j.rows.map(q=>{const col=q.pct>=95?"var(--bad)":q.pct>=80?"var(--warn)":"var(--accent)";
     const once=q.type==="once",ex=q.expire_days;
-    const exTag=q.expire?`<span class="lv ${ex<0||ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${q.expire}</span>`:`<span class="lv note">${once?"永不过期":"无到期日"}</span>`;
-    const per=once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
+    const exTag=q.expire?`<span class="lv ${ex<0||ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${q.expire}</span>`:`<span class="lv note">${once||off?"永不过期":"无到期日"}</span>`;
+    const off=q.src==="official",per=off&&q.auto?`官方数据 · 周期以机场后台为准${q.type==="monthly"?"":""} · 面板统计到的 ${fmt(q.panel_used)}`:off?`${once?"一次性流量":"周期 "+q.start.slice(5)+" → "+q.end.slice(5)}(官方数据) · 面板统计到的 ${fmt(q.panel_used)}`:once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
     return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(q.airport)}</b><span>${fmt(q.used)} / ${fmtGB(q.gb)} · ${q.pct}%</span>${exTag}<span class="sub">${per} · 近 7 天日均 ${fmt(q.rate)}${q.exhaust?` · 预计 ${q.exhaust.slice(5)} 用完${q.over?" ⚠ 早于"+(once?"到期日":"重置日"):""}`:""}</span></div>${barR(q.pct,col)}${q.known?"":'<div class="sub">还没有节点归到这个机场(检查机场名是否和「机场归类」一致)</div>'}</div>`}).join("")})}
 $("#quotaGo").onclick=()=>openSettings("quota");
 

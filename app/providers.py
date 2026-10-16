@@ -21,7 +21,34 @@ def _kv_get(con, k, default=None):
     return g(con, k, default)
 
 
+_cache = {"t": 0, "v": []}
+NEVER = 4070908800   # 2099-01-01:机场用这种日期表示「永不过期」
+
+
 def fetch():
+    now = time.time()
+    if now - _cache["t"] < 15:
+        return _cache["v"]
+    v = _fetch()
+    _cache.update(t=now, v=v)
+    return v
+
+
+def official():
+    """{机场名: {used, total, expire}}:只含有订阅用量信息的;读不到就是空(出错也不抛)。"""
+    try:
+        ps = fetch()
+    except Exception:
+        return {}
+    out = {}
+    for p in ps:
+        if p["has_info"] and p["total"] > 0:
+            out.setdefault(airport_for(p), {"used": p["used"], "total": p["total"],
+                                            "expire": (p["expire"] if p["expire"] and p["expire"] < NEVER else 0)})
+    return out
+
+
+def _fetch():
     """返回 [{name, vehicle, used, total, expire, updated, nodes:[...] }];没有订阅型 provider 时是空列表。"""
     j = api_call("/providers/proxies") or {}
     out = []
@@ -35,6 +62,12 @@ def fetch():
         out.append({"name": name, "vehicle": p.get("vehicleType") or "", "used": used, "total": si.get("Total") or 0,
                     "expire": si.get("Expire") or 0, "updated": p.get("updatedAt") or "",
                     "nodes": [x.get("name") for x in (p.get("proxies") or []) if x.get("name")], "has_info": bool(si)})
+    m = {}
+    for p in out:
+        for n in p["nodes"]:
+            m.setdefault(n, p["name"])
+    from . import airports
+    airports.set_providers(m)
     return out
 
 
@@ -98,6 +131,8 @@ def status(con):
         ap = airport_for(p)
         c = compare(con, p["name"], [n for n in _web().all_nodes() if _web().airport_of(n) == ap])
         exp_days = None
+        if p["expire"] and p["expire"] >= NEVER:
+            p = dict(p, expire=0)
         if p["expire"]:
             exp_days = int((p["expire"] - time.time()) // 86400)
         out.append({"name": p["name"], "airport": ap, "used": p["used"], "total": p["total"], "expire": p["expire"] or None,

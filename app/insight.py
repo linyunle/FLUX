@@ -167,7 +167,7 @@ def quota_cfg(con):
     d = _kv_get(con, "quota", {}) or {}
     out = {}
     for ap, v in d.items():
-        if isinstance(v, dict) and v.get("gb"):
+        if isinstance(v, dict):
             try:
                 out[str(ap)[:40]] = {"type": "once" if v.get("type") == "once" else "monthly", "gb": float(v["gb"]),
                                      "reset_day": int(v.get("reset_day") or 1), "start": str(v.get("start") or ""), "expire": str(v.get("expire") or "")}
@@ -187,8 +187,7 @@ def save_quota(con, body):
             rd = int(v.get("reset_day") or 1)
         except (TypeError, ValueError):
             raise ValueError(f"「{name}」的流量或重置日不是数字")
-        if gb <= 0:
-            continue
+        gb = max(0.0, gb)   # 0 = 总量用机场官方的数字
         t = "once" if v.get("type") == "once" else "monthly"
         out[name] = {"type": t, "gb": min(gb, 1e8), "reset_day": max(1, min(31, rd)),
                      "start": _date_or_empty(v.get("start"), f"「{name}」的起算日") if t == "once" else "",
@@ -219,7 +218,13 @@ def quota_status(con, today=None):
     t = today or datetime.date.today()
     nodes = w.all_nodes()
     out = []
+    from . import providers
+    off = providers.official()
+    for ap, o in off.items():   # 机场官方有数据但你没设置套餐的,自动加上(每月类型,周期以机场为准)
+        if ap not in cfg:
+            cfg[ap] = {"type": "monthly", "gb": 0.0, "reset_day": 1, "start": "", "expire": "", "auto": True}
     for ap, c in sorted(cfg.items()):
+        o = off.get(ap)
         ns = [n for n in nodes if w.airport_of(n) == ap]
         once = c["type"] == "once"
         exp = datetime.date.fromisoformat(c["expire"]) if c["expire"] else None
@@ -245,7 +250,16 @@ def quota_status(con, today=None):
             rate = con.execute(f"SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND node IN ({ph})", [ws.isoformat()] + ns).fetchone()[0] / n
         elif once:
             start = datetime.date.fromisoformat(c["start"]) if c["start"] else t
-        limit = c["gb"] * 1024 ** 3
+        panel_used = used
+        if o:   # 机场官方的已用/总量/到期优先;面板自己的统计留作对比
+            used = o["used"]
+            if not c["expire"] and o["expire"]:
+                exp = datetime.date.fromtimestamp(o["expire"])
+                if once:
+                    end = exp
+        limit = (o["total"] if o else c["gb"] * 1024 ** 3)
+        if limit <= 0:
+            continue
         left = max(0.0, limit - used)
         exhaust = None
         if left <= 0:
@@ -261,8 +275,10 @@ def quota_status(con, today=None):
         out.append({"airport": ap, "type": c["type"], "gb": c["gb"], "reset_day": c["reset_day"], "used": used,
                     "pct": round(used * 100 / limit, 1) if limit else 0,
                     "start": start.isoformat() if start else "", "end": end.isoformat() if end else "",
-                    "days_left": (end - t).days if end else None, "expire": c["expire"], "expire_days": (exp - t).days if exp else None,
-                    "rate": round(rate), "exhaust": exhaust, "over": over, "known": bool(ns)})
+                    "days_left": (end - t).days if end else None, "expire": exp.isoformat() if exp else "", "expire_days": (exp - t).days if exp else None,
+                    "rate": round(rate), "exhaust": exhaust, "over": over, "known": bool(ns) or bool(o),
+                    "src": "official" if o else "panel", "panel_used": panel_used, "auto": bool(c.get("auto")),
+                    "gb": round(limit / 1024 ** 3, 2) if o else c["gb"]})
     return out
 
 
