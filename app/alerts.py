@@ -13,7 +13,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from . import collector, config, db, devices, netstat, realtime, sysinfo
+from . import collector, config, db, devices, groups, netstat, realtime, sysinfo
 from .util import is_mac, log, stop
 
 KINDS = {
@@ -31,8 +31,12 @@ KINDS = {
     "sys_disk": "磁盘空间不足",
     "sys_mem": "路由器内存紧张",
     "report": "周报",
+    "group_policy": "分组白名单",
+    "audit": "设置变更",
+    "boot": "面板启动",
+    "router_reboot": "路由器重启",
 }
-LEVELS = ("bad", "warn", "info", "ok")
+LEVELS = ("bad", "warn", "info", "ok", "note")
 
 # 规则默认值:on 是否启用,其余是阈值;cool_min 同一对象两次告警之间至少隔多少分钟
 DEFAULT_RULES = {
@@ -43,6 +47,7 @@ DEFAULT_RULES = {
     "conn_many": {"on": True, "count": 500, "cool_min": 60},
     "api_down": {"on": True, "after_sec": 120, "cool_min": 30},
     "quota": {"on": True, "pct": 80, "cool_min": 1440},
+    "group_policy": {"on": True, "cool_min": 1440},
     "sys_conntrack": {"on": True, "pct": 85, "cool_min": 60},
     "sys_temp": {"on": True, "c": 85, "cool_min": 60},
     "sys_disk": {"on": True, "pct": 90, "cool_min": 1440},
@@ -264,6 +269,14 @@ def fire(con, cfg, kind, level, key, title, detail, now=None):
     log("告警", kind, title)
 
 
+def note(con, kind, key, title, detail="", level="note", now=None):
+    """只记录到时间线,不推送、不算未读。"""
+    with con:
+        con.execute("INSERT INTO alerts(ts,kind,level,key,title,detail,sent) VALUES(?,?,?,?,?,?,?)",
+                    (int(now or time.time()), kind, level, key, title, detail, "仅记录"))
+        con.execute("DELETE FROM alerts WHERE id NOT IN (SELECT id FROM alerts ORDER BY id DESC LIMIT 2000)")
+
+
 def _dev_names(con):
     return devices.ips_by_dev(con), devices.stored_names(con)
 
@@ -411,6 +424,11 @@ def check_api(con, cfg, now):
 
 def check_sys(con, cfg, now):
     s = sysinfo.STATE
+    up = s.get("uptime") or 0
+    last = _state.get("uptime")
+    _state["uptime"] = up
+    if last and up and up + 30 < last:
+        note(con, "router_reboot", "reboot", "路由器重启过", f"运行时间从 {last // 3600} 小时回到了 {up // 60} 分钟,说明路由器刚重启(或断电)过。", level="warn", now=now - up)
     r = cfg["rules"]
     ct = s.get("ct")
     if r["sys_conntrack"]["on"] and ct and ct.get("pct") is not None and ct["pct"] >= r["sys_conntrack"]["pct"] and _allow("sys_conntrack", "ct", r["sys_conntrack"]["cool_min"], now):
@@ -436,7 +454,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check)]
 
 
 def evaluate(con, now=None):
@@ -461,6 +479,10 @@ def evaluate(con, now=None):
 
 def run():
     con = db.open_db()
+    try:
+        note(con, "boot", "boot", f"面板启动 {config.VERSION}", "容器重启或更新后会记一条;配合下面的「路由器重启」可以区分是面板重启还是路由器重启。")
+    except Exception:
+        pass
     stop.wait(5)
     while not stop.is_set():
         try:

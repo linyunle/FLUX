@@ -157,6 +157,14 @@ def test_leak_lists():
     assert insight._in_list("r1.googlevideo.com", insight.FOREIGN_SUFFIX)
 
 
+def test_groups():
+    from app import groups
+    assert groups.base_domain("a.b.apple.com") == "apple.com" and groups.base_domain("x.bbc.co.uk") == "bbc.co.uk"
+    assert groups.allowed("a.apple.com", ["apple.com"]) and groups.allowed("apple.com", ["apple.com"])
+    assert not groups.allowed("notapple.com", ["apple.com"])
+    assert groups._norm_domains("Apple.com\n*.a.org, b.net\n bad/x") == ["apple.com", "a.org", "b.net"]
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

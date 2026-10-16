@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, insight
+from . import agh, airports, alerts, appsig, config, devices, groups, insight
 
 MAX_THEME = 64 * 1024
 
@@ -62,6 +62,8 @@ def export(con, secrets=False):
     out["airport_rules"] = airports.rules_text()
     out["app_rules"] = appsig.rules_text()
     out["devices"] = devices.stored_names(con)
+    out["dev_groups"] = groups.dev_groups(con)
+    out["group_policy"] = groups.policy(con)
     return out
 
 
@@ -110,4 +112,15 @@ def restore(con, d):
             for k, v in list(d["devices"].items())[:2000]:
                 devices.rename(con, str(k), str(v))
         step("设备名", g)
+    if isinstance(d.get("dev_groups"), dict):
+        def h():
+            for k, v in list(d["dev_groups"].items())[:2000]:
+                groups.set_group(con, str(k), str(v))
+        step("设备分组", h)
+    if isinstance(d.get("group_policy"), dict):
+        def i():
+            for g, v in list(d["group_policy"].items())[:50]:
+                if isinstance(v, dict):
+                    groups.save_policy(con, g, v.get("on"), v.get("allow"))
+        step("分组白名单", i)
     return {"ok": True, "done": done, "skipped": skipped}

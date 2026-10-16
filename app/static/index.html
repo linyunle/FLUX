@@ -250,6 +250,11 @@ body.priv .pv{filter:blur(6px);transition:filter .15s}body.priv .pv:hover{filter
 .navi{position:relative}.nb{position:absolute;top:3px;right:8px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--bad);color:#fff;font:600 10px/16px system-ui;font-style:normal;text-align:center}
 .app.collapsed .nb{right:4px}
 .lv{display:inline-block;font-size:11px;padding:0 6px;border-radius:8px;border:1px solid currentColor;white-space:nowrap}
+.lv.note{color:var(--muted)}
+.tl{border-left:2px solid var(--line);margin:4px 0 4px 6px;padding-left:16px}.tl .day{font-weight:600;margin:14px 0 4px -16px;font-size:13px;color:var(--ink2)}.tl .ev{position:relative;padding:5px 0 5px 0}
+.tl .ev::before{content:"";position:absolute;left:-23px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--muted);border:2px solid var(--surface)}
+.tl .ev.bad::before{background:var(--bad)}.tl .ev.warn::before{background:var(--warn)}.tl .ev.ok::before{background:var(--good)}.tl .ev.info::before{background:var(--accent)}
+.tl .ev .t{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-right:8px}.tl .ev .kd{font-size:11px;color:var(--ink2);border:1px solid var(--line);border-radius:8px;padding:0 6px;margin-left:6px}
 .lv.bad{color:var(--bad)}.lv.warn{color:var(--warn)}.lv.ok{color:var(--good)}.lv.info{color:var(--accent)}
 tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 #alcBody:empty,#alTbl:empty,#alBase:empty{min-height:80px}
@@ -408,7 +413,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-alerts" style="display:none">
   <div class="card">
-    <h2>告警事件 <select id="alKind" aria-label="类型" style="padding:3px 6px"></select><span class="sp"></span><span class="sub" id="alStat"></span><button id="alSeen">全部已读</button><button id="alClear">清空记录</button></h2>
+    <h2>告警与事件 <span class="seg" id="alView" role="group" aria-label="显示方式"></span><select id="alKind" aria-label="类型" style="padding:3px 6px"></select><span class="sp"></span><span class="sub" id="alStat"></span><button id="alSeen">全部已读</button><button id="alClear">清空记录</button></h2>
     <div class="sub" id="alHint" style="margin-bottom:6px"></div>
     <div class="scroll" id="alTbl"></div>
   </div>
@@ -566,6 +571,10 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authSave" class="pri">保存</button></div>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label></div>
+      <div class="card sec" id="sec-groups"><h2>设备分组与白名单</h2>
+  <div class="sub" style="margin-bottom:10px;line-height:1.7">先在「设备」页给设备选分组(IoT / 手机 / 电脑 / 访客,也可以新建)。然后在这里给分组设「允许访问的域名」:组里的设备访问了名单之外的域名,会告警一次(同一设备同一域名 24 小时内不重复)。域名按后缀匹配,填 <code>apple.com</code> 就包含 <code>a.apple.com</code>。点「从最近 7 天学习」会列出这个分组实际访问过的主域名,先学习、再删掉不认识的,最后保存并启用。启用后的第一轮只记账不告警。只看域名,走代理时以 mihomo 记录的域名为准,没有域名的连接不判断。</div>
+  <div id="grpBody"></div>
+</div>
       <div class="card sec" id="sec-devices"><h2>设备名导入</h2>
   <div class="sub" style="margin-bottom:8px">在路由器上执行 <code>uci show dhcp</code>,把输出粘贴到下面(也可以粘贴 /etc/config/dhcp 全文)。只读取静态绑定里的 名字 / MAC / IP。</div>
   <textarea id="iTxt" rows="9" placeholder="dhcp.@host[0]=host&#10;dhcp.@host[0].name='my-phone'&#10;dhcp.@host[0].mac='aa:bb:cc:dd:ee:ff'"></textarea>
@@ -952,11 +961,18 @@ $("#dtlX").onclick=()=>closeM("#dtl");
 function loadDevicesTab(){
   $("#devListView").style.display=S.dd?"none":"";$("#devDetail").style.display=S.dd?"":"none";
   if(S.dd)return loadDetail();
+  get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}).finally(devTabRows)}
+function grpSel(k){const g=(S.grp&&S.grp.groups[k])||"",names=(S.grp&&S.grp.names)||[];
+  return `<select class="grp" data-k="${esc(k)}" aria-label="分组" title="设备分组" style="padding:1px 4px;font-size:12px"><option value="">未分组</option>${names.map(n=>`<option ${n===g?"selected":""}>${esc(n)}</option>`).join("")}${g&&!names.includes(g)?`<option selected>${esc(g)}</option>`:""}<option value="__new__">新建分组…</option></select>`}
+function devTabRows(){
   load("devtab","/api/summary",{...base(),by:"client",limit:200},j=>{
   rowsTable($("#devTbl"),j,[
-    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button><div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
+    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
     {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],
     r=>{S.dd=r.key;loadDevicesTab()});
+  $("#devTbl").querySelectorAll("select.grp").forEach(sel=>{sel.onclick=e=>e.stopPropagation();sel.onchange=async e=>{e.stopPropagation();let v=sel.value;
+    if(v==="__new__"){v=(prompt("新分组名(最多 20 个字)")||"").trim();if(!v){loadDevicesTab();return}}
+    try{await post("/api/groups/set",{dev:sel.dataset.k,group:v});loadDevicesTab()}catch(er){alert(er.message);loadDevicesTab()}}});
   $("#devTbl").querySelectorAll(".ren").forEach(b=>b.onclick=async e=>{e.stopPropagation();const n=prompt("设备名(留空 = 恢复自动名)",b.dataset.n);if(n===null)return;
     try{await post("/api/device",{dev:b.dataset.k,name:n});loadDevices();loadDevicesTab()}catch(er){alert(er.message)}})})}
 /* 单台设备详情 */
@@ -1365,20 +1381,29 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
   status()}catch(e){m.className="msg err";m.textContent=e.message}};
 
 /* ---------- 告警 ---------- */
-const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复"};
+const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复",note:"记录"};
 const fmtTs=t=>{const d=new Date(t*1000);return pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())};
-function alertRow(r,seen){return `<tr class="${r.ts>seen&&r.level!=="ok"?"unseen":""} ${["new_device","traffic_spike","conn_many","node_down","node_up"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}">
+function alertRow(r,seen){return `<tr class="${r.ts>seen&&r.level!=="ok"?"unseen":""} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}">
   <td class="n" style="white-space:nowrap;text-align:left">${fmtTs(r.ts)}</td><td><span class="lv ${r.level}">${LV[r.level]||r.level}</span></td>
   <td><b>${esc(r.title)}</b><div class="sub">${esc(r.detail)}</div></td><td class="hide-s sub">${esc(r.sent)}</td></tr>`}
-function alertOpen(e){const tr=e.target.closest("tr.click");if(!tr)return;const k=tr.dataset.k,key=tr.dataset.key;
+function alertOpen(e){const tr=e.target.closest("tr.click,.ev.click");if(!tr)return;const k=tr.dataset.k,key=tr.dataset.key;
   if(k.startsWith("node"))openDetail("node",{node:key});else openDetail("dev",{key,name:tr.dataset.t.replace(/^[^:]*:/,"")})}
+function timelineH(j){
+  const day=t=>{const d=new Date(t*1000),n=new Date();return d.toDateString()===n.toDateString()?"今天":new Date(n-86400000).toDateString()===d.toDateString()?"昨天":`${d.getMonth()+1} 月 ${d.getDate()} 日`};
+  let h="",cur="";
+  for(const r of j.rows){const dy=day(r.ts);if(dy!==cur){cur=dy;h+=`<div class="day">${dy}</div>`}
+    const tm=new Date(r.ts*1000);
+    h+=`<div class="ev ${r.level} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}"><span class="t">${String(tm.getHours()).padStart(2,"0")}:${String(tm.getMinutes()).padStart(2,"0")}</span><b>${esc(r.title)}</b><span class="kd">${esc(j.kinds[r.kind]||r.kind)}</span>${r.detail?`<div class="sub">${esc(r.detail)}</div>`:""}</div>`}
+  return `<div class="tl">${h}</div>`}
 async function loadAlerts(){
-  load("alerts","/api/alerts",{limit:100,kind:S.alKind},j=>{
+  S.alView=S.alView||"list";seg($("#alView"),[["list","列表"],["line","时间线"]],S.alView,k=>{S.alView=k;loadAlerts()});
+  load("alerts","/api/alerts",{limit:S.alView==="line"?200:100,kind:S.alKind},j=>{
     const k=$("#alKind");k.innerHTML='<option value="">全部类型</option>'+Object.entries(j.kinds).map(([v,l])=>`<option value="${v}" ${v===S.alKind?"selected":""}>${l}</option>`).join("");
     const c=j.counts;$("#alStat").textContent=`最近 24 小时:严重 ${c.bad} · 警告 ${c.warn} · 提示 ${c.info} · 恢复 ${c.ok}`;
     $("#alHint").innerHTML=j.has_channel?"":'没有配置推送渠道:告警只会记录在这里。<a href="#" id="alGoSet">去设置 → 告警与推送</a>';
     const g=$("#alGoSet");if(g)g.onclick=e=>{e.preventDefault();openSettings("alerts")};
-    $("#alTbl").innerHTML=j.rows.length?`<table><thead><tr><th>时间</th><th>级别</th><th>内容</th><th class="hide-s">推送</th></tr></thead><tbody>${j.rows.map(r=>alertRow(r,j.seen)).join("")}</tbody></table>`:'<div class="empty">还没有告警 · 一切正常</div>';
+    if(S.alView==="line")$("#alTbl").innerHTML=j.rows.length?timelineH(j):'<div class="empty">还没有事件</div>';
+    else $("#alTbl").innerHTML=j.rows.length?`<table><thead><tr><th>时间</th><th>级别</th><th>内容</th><th class="hide-s">推送</th></tr></thead><tbody>${j.rows.map(r=>alertRow(r,j.seen)).join("")}</tbody></table>`:'<div class="empty">还没有告警 · 一切正常</div>';
     $("#alTbl").onclick=alertOpen;
     if(S.unread){post("/api/alerts/seen",{}).then(()=>{S.unread=0;document.title="FLUX";renderChrome()}).catch(()=>{})}});
   load("albase","/api/alerts/baseline",{},j=>{
@@ -1399,6 +1424,7 @@ const RULE_META=[
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
  ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
+ ["group_policy","分组白名单","给设备分组设了白名单后,组内设备访问名单之外的域名时告警(在「设置 → 设备分组」里设置名单)",[["cool_min","同一设备同一域名间隔","分钟"]]],
  ["sys_conntrack","连接跟踪占用高","路由器的连接跟踪表快满了(满了新连接会被丢弃,网页打不开)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["sys_temp","路由器温度高","最高温度传感器读数达到阈值(没有传感器的路由器不会触发)",[["c","阈值","℃"],["cool_min","间隔","分钟"]]],
  ["sys_disk","磁盘空间不足","面板数据所在磁盘的使用率",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
@@ -1435,7 +1461,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1450,6 +1476,7 @@ async function loadSettings(){
     else if(S.set==="geo")await loadGeoSet();
     else if(S.set==="quota")await loadQuotaSet();
     else if(S.set==="report")await loadReportSet();
+    else if(S.set==="groups")await loadGroupsSet();
     else if(S.set==="backup"){const j=await get("/api/ui");$("#bkInfo").textContent=j.at?"服务器上的外观设置最近同步:"+new Date(j.at*1000).toLocaleString():"服务器上还没有外观设置(改一下外观就会同步)"}
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
@@ -1458,6 +1485,22 @@ async function loadSettings(){
     else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
   }catch(e){console.warn(e)}}
+async function loadGroupsSet(){
+  const j=await get("/api/groups");S.grp=j;const cnt={};for(const g of Object.values(j.groups))cnt[g]=(cnt[g]||0)+1;
+  const used=j.names.filter(n=>cnt[n]||(j.policy[n]));
+  $("#grpBody").innerHTML=used.length?used.map(n=>{const p=j.policy[n]||{on:false,allow:[]};
+    return `<div class="gset" data-g="${esc(n)}" style="border:1px solid var(--line);border-radius:var(--rs);padding:10px;margin-bottom:10px">
+      <div class="row2"><b>${esc(n)}</b><span class="sub">${cnt[n]||0} 台设备</span><span class="sp"></span><label class="crow sub" style="cursor:pointer"><input type="checkbox" class="gon" ${p.on?"checked":""}> 启用白名单</label></div>
+      <textarea class="gallow" rows="5" placeholder="每行一个域名,例如 apple.com" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px">${esc(p.allow.join("\n"))}</textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px"><span class="msg gmsg" style="margin-right:auto"></span><button class="glearn">从最近 7 天学习</button><button class="gsave pri">保存</button></div></div>`}).join(""):'<div class="empty">还没有分组。到「设备」页,给设备选一个分组(例如 IoT)。</div>'}
+$("#grpBody").onclick=async e=>{const b=e.target.closest("button");if(!b)return;const box=b.closest(".gset"),g=box.dataset.g,m=box.querySelector(".gmsg");m.className="msg gmsg";m.textContent="";
+  try{
+    if(b.classList.contains("glearn")){const j=await get("/api/groups/learn",{group:g});
+      if(!j.rows.length){m.className="msg gmsg warn";m.textContent="最近 7 天没有这个分组的访问记录";return}
+      const ta=box.querySelector(".gallow"),have=new Set(ta.value.split("\n").map(x=>x.trim()).filter(Boolean));
+      ta.value=[...have,...j.rows.map(r=>r.domain).filter(d=>!have.has(d))].join("\n");m.textContent=`已列出 ${j.rows.length} 个域名,请删掉不认识的再保存`}
+    else if(b.classList.contains("gsave")){await post("/api/groups/policy",{group:g,on:box.querySelector(".gon").checked,allow:box.querySelector(".gallow").value});m.className="msg gmsg ok";m.textContent="已保存"}
+  }catch(er){m.className="msg gmsg err";m.textContent=er.message}};
 $("#bkDl").onclick=async()=>{const m=$("#bkMsg");m.className="msg";m.textContent="";
   try{const sec=$("#bkSec").checked,j=await get("/api/backup",{secrets:sec?1:0});
     j.ui=TH; /* 以此刻浏览器里的外观为准 */

@@ -283,6 +283,16 @@ try:
     ok(c == 200 and "周报" in r["done"] and get("/api/report/config")["weekday"] == 3, "恢复:周报设置")
     ok(post("/api/restore", {"backup": {"nope": 1}})[0] == 400, "恢复:拒绝不是备份的文件")
     post("/api/report/config", {"on": False, "weekday": 0, "hour": 9})
+    # 设备分组 / 白名单 / 时间线
+    post("/api/groups/set", {"dev": "aa:bb:cc:dd:ee:01", "group": "IoT"})
+    c, r = post("/api/groups/policy", {"group": "IoT", "on": True, "allow": "Apple.com\n*.example.org\napple.com"})
+    gj = get("/api/groups")
+    ok(gj["groups"].get("aa:bb:cc:dd:ee:01") == "IoT" and "IoT" in gj["names"], "分组:设备分到 IoT")
+    ok(r["allow"] == ["apple.com", "example.org"] and gj["policy"]["IoT"]["on"], "白名单:规范化并保存")
+    ok(isinstance(get("/api/groups/learn?group=IoT")["rows"], list), "白名单:学习接口")
+    ok(any(x["kind"] == "audit" for x in get("/api/alerts?limit=100")["rows"]), "时间线:设置变更被记录")
+    ok(get("/api/backup")["dev_groups"].get("aa:bb:cc:dd:ee:01") == "IoT", "备份:包含设备分组")
+    post("/api/groups/set", {"dev": "aa:bb:cc:dd:ee:01", "group": ""}); post("/api/groups/policy", {"group": "IoT", "on": False, "allow": ""})
     ql = get("/api/quality"); ok(ql["poll"]["ok"] > 3 and ql["size"]["db"] > 0 and ql["rows"]["traffic"] > 0 and ql["geo"]["country"] and ql["agh"], "数据质量:采集/库/GeoIP/AdGuard")
     # ---- v0.11.1
     sc = get("/api/secsum?force=1"); keys = {t["key"] for t in sc["tiles"]}
