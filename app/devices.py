@@ -26,8 +26,11 @@ def _fmt_ip(family, raw):
         return ""
 
 
-def parse_neigh_dump(buf):
-    """解析 netlink RTM_GETNEIGH 的回包,返回 {ip: mac}。"""
+NUD_FRESH = 0x02 | 0x08 | 0x10   # REACHABLE / DELAY / PROBE:内核最近确认过这台设备在线(STALE 不算)
+
+
+def parse_neigh_dump(buf, fresh=None):
+    """解析 netlink RTM_GETNEIGH 的回包,返回 {ip: mac};传入 fresh(set)时,把「最近确认在线」的 MAC 也放进去。"""
     out, off = {}, 0
     while off + 16 <= len(buf):
         ln, typ, _flags, _seq, _pid = struct.unpack_from("=IHHII", buf, off)
@@ -53,11 +56,13 @@ def parse_neigh_dump(buf):
                     a += (alen + 3) & ~3
                 if ip and mac and mac != "00:00:00:00:00:00":
                     out[ip] = mac
+                    if fresh is not None and state & NUD_FRESH:
+                        fresh.add(mac)
         off += (ln + 3) & ~3
     return out
 
 
-def _netlink_neigh():
+def _netlink_neigh(fresh=None):
     s = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 0)
     s.settimeout(3)
     try:
@@ -82,12 +87,12 @@ def _netlink_neigh():
                 off += (ln + 3) & ~3
             if done:
                 break
-        return parse_neigh_dump(data)
+        return parse_neigh_dump(data, fresh)
     finally:
         s.close()
 
 
-def parse_ip_neigh(text):
+def parse_ip_neigh(text, fresh=None):
     out = {}
     for line in text.splitlines():
         p = line.split()
@@ -95,6 +100,8 @@ def parse_ip_neigh(text):
             mac = p[p.index("lladdr") + 1].lower()
             if is_mac(mac) and mac != "00:00:00:00:00:00" and p[-1] not in ("FAILED", "INCOMPLETE"):
                 out[p[0]] = mac
+                if fresh is not None and p[-1] in ("REACHABLE", "DELAY", "PROBE"):
+                    fresh.add(mac)
     return out
 
 
@@ -112,22 +119,23 @@ def read_proc_arp():
     return out
 
 
-def read_neigh():
-    """{ip: mac}。顺序:netlink(IPv4+IPv6)→ `ip neigh` → /proc/net/arp(仅 IPv4)。"""
+def read_neigh(fresh=None):
+    """{ip: mac}。顺序:netlink(IPv4+IPv6)→ `ip neigh` → /proc/net/arp(仅 IPv4)。
+    传入 fresh(set)时,内核最近确认在线(REACHABLE/DELAY/PROBE)的 MAC 会被加进去(/proc/net/arp 没有状态,不加)。"""
     if NEIGH_FILE:
         try:
             with open(NEIGH_FILE, encoding="utf-8") as f:
-                return parse_ip_neigh(f.read())
+                return parse_ip_neigh(f.read(), fresh)
         except OSError:
             return {}
     try:
-        r = _netlink_neigh()
+        r = _netlink_neigh(fresh)
         if r:
             return r
     except Exception:
         pass
     try:
-        r = parse_ip_neigh(subprocess.run(["ip", "neigh", "show"], capture_output=True, text=True, timeout=4).stdout)
+        r = parse_ip_neigh(subprocess.run(["ip", "neigh", "show"], capture_output=True, text=True, timeout=4).stdout, fresh)
         if r:
             return r
     except Exception:

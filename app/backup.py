@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, groups, insight, probe
+from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe
 
 MAX_THEME = 64 * 1024
 
@@ -65,6 +65,7 @@ def export(con, secrets=False):
     out["dev_groups"] = groups.dev_groups(con)
     out["group_policy"] = groups.policy(con)
     out["probe"] = probe.load_cfg(con)
+    out["dev_watch"] = presence.watch_list(con)
     return out
 
 
@@ -126,4 +127,9 @@ def restore(con, d):
         step("分组白名单", i)
     if isinstance(d.get("probe"), dict):
         step("节点测速", lambda: probe.save_cfg(con, d["probe"]))
+    if isinstance(d.get("dev_watch"), list):
+        def w():
+            for k in d["dev_watch"][:500]:
+                presence.set_watch(con, k, True)
+        step("关注的设备", w)
     return {"ok": True, "done": done, "skipped": skipped}

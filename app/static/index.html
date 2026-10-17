@@ -982,18 +982,23 @@ $("#dtlX").onclick=()=>closeM("#dtl");
 function loadDevicesTab(){
   $("#devListView").style.display=S.dd?"none":"";$("#devDetail").style.display=S.dd?"":"none";
   if(S.dd)return loadDetail();
-  get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}).finally(devTabRows)}
+  Promise.all([get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}),get("/api/presence").then(j=>{S.pres={};j.rows.forEach(r=>S.pres[r.key]=r)}).catch(()=>{})]).finally(devTabRows)}
+function presTag(k){const p=(S.pres||{})[k];if(!p)return "";
+  const st=p.on?`<span class="lv ok" title="上线于 ${fmtTs(p.since)}">在线</span>`:`<span class="lv note" title="最后在线 ${fmtTs(p.last)}">离线 · ${fmtTs(p.last)}</span>`;
+  return `${st} <button class="wch" data-k="${esc(k)}" aria-pressed="${p.watch}" title="${p.watch?"已关注:上线/离线会记录并提醒(取决于告警规则里的开关)":"关注后,这台设备上线/离线会记录并提醒"}" style="padding:1px 6px;font-size:12px">${p.watch?"🔔 已关注":"🔕 关注"}</button>`}
 function grpSel(k){const g=(S.grp&&S.grp.groups[k])||"",names=(S.grp&&S.grp.names)||[];
   return `<select class="grp" data-k="${esc(k)}" aria-label="分组" title="设备分组" style="padding:1px 4px;font-size:12px"><option value="">未分组</option>${names.map(n=>`<option ${n===g?"selected":""}>${esc(n)}</option>`).join("")}${g&&!names.includes(g)?`<option selected>${esc(g)}</option>`:""}<option value="__new__">新建分组…</option></select>`}
 function devTabRows(){
   load("devtab","/api/summary",{...base(),by:"client",limit:200},j=>{
   rowsTable($("#devTbl"),j,[
-    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
+    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)} ${presTag(r.key)}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
     {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],
     r=>{S.dd=r.key;loadDevicesTab()});
   $("#devTbl").querySelectorAll("select.grp").forEach(sel=>{sel.onclick=e=>e.stopPropagation();sel.onchange=async e=>{e.stopPropagation();let v=sel.value;
     if(v==="__new__"){v=(prompt("新分组名(最多 20 个字)")||"").trim();if(!v){loadDevicesTab();return}}
     try{await post("/api/groups/set",{dev:sel.dataset.k,group:v});loadDevicesTab()}catch(er){alert(er.message);loadDevicesTab()}}});
+  $("#devTbl").querySelectorAll(".wch").forEach(b=>b.onclick=async e=>{e.stopPropagation();
+    try{await post("/api/presence/watch",{key:b.dataset.k,on:b.getAttribute("aria-pressed")!=="true"});loadDevicesTab()}catch(er){alert(er.message)}});
   $("#devTbl").querySelectorAll(".ren").forEach(b=>b.onclick=async e=>{e.stopPropagation();const n=prompt("设备名(留空 = 恢复自动名)",b.dataset.n);if(n===null)return;
     try{await post("/api/device",{dev:b.dataset.k,name:n});loadDevices();loadDevicesTab()}catch(er){alert(er.message)}})})}
 /* 单台设备详情 */
@@ -1455,6 +1460,8 @@ $("#alcGo").onclick=()=>{S.tab="alerts";showTab();refresh()};
 /* 设置里的「告警与推送」 */
 const RULE_META=[
  ["new_device","新设备入网","出现之前没见过的设备时提醒。首次启动后的学习期内见到的设备都算已知",[]],
+ ["dev_online","设备上线","「关注」的设备(设备页点 🔔 关注)从离线变回在线时记录并提醒;范围选 1 则所有设备都提醒。这个开关只管推送,时间线照常记录",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["cool_min","同一设备间隔","分钟"]]],
+ ["dev_offline","设备离线","「关注」的设备超过「离线判定」时间没有出现(内核邻居表里没有确认在线、也没有连接经过 nikki)才算离线,手机省电断 Wi-Fi 几分钟不会误报",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["grace_min","离线判定","分钟"],["cool_min","同一设备间隔","分钟"]]],
  ["traffic_spike","流量突增","设备这一小时的流量 ≥ 平时同一钟点均值 × 倍数,且不少于下限(没有历史基线时只看下限)",[["min_mb","下限","MB"],["factor","倍数","×"],["cool_min","同一设备间隔","分钟"]]],
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],

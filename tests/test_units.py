@@ -232,6 +232,37 @@ def test_probe_and_panellog():
     assert con.execute("SELECT COUNT(*) FROM alerts WHERE kind='audit'").fetchone()[0] == 1   # 登录失败记一条;新来源只在第一次(同一次已被失败那条占了)
 
 
+def test_presence():
+    import sqlite3, time, copy
+    from app import alerts, db, presence
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    cfg = copy.deepcopy(alerts.DEFAULT_CFG)
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, key, title))
+    A, B = "aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"
+    t0 = time.time() - 1000
+    presence._s["start"] = t0 - 500          # 已过了启动学习期
+    presence.check(con, cfg, t0, ev={A, B})  # 初次见到:静默记为在线
+    assert not fired and presence.status(con)["rows"] and all(r["on"] for r in presence.status(con)["rows"])
+    presence.check(con, cfg, t0 + 300, ev={A})        # B 才 5 分钟没出现:还没到 10 分钟
+    assert not fired
+    presence.check(con, cfg, t0 + 700, ev={A})        # B 超过 10 分钟 -> 离线;但没关注,不提醒
+    assert not fired and [r["on"] for r in presence.status(con)["rows"] if r["key"] == B] == [False]
+    presence.set_watch(con, B, True)
+    presence.check(con, cfg, t0 + 800, ev={A, B})     # B 回来 -> 上线,已关注 -> 提醒
+    assert [f[0] for f in fired] == ["dev_online"] and fired[0][1] == B, fired
+    presence.check(con, cfg, t0 + 900, ev={A})
+    presence.check(con, cfg, t0 + 1600, ev={A})       # 再次离线,已关注 -> 提醒
+    assert [f[0] for f in fired] == ["dev_online", "dev_offline"], fired
+    cfg["rules"]["dev_online"]["on"] = False; cfg["rules"]["dev_online"]["all"] = 1   # 推送开关关掉:只记录不推送;选了所有设备:A 也会被记
+    presence.check(con, cfg, t0 + 1700, ev={A, B})    # B 上线:开关关着 -> 只记录
+    presence.check(con, cfg, t0 + 3000, ev={B})       # A 离线:离线规则范围还是「只关注的」,A 没关注 -> 不记
+    presence.check(con, cfg, t0 + 3100, ev={A, B})    # A 上线:上线规则选了所有设备 -> 记录但不推送
+    assert [f[0] for f in fired] == ["dev_online", "dev_offline"], fired
+    assert con.execute("SELECT COUNT(*) FROM alerts WHERE kind='dev_online' AND key=?", (A,)).fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM alerts WHERE kind='dev_offline' AND key=?", (A,)).fetchone()[0] == 0
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

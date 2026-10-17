@@ -119,6 +119,10 @@ try:
         pg.check("#prOn"); pg.click("#prSave"); pg.wait_for_timeout(800)
         assert "已保存" in pg.inner_text("#prMsg"), pg.inner_text("#prMsg")
         assert pg.evaluate("fetch('/api/probe').then(r=>r.json()).then(j=>j.cfg.on)") is True, "节点测速设置没保存"
+        pg.evaluate("S.tab='devices';S.dd='';showTab();refresh()"); pg.wait_for_timeout(4000)
+        assert "在线" in pg.inner_text("#devTbl"), ("设备页没有显示在线状态", pg.inner_text("#devTbl")[:300])
+        pg.locator("#devTbl .wch").first.click(); pg.wait_for_timeout(1500)
+        assert "已关注" in pg.inner_text("#devTbl"), "关注按钮没有生效"
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

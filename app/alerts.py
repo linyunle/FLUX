@@ -39,6 +39,8 @@ KINDS = {
     "audit": "设置变更",
     "boot": "面板启动",
     "router_reboot": "路由器重启",
+    "dev_online": "设备上线",
+    "dev_offline": "设备离线",
 }
 LEVELS = ("bad", "warn", "info", "ok", "note")
 
@@ -60,10 +62,12 @@ DEFAULT_RULES = {
     "sys_temp": {"on": True, "c": 85, "cool_min": 60},
     "sys_disk": {"on": True, "pct": 90, "cool_min": 1440},
     "sys_mem": {"on": True, "pct": 92, "cool_min": 120},
+    "dev_online": {"on": True, "all": 0, "cool_min": 30},
+    "dev_offline": {"on": True, "all": 0, "grace_min": 10, "cool_min": 30},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
@@ -476,6 +480,11 @@ def check_probe(con, cfg, now):
     probe.check(con, cfg, now)
 
 
+def check_presence(con, cfg, now):
+    from . import presence
+    presence.check(con, cfg, now)
+
+
 def check_forecast(con, cfg, now):
     from . import advisor
     advisor.check_quota_forecast(con, cfg, now)
@@ -492,7 +501,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence)]
 
 
 def evaluate(con, now=None):
