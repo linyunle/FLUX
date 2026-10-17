@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, wan
+from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, wan
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -62,12 +62,28 @@ def selfcheck(con, now=None):
             out.append(_f("bad", "数据库自检没通过", str(r[0])[:200] + "。先备份设置,再考虑删除 data/traffic.db 重建。"))
     except Exception as e:
         out.append(_f("warn", "数据库自检出错", str(e)))
-    d = sysinfo.STATE.get("disk")
-    if d and d.get("pct") is not None:
+    for i, d in enumerate(sysinfo.STATE.get("disks") or ([dict(sysinfo.STATE["disk"], name="面板数据盘")] if sysinfo.STATE.get("disk") else [])):
+        if d.get("pct") is None:
+            continue
         if d["pct"] >= 95:
-            out.append(_f("bad", "面板数据盘快满了", f"已用 {d['pct']}%,剩余 {d['free'] // 1048576} MB。数据库写不进去会丢统计。"))
+            out.append(_f("bad", f"「{d['name']}」快满了", f"已用 {d['pct']}%,剩余 {d['free'] // 1048576} MB。" + ("数据库写不进去会丢统计。" if i == 0 else "")))
         elif d["pct"] >= 85:
-            out.append(_f("warn", "面板数据盘空间偏紧", f"已用 {d['pct']}%。"))
+            out.append(_f("warn", f"「{d['name']}」空间偏紧", f"已用 {d['pct']}%。"))
+    try:
+        sc = syslog.load_cfg(con)
+        if sc["on"] and syslog._state["err"]:
+            out.append(_f("warn", "系统日志接收没起来", syslog._state["err"] + "。换一个端口,或看看是不是被别的程序占用了。"))
+        elif sc["on"] and not syslog._state["last_rx"]:
+            out.append(_f("info", "系统日志还没收到任何日志", "面板在等路由器转发过来:到路由器上设置日志转发(设置页「系统日志」里有命令),并确认端口一致。"))
+        if syslog._state["drop"]:
+            out.append(_f("info", f"系统日志已丢弃 {syslog._state['drop']} 条", "短时间内日志太多(每秒超过 300 条),超出的被丢弃了。多半是某个服务在狂刷日志,值得去看看是谁。"))
+        if ups.load_cfg(con)["on"] and ups.STATE["ok"] is False:
+            out.append(_f("warn", "读不到 UPS", ups.STATE["err"]))
+        for t, v in list(expiry.STATE["certs"].items()) + list(expiry.STATE["domains"].items()):
+            if v.get("days") is not None and v["days"] <= 14:
+                out.append(_f("warn", f"{t} {'已过期' if v['days'] < 0 else str(v['days']) + ' 天后到期'}", "证书或域名快到期了,记得续期。"))
+    except Exception:
+        pass
     if time.localtime(now).tm_year < 2024:
         out.append(_f("warn", "系统时间不对", "年份早于 2024,统计的日期会错乱;检查路由器时间/NTP。"))
     rss = _rss_mb()
@@ -173,7 +189,7 @@ def bundle(con, full=False, now=None):
     for r in pv.get("rows", []):
         r.pop("cmp", None)
     counts = {}
-    for t in ("traffic", "hourly", "app_hourly", "qoe", "alerts", "ipmap", "wanq", "dns"):
+    for t in ("traffic", "hourly", "app_hourly", "qoe", "alerts", "ipmap", "wanq", "dns", "syslog"):
         try:
             counts[t] = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         except Exception:
@@ -202,6 +218,10 @@ def bundle(con, full=False, now=None):
         "nodes": [{"name": n, "type": v.get("type"), "delay": v.get("delay"), "fails": v.get("fails")} for n, v in (c.nodes.items() if c else [])][:400],
         "sys": {k: v for k, v in sysinfo.snapshot(60).items() if k != "series"},
         "wan": wan.snapshot(),
+        "syslog": {k: v for k, v in syslog.status(con).items() if k != "rows_data"},
+        "ups": {"cfg_on": ups.load_cfg(con)["on"], "ok": ups.STATE["ok"], "err": ups.STATE["err"], "info": ups.STATE["info"]},
+        "expiry": {"at": expiry.STATE["at"], "certs": [{"days": v.get("days"), "trusted": v.get("trusted"), "err": v.get("err")} for v in expiry.STATE["certs"].values()],
+                   "domains": [{"days": v.get("days"), "err": v.get("err")} for v in expiry.STATE["domains"].values()]},
         "db": {"size_bytes": dbsize, "rows": counts},
         "threads": sorted(t.name for t in threading.enumerate()),
         "alerts_recent": ev,

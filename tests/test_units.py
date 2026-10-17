@@ -324,6 +324,149 @@ def test_provider_nodes_probe_local():
     assert devices.NAMES.label("2001:db8::1", [], {}) == "路由器本机"
 
 
+def test_syslog():
+    import sqlite3, time, copy, tempfile, os, threading, socket as so
+    from app import syslog, alerts, db, config
+    h, sv, tg, msg = syslog.parse(b"<30>Oct 17 19:58:00 OpenWrt dnsmasq[123]: DHCPACK(br-lan) 192.168.1.5 aa:bb", "127.0.0.1")
+    assert (h, sv, tg) == ("OpenWrt", 6, "dnsmasq") and msg.startswith("DHCPACK"), (h, sv, tg, msg)
+    h, sv, tg, msg = syslog.parse(b"<11>Oct  7 19:58:00 R kernel: [12.3] Out of memory: Killed process 1", "1.2.3.4")
+    assert sv == 3 and tg == "kernel" and syslog.CRIT.search(msg), (sv, tg, msg)
+    h, sv, tg, msg = syslog.parse(b"<14>1 2026-10-17T19:58:00+08:00 host app 12 ID47 - hello world", "1.2.3.4")
+    assert (h, sv, tg, msg) == ("host", 6, "app", "hello world"), (h, sv, tg, msg)
+    h, sv, tg, msg = syslog.parse(b"Oct 17 19:58:00 OpenWrt daemon.err hostapd: bad thing", "1.2.3.4")
+    assert sv == 3 and tg == "hostapd" and msg == "bad thing", (sv, tg, msg)
+    assert syslog.parse(b"random text", "9.9.9.9")[3] == "random text"
+    assert syslog.allowed_src("192.168.1.5") and syslog.allowed_src("127.0.0.1") and not syslog.allowed_src("8.8.8.8")
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    now = time.time()
+    syslog._insert(con, [(int(now - 10 * 86400), "r", 6, "old", "ancient"), (int(now - 5), "r", 6, "a", "hello"), (int(now - 4), "r", 3, "b", "bad_thing 100%")])
+    assert len(syslog.query(con, 7)) == 3 and len(syslog.query(con, 3)) == 1 and len(syslog.query(con, 7, "100%")) == 1 and len(syslog.query(con, 7, "_")) == 1
+    cfg = syslog.save_cfg(con, {"on": True, "port": 5514, "days": 7, "max_rows": 1000})
+    assert syslog.prune(con, cfg, now) == 1 and len(syslog.query(con, 7)) == 2
+    for bad in ({"port": 80}, {"days": 0}, {"max_rows": 5}):
+        try:
+            syslog.save_cfg(con, dict({"on": True, "port": 5514, "days": 7, "max_rows": 1000}, **bad)); assert False
+        except ValueError:
+            pass
+    # 严重日志告警:第一次只记基线;之后出现严重信息才触发
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, title))
+    acfg = copy.deepcopy(alerts.DEFAULT_CFG)
+    syslog._state["sys_last"] = None
+    syslog.check(con, acfg, now); assert not fired
+    syslog._insert(con, [(int(now), "r", 6, "x", "all fine"), (int(now), "r", 6, "kernel", "EXT4-fs error (device sda1): bad")])
+    syslog.check(con, acfg, now + 1)
+    assert fired and fired[0][0] == "syslog_crit", fired
+    syslog._insert(con, [(int(now), "r", 6, "x", "all fine too")])
+    n = len(fired); syslog.check(con, acfg, now + 2); assert len(fired) == n
+    # 真实收包:开线程监听本机一个端口
+    d = tempfile.mkdtemp(); config.DB_PATH = d + "/t.db"; c2 = db.init_db()
+    s = so.socket(so.AF_INET, so.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    syslog.save_cfg(c2, {"on": True, "port": port, "days": 3, "max_rows": 5000})
+    threading.Thread(target=syslog.run, daemon=True).start()
+    for _ in range(40):
+        if syslog._state["bound"] == port: break
+        time.sleep(0.25)
+    assert syslog._state["bound"] == port, syslog._state
+    cl = so.socket(so.AF_INET, so.SOCK_DGRAM)
+    for i in range(3):
+        cl.sendto(f"<30>Oct 17 19:58:0{i} R app[1]: msg {i}".encode(), ("127.0.0.1", port))
+    for _ in range(20):
+        if len(syslog.query(c2, 7)) >= 3: break
+        time.sleep(0.5)
+    assert len(syslog.query(c2, 7)) == 3, syslog.query(c2, 7)
+    syslog.save_cfg(c2, {"on": False, "port": port, "days": 3, "max_rows": 5000})
+
+
+def test_ups():
+    import sqlite3, time, copy, threading, socket as so
+    from app import ups, alerts, db
+    state = {"status": "OL CHRG", "charge": "100"}
+    srv = so.socket(); srv.setsockopt(so.SOL_SOCKET, so.SO_REUSEADDR, 1); srv.bind(("127.0.0.1", 0)); srv.listen(5); port = srv.getsockname()[1]
+    def serve():
+        while True:
+            try: c, _ = srv.accept()
+            except OSError: return
+            req = c.recv(200).decode()
+            if "NOPE" in req: c.sendall(b"ERR UNKNOWN-UPS\n")
+            else:
+                c.sendall((f'BEGIN LIST VAR CyberPower\nVAR CyberPower battery.charge "{state["charge"]}"\nVAR CyberPower battery.runtime "1500"\nVAR CyberPower ups.load "23"\n'
+                           f'VAR CyberPower ups.status "{state["status"]}"\nVAR CyberPower ups.model "UT650EG"\nVAR CyberPower ups.realpower.nominal "360"\nEND LIST VAR CyberPower\n').encode())
+            c.close()
+    threading.Thread(target=serve, daemon=True).start()
+    v = ups.read("127.0.0.1", port, "CyberPower")
+    s = ups.summarize(v)
+    assert s["charge"] == 100 and s["runtime"] == 1500 and s["status"] == ["OL", "CHRG"] and s["model"] == "UT650EG" and round(s["watts"]) == 83, s
+    try:
+        ups.read("127.0.0.1", port, "NOPE"); assert False
+    except RuntimeError as e:
+        assert "没有这个名字" in str(e)
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    ups.save_cfg(con, {"on": True, "host": "127.0.0.1", "port": port, "name": "CyberPower"})
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, level, title))
+    cfg = copy.deepcopy(alerts.DEFAULT_CFG); now = time.time()
+    ups.check(con, cfg, now); assert not fired and ups.STATE["ok"]
+    state.update(status="OB DISCHRG", charge="70"); ups.check(con, cfg, now + 30)
+    assert fired == [("ups_onbatt", "bad", "市电断了,UPS 在用电池")], fired
+    state.update(status="OB DISCHRG LB", charge="15"); ups.check(con, cfg, now + 60)
+    assert fired[-1][0] == "ups_low", fired
+    state.update(status="OL CHRG", charge="16"); ups.check(con, cfg, now + 600)
+    assert fired[-1] == ("ups_onbatt", "ok", "市电恢复"), fired
+    z = so.socket(); z.bind(("127.0.0.1", 0)); dead = z.getsockname()[1]; z.close()
+    ups.save_cfg(con, {"on": True, "host": "127.0.0.1", "port": dead, "name": "CyberPower"})   # 换成没人监听的端口,模拟 NUT 停了
+    n = len(fired); ups.check(con, cfg, now + 700); assert ups.STATE["ok"] is False and len(fired) == n
+    ups.check(con, cfg, now + 700 + 11 * 60); assert fired[-1][0] == "ups_lost", fired
+    for bad in ({"name": "a b"}, {"host": "x y"}, {"port": 0}):
+        try: ups.save_cfg(con, dict({"host": "h", "port": 3493, "name": "n"}, **bad)); assert False
+        except ValueError: pass
+
+
+def test_expiry_and_disks():
+    import sqlite3, time, copy, threading, subprocess, ssl, tempfile, os, socket as so, io, json
+    from app import expiry, alerts, db, sysinfo
+    d = tempfile.mkdtemp()
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", d + "/k.pem", "-out", d + "/c.pem", "-days", "12", "-subj", "/CN=test.local"], check=True, capture_output=True)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain(d + "/c.pem", d + "/k.pem")
+    srv = so.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(5); port = srv.getsockname()[1]
+    def serve():
+        while True:
+            try:
+                c, _ = srv.accept()
+                try: ctx.wrap_socket(c, server_side=True).close()
+                except Exception: c.close()
+            except OSError: return
+    threading.Thread(target=serve, daemon=True).start()
+    r = expiry.check_cert(f"127.0.0.1:{port}")
+    assert r["trusted"] is False and r["days"] in (11, 12) and r["not_after"], r      # 自签名:读得到到期日,但标记不受信任
+    assert expiry.check_cert("127.0.0.1:1")["days"] is None
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    expiry.urllib.request.urlopen = lambda req, timeout=0: R(json.dumps({"events": [{"eventAction": "expiration", "eventDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 20 * 86400 + 60))}]}).encode())
+    assert expiry.check_domain("example.com")["days"] == 20
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    try: expiry.save_cfg(con, {"certs": "bad host!"}); assert False
+    except ValueError: pass
+    expiry.refresh_async = lambda force=False: True
+    c = expiry.save_cfg(con, {"certs": f"https://127.0.0.1:{port}/x\n127.0.0.1:{port}", "domains": "Example.com"})
+    assert c["certs"] == [f"127.0.0.1:{port}"] and c["domains"] == ["example.com"], c
+    expiry.STATE.update(at=int(time.time()), certs={f"127.0.0.1:{port}": r}, domains={"example.com": {"days": 40, "not_after": time.time() + 40 * 86400}})
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, level, key))
+    expiry.check(con, copy.deepcopy(alerts.DEFAULT_CFG), time.time())
+    assert fired == [("cert_expire", "warn", f"127.0.0.1:{port}")], fired               # 11~12 天 <= 14 天提醒;域名 40 天 > 30 天不提醒
+    # 磁盘:读 /proc/mounts,同一块盘去重,小分区忽略
+    m = d + "/mounts"
+    open(m, "w").write(f"overlay / overlay rw 0 0\n/dev/sdz1 {d} ext4 rw 0 0\n/dev/sdz1 {d} ext4 rw 0 0\ntmpfs /tmp tmpfs rw 0 0\nproc /proc proc rw 0 0\n")
+    os.makedirs(d + "/proc_x"); os.rename(m, d + "/proc_x/mounts"); sysinfo.PROC = d + "/proc_x"
+    ds = sysinfo._disks()
+    assert ds and all(x["total"] > 0 and 0 <= x["pct"] <= 100 for x in ds) and len({(x["mp"]) for x in ds}) == len(ds), ds
+    os.environ["DISK_PATHS"] = f"我的盘={d}"
+    assert sysinfo._disks()[0]["name"] == "我的盘"
+    del os.environ["DISK_PATHS"]
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

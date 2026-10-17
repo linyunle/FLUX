@@ -123,6 +123,17 @@ try:
         pg.check("#prOn"); pg.click("#prSave"); pg.wait_for_timeout(800)
         assert "已保存" in pg.inner_text("#prMsg"), pg.inner_text("#prMsg")
         assert pg.evaluate("fetch('/api/probe').then(r=>r.json()).then(j=>j.cfg.on)") is True, "节点测速设置没保存"
+        pg.evaluate("S.set='syslog';openSettings('syslog')"); pg.wait_for_timeout(1200)
+        assert "uci set system" in pg.inner_text("#slCmd") and "未开启" in pg.inner_text("#slInfo"), ("路由器日志设置页没有内容", pg.inner_text("#slInfo"))
+        pg.check("#slOn"); pg.fill("#slPort","25514"); pg.click("#slSave"); pg.wait_for_timeout(1200)
+        assert "已保存" in pg.inner_text("#slMsg"), pg.inner_text("#slMsg")
+        assert pg.evaluate("fetch('/api/syslog').then(r=>r.json()).then(j=>j.cfg.on&&j.cfg.port===25514)") is True, "系统日志设置没保存"
+        pg.evaluate("S.set='ext';openSettings('ext')"); pg.wait_for_timeout(1500)
+        assert "挂载点" in pg.inner_text("#dkRows") and "还没有填名单" in pg.inner_text("#exRes") and "未开启" in pg.inner_text("#upInfo"), ("UPS/到期/磁盘页没有内容", pg.inner_text("#dkRows")[:200])
+        pg.fill("#exCerts","127.0.0.1:1"); pg.click("#exSave"); pg.wait_for_timeout(1500)
+        assert "已保存" in pg.inner_text("#exMsg") and "127.0.0.1:1" in pg.inner_text("#exRes"), (pg.inner_text("#exMsg"), pg.inner_text("#exRes"))
+        pg.click("#upTest"); pg.wait_for_timeout(1500); assert "连不上" in pg.inner_text("#upMsg"), pg.inner_text("#upMsg")
+        pg.evaluate("fetch('/api/expiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({certs:'',domains:''})})")
         pg.evaluate("S.tab='devices';S.dd='';showTab();refresh()"); pg.wait_for_timeout(4000)
         assert "在线" in pg.inner_text("#devTbl"), ("设备页没有显示在线状态", pg.inner_text("#devTbl")[:300])
         pg.locator("#devTbl .wch").first.click(); pg.wait_for_timeout(1500)

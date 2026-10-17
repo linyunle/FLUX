@@ -291,6 +291,36 @@ try:
     ok(get("/api/diag?full=1")["masked"] is False, "诊断包:完整版")
     ok("wan" in get("/api/sys") and "targets" in get("/api/wan") and isinstance(get("/api/wan")["hours"], dict), "宽带质量:接口")
     ar2 = get("/api/alerts/config")["rules"]; ok(all(k in ar2 for k in ("wan_down", "wan_ip", "wan_loss", "sub_stale")), "告警:宽带/订阅规则存在")
+    # ---- v0.20.0
+    ok(all(k in get("/api/alerts/config")["rules"] for k in ("syslog_crit", "ups_onbatt", "ups_low", "ups_lost", "cert_expire", "domain_expire")), "告警:日志/UPS/到期规则存在")
+    sy = get("/api/sys"); ok(isinstance(sy.get("disks"), list) and sy["disks"] and sy["disks"][0]["total"] > 0 and "ups" in sy, f"磁盘:全部挂载盘 {[d['name'] for d in sy['disks']]}")
+    sl = get("/api/syslog"); ok(sl["cfg"]["on"] is False and sl["rows"] == 0 and sl["rows_data"] == [], "系统日志:默认关闭")
+    ok(post("/api/syslog/cfg", {"on": True, "port": 80})[0] == 400, "系统日志:端口范围校验")
+    import socket as _so
+    _s = _so.socket(_so.AF_INET, _so.SOCK_DGRAM); _s.bind(("127.0.0.1", 0)); sp = _s.getsockname()[1]; _s.close()
+    c, r = post("/api/syslog/cfg", {"on": True, "port": sp, "days": 2, "max_rows": 2000}); ok(c == 200 and r["cfg"]["on"] and r["cfg"]["days"] == 2, "系统日志:保存设置")
+    for _ in range(40):
+        if get("/api/syslog")["bound"] == sp: break
+        time.sleep(0.5)
+    ok(get("/api/syslog")["bound"] == sp, "系统日志:开始监听")
+    _c = _so.socket(_so.AF_INET, _so.SOCK_DGRAM)
+    _c.sendto("<30>Oct 17 19:58:00 OpenWrt dnsmasq[12]: DHCPACK e2e-marker".encode(), ("127.0.0.1", sp)); _c.sendto("<11>Oct 17 19:58:01 OpenWrt kernel: Out of memory: Killed process 9 (e2e-oom)".encode(), ("127.0.0.1", sp))
+    for _ in range(20):
+        if get("/api/syslog")["rows"] >= 2: break
+        time.sleep(0.5)
+    sl = get("/api/syslog", ) ; ok(sl["rows"] >= 2 and any("e2e-marker" in x["msg"] for x in sl["rows_data"]), "系统日志:收到并入库")
+    ok(len(get("/api/syslog?level=3")["rows_data"]) == 1 and len(get("/api/syslog?q=e2e-marker")["rows_data"]) == 1, "系统日志:按级别和关键词筛选")
+    so_ = wait_kind("syslog_crit", 40); ok(so_ and "严重" in so_[0]["title"], f"系统日志:严重信息告警 {so_[:1]}")
+    ok(get("/api/backup")["syslog"]["port"] == sp and "ups" in get("/api/backup") and "expiry" in get("/api/backup"), "备份:包含日志/UPS/到期设置")
+    c, r = post("/api/syslog/clear", {}); ok(c == 200 and get("/api/syslog")["rows"] == 0, "系统日志:清空")
+    post("/api/syslog/cfg", {"on": False, "port": sp})
+    up = get("/api/ups"); ok(up["cfg"]["on"] is False and up["cfg"]["name"] == "CyberPower", "UPS:默认关闭")
+    ok(post("/api/ups", {"on": True, "name": "bad name"})[0] == 400, "UPS:名称校验")
+    ok(post("/api/ups/test", {"host": "127.0.0.1", "port": 1, "name": "x"})[0] == 400, "UPS:连不上会报错")
+    ex = get("/api/expiry"); ok(ex["cfg"] == {"certs": [], "domains": []}, "到期检查:默认没有名单")
+    ok(post("/api/expiry", {"certs": "bad host!"})[0] == 400, "到期检查:地址校验")
+    c, r = post("/api/expiry", {"certs": "127.0.0.1:1", "domains": ""}); ok(c == 200 and r["cfg"]["certs"] == ["127.0.0.1:1"], "到期检查:保存名单")
+    post("/api/expiry", {"certs": "", "domains": ""})
     names_ = [n["node"] for n in get("/api/qoe")["nodes"]]
     ok("XX-01" in names_ and "HK-01" in names_, f"节点:订阅(provider)里的节点也被读到 {names_[:6]}")
     rp = get("/api/report"); ok(rp["up"] + rp["down"] > 0 and rp["devices"] and rp["kinds"]["proxy"] > 0 and rp["quota"], "周报:数据")

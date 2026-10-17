@@ -14,7 +14,7 @@ SYSFS = os.environ.get("SYS_SYSFS", "/sys")
 # (时间戳, CPU%, 内存已用, 连接跟踪数, 最高温度, 总下行B/s, 总上行B/s)
 SERIES = collections.deque(maxlen=600)
 STATE = {"at": 0, "cpu": None, "load": None, "ncpu": os.cpu_count() or 1, "mem": None, "uptime": 0, "temps": [],
-         "ct": None, "ifaces": [], "disk": None}
+         "ct": None, "ifaces": [], "disk": None, "disks": []}
 _lock = threading.Lock()
 _last = {"cpu": None, "net": None, "t": 0.0}
 SKIP_IF = ("lo", "veth", "docker", "br-", "ifb", "bonding_masters")
@@ -107,6 +107,56 @@ def _disk():
         return None
 
 
+REAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "vfat", "exfat", "ntfs", "ntfs3", "fuseblk", "overlay", "zfs", "jfs", "ubifs"}
+SKIP_MP = ("/proc", "/sys", "/dev", "/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/run", "/var/run", "/var/lib/docker")
+
+
+def _stat(mp):
+    st = os.statvfs(mp)
+    tot, free = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
+    return st, tot, free
+
+
+def _disks():
+    """所有挂载的硬盘/分区的空间。容器里只能看到挂进来的盘:要看路由器上别的硬盘,
+    在 compose 里加一行 `- /mnt:/host/mnt:ro,rslave`(只读),或用环境变量 DISK_PATHS=名称=路径,名称=路径 指定。"""
+    out, seen = [], set()
+
+    def add(name, mp, fs):
+        try:
+            st, tot, free = _stat(mp)
+        except OSError:
+            return
+        if tot < 64 * 1048576:
+            return
+        key = (getattr(st, "f_fsid", 0), st.f_blocks)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({"name": name, "mp": mp, "fs": fs, "total": tot, "free": free, "pct": round((tot - free) * 100 / tot, 1)})
+
+    for it in (os.environ.get("DISK_PATHS") or "").split(","):
+        n, _, p = it.partition("=")
+        if n.strip() and p.strip():
+            add(n.strip(), p.strip(), "")
+    d = config.DATA_DIR if os.path.isdir(config.DATA_DIR) else "/"
+    add("面板数据所在盘", d, "")
+    try:
+        lines = _rd(PROC + "/mounts").splitlines()
+    except OSError:
+        lines = []
+    for ln in lines:
+        f = ln.split()
+        if len(f) < 3:
+            continue
+        mp, fs = f[1].replace("\\040", " "), f[2]
+        if fs not in REAL_FS or mp.startswith(SKIP_MP) or (fs == "overlay" and mp != "/"):
+            continue
+        label = mp[5:] if mp.startswith("/host/") else mp
+        add("容器根(Docker 所在盘)" if mp == "/" else label or "/", mp, fs)
+    return out[:12]
+
+
 def sample():
     now = time.time()
     cpu = _cpu()
@@ -124,11 +174,15 @@ def sample():
     temps, ct, ifs = _temps(), _ct(), _net(now)
     if now - _last["t"] > 30 or STATE["disk"] is None:
         _last["t"], disk = now, _disk()
+        try:
+            disks = _disks()
+        except Exception:
+            disks = STATE["disks"]
     else:
-        disk = STATE["disk"]
+        disk, disks = STATE["disk"], STATE["disks"]
     with _lock:
         STATE.update(at=int(now), cpu=cpu if cpu is not None else STATE["cpu"], load=load, mem={"used": used, "total": total} if total else None,
-                     uptime=up, temps=temps, ct=ct, ifaces=ifs, disk=disk)
+                     uptime=up, temps=temps, ct=ct, ifaces=ifs, disk=disk, disks=disks)
         if cpu is not None:
             SERIES.append((now, cpu, used, ct["n"] if ct else 0, max((t["c"] for t in temps), default=0),
                            sum(i["down"] for i in ifs), sum(i["up"] for i in ifs)))

@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -1007,6 +1007,8 @@ q_nodescore = _q(lambda con, p: {"rows": advisor.node_scores(con)})
 def q_sys(p):
     s = sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", "120") or 120))))
     s["wan"] = wan.snapshot()
+    u = ups.STATE
+    s["ups"] = {"ok": u["ok"], "info": u["info"], "onbatt_since": u["onbatt_since"]} if u["ok"] is not None else None
     return 200, s
 
 
@@ -1075,6 +1077,22 @@ def p_update(body):
 
 POST_ROUTES = {"/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
+
+
+q_syslog = _q(lambda con, p: dict(syslog.status(con), rows_data=syslog.query(
+    con, int(one(p, "level", "7") or 7), one(p, "q"), int(one(p, "n", "200") or 200), int(one(p, "before", "0") or 0))))
+q_ups = _q(lambda con, p: ups.status(con))
+q_expiry = _q(lambda con, p: expiry.status(con))
+GET_ROUTES.update({"/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+POST_ROUTES.update({
+    "/api/syslog/cfg": lambda body: _wcon(lambda con: {"cfg": syslog.save_cfg(con, body)}),
+    "/api/syslog/clear": lambda body: _wcon(lambda con: syslog.clear(con)),
+    "/api/ups": lambda body: _wcon(lambda con: {"cfg": ups.save_cfg(con, body)}),
+    "/api/ups/test": lambda body: _wcon(lambda con: ups.test(con, body)),
+    "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
+    "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
+})
+AUDIT.update({"/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单"})
 
 
 # ---------------------------------------------------------------- HTTP

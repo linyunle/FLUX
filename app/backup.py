@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe
+from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry
 
 MAX_THEME = 64 * 1024
 
@@ -66,6 +66,9 @@ def export(con, secrets=False):
     out["group_policy"] = groups.policy(con)
     out["probe"] = probe.load_cfg(con)
     out["dev_watch"] = presence.watch_list(con)
+    out["syslog"] = syslog.load_cfg(con)
+    out["ups"] = ups.load_cfg(con)
+    out["expiry"] = expiry.load_cfg(con)
     return out
 
 
@@ -132,4 +135,10 @@ def restore(con, d):
             for k in d["dev_watch"][:500]:
                 presence.set_watch(con, k, True)
         step("关注的设备", w)
+    if isinstance(d.get("syslog"), dict):
+        step("系统日志设置", lambda: syslog.save_cfg(con, d["syslog"]))
+    if isinstance(d.get("ups"), dict):
+        step("UPS 设置", lambda: ups.save_cfg(con, d["ups"]))
+    if isinstance(d.get("expiry"), dict):
+        step("到期检查名单", lambda: expiry.save_cfg(con, d["expiry"]))
     return {"ok": True, "done": done, "skipped": skipped}

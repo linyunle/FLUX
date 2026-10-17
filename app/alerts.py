@@ -45,6 +45,12 @@ KINDS = {
     "wan_ip": "公网 IP 变化",
     "wan_loss": "宽带丢包",
     "sub_stale": "订阅长时间没更新",
+    "syslog_crit": "路由器日志严重信息",
+    "ups_onbatt": "UPS 断电 / 恢复",
+    "ups_low": "UPS 电量低",
+    "ups_lost": "读不到 UPS",
+    "cert_expire": "证书到期",
+    "domain_expire": "域名到期",
 }
 LEVELS = ("bad", "warn", "info", "ok", "note")
 
@@ -72,10 +78,16 @@ DEFAULT_RULES = {
     "wan_ip": {"on": True, "cool_min": 60},
     "wan_loss": {"on": True, "pct": 50, "cool_min": 30},
     "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
+    "syslog_crit": {"on": True, "cool_min": 60},
+    "ups_onbatt": {"on": True, "cool_min": 5},
+    "ups_low": {"on": True, "pct": 20, "cool_min": 30},
+    "ups_lost": {"on": True, "after_min": 10, "cool_min": 360},
+    "cert_expire": {"on": True, "days": 14, "cool_min": 1440},
+    "domain_expire": {"on": True, "days": 30, "cool_min": 1440},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
@@ -464,10 +476,10 @@ def check_sys(con, cfg, now):
     if r["sys_temp"]["on"] and tm is not None and tm >= r["sys_temp"]["c"] and _allow("sys_temp", "temp", r["sys_temp"]["cool_min"], now):
         fire(con, cfg, "sys_temp", "warn", "temp", f"路由器温度 {tm:.0f}℃",
              f"最高温度传感器读数 {tm:.1f}℃(阈值 {r['sys_temp']['c']:g}℃)。检查散热、通风,或是否长时间满载。", now)
-    d = s.get("disk")
-    if r["sys_disk"]["on"] and d and d.get("pct") is not None and d["pct"] >= r["sys_disk"]["pct"] and _allow("sys_disk", "disk", r["sys_disk"]["cool_min"], now):
-        fire(con, cfg, "sys_disk", "warn", "disk", f"磁盘已用 {d['pct']:.0f}%",
-             f"面板数据所在的磁盘已用 {d['pct']:.1f}%,剩余 {d['free'] // 1048576} MB(阈值 {r['sys_disk']['pct']:g}%)。", now)
+    for d in (s.get("disks") or ([dict(s["disk"], name="面板数据所在盘", mp="")] if s.get("disk") else [])):
+        if r["sys_disk"]["on"] and d.get("pct") is not None and d["pct"] >= r["sys_disk"]["pct"] and _allow("sys_disk", d.get("mp") or "disk", r["sys_disk"]["cool_min"], now):
+            fire(con, cfg, "sys_disk", "warn", d.get("mp") or "disk", f"磁盘「{d.get('name', '')}」已用 {d['pct']:.0f}%",
+                 f"{d.get('name', '')}{'(' + d['mp'] + ')' if d.get('mp') else ''}已用 {d['pct']:.1f}%,剩余 {d['free'] // 1048576} MB(阈值 {r['sys_disk']['pct']:g}%)。", now)
     m = s.get("mem")
     if r["sys_mem"]["on"] and m and m["total"] and m["used"] * 100 / m["total"] >= r["sys_mem"]["pct"] and _allow("sys_mem", "mem", r["sys_mem"]["cool_min"], now):
         fire(con, cfg, "sys_mem", "warn", "mem", f"路由器内存已用 {m['used'] * 100 // m['total']}%",
@@ -537,6 +549,21 @@ def check_wan(con, cfg, now):
                  f"最近 5 分钟到公共 DNS 的丢包 {'、'.join(k + ' ' + str(v['loss']) + '%' for k, v in t.items() if not v['gw'] and not v['silent'])}。{where}", now)
 
 
+def check_syslog(con, cfg, now):
+    from . import syslog
+    syslog.check(con, cfg, now)
+
+
+def check_ups(con, cfg, now):
+    from . import ups
+    ups.check(con, cfg, now)
+
+
+def check_expiry(con, cfg, now):
+    from . import expiry
+    expiry.check(con, cfg, now)
+
+
 def check_sub_stale(con, cfg, now):
     from . import providers
     providers.check_stale(con, cfg, now)
@@ -558,7 +585,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry)]
 
 
 def evaluate(con, now=None):
