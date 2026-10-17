@@ -1670,9 +1670,9 @@ function loadProv(){load("prov","/api/providers",{},j=>{
 function loadQuota(){load("quota","/api/quota",{},j=>{
   const c=$("#quotaCard");if(!j.rows.length){c.style.display="none";return}c.style.display="";
   $("#quotaBody").innerHTML=j.rows.map(q=>{const col=q.pct>=95?"var(--bad)":q.pct>=80?"var(--warn)":"var(--accent)";
-    const once=q.type==="once",ex=q.expire_days;
+    const once=q.type==="once",ex=q.expire_days,off=q.src==="official";
     const exTag=q.expire?`<span class="lv ${ex<0||ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${q.expire}</span>`:`<span class="lv note">${once||off?"永不过期":"无到期日"}</span>`;
-    const off=q.src==="official",live=off?`官方 ${fmt(q.off_used)}${q.off_at?"(更新于 "+fmtTs(q.off_at)+")":""} + 此后面板新增 ${fmt(q.since)}`:"",per=off&&q.auto?`${live} · 周期以机场后台为准`:off?`${once?"一次性流量":"周期 "+q.start.slice(5)+" → "+q.end.slice(5)}(${live})`:once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
+    const live=off?`官方 ${fmt(q.off_used)}${q.off_at?"(更新于 "+fmtTs(q.off_at)+")":""} + 此后面板新增 ${fmt(q.since)}`:"",per=off&&q.auto?`${live} · 周期以机场后台为准`:off?`${once?"一次性流量":"周期 "+q.start.slice(5)+" → "+q.end.slice(5)}(${live})`:once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
     return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(q.airport)}</b><span>${fmt(q.used)} / ${fmtGB(q.gb)} · ${q.pct}%</span>${exTag}<span class="sub">${per} · 近 7 天日均 ${fmt(q.rate)}${q.exhaust?` · 预计 ${q.exhaust.slice(5)} 用完${q.over?" ⚠ 早于"+(once?"到期日":"重置日"):""}`:""}</span></div>${barR(q.pct,col)}${q.known?"":'<div class="sub">还没有节点归到这个机场(检查机场名是否和「机场归类」一致)</div>'}</div>`}).join("")})}
 $("#quotaGo").onclick=()=>openSettings("quota");
 

@@ -112,6 +112,7 @@ try:
         assert gap<45, ("内存图表没有撑满卡片", gap)
         pg.evaluate("S.tab='nodes';showTab();refresh()"); pg.wait_for_timeout(2500)
         assert "MyAir" in pg.inner_text("#provBody"), "机场官方数据卡没有显示"
+        qb=pg.inner_text("#quotaBody"); assert "MyAir" in qb and "NoExp" in qb and "永不过期" in qb, ("套餐用量卡没有显示官方机场(含无到期日的)", qb)
         pg.evaluate("S.set='plog';openSettings('plog')"); pg.wait_for_timeout(1500)
         assert "127.0.0.1" in pg.inner_text("#plClients") and pg.input_value("#plText").strip(), "访问记录/面板日志没有内容"
         pg.evaluate("S.set='probe';openSettings('probe')"); pg.wait_for_timeout(1000)
