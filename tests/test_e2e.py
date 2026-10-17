@@ -1,10 +1,11 @@
 import json, os, sqlite3, subprocess, sys, tempfile, time, urllib.request, urllib.error
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import mock_mihomo
+import mock_mihomo, mock_docker
 API_P, PROBE_P, WEB_P = 19090, 18999, 18099
 mock_mihomo.start(API_P, PROBE_P)
 mock_mihomo.start_agh(19444)
+mock_docker.start(19331)
 
 data = tempfile.mkdtemp()
 import shutil
@@ -318,6 +319,21 @@ try:
         time.sleep(0.5)
     ok(get("/api/syslog?q=e2e-keep")["rows_data"] and not get("/api/syslog?q=e2e-skip")["rows_data"] and get("/api/syslog")["ignored"] >= 1, "系统日志:命中忽略名单的不入库")
     so_ = wait_kind("syslog_crit", 40); ok(so_ and "严重" in so_[0]["title"], f"系统日志:严重信息告警 {so_[:1]}")
+    # ---- v0.21.0 容器页
+    dk = get("/api/docker"); ok(dk["cfg"]["on"] is False and dk["rows"] == [] and get("/api/status")["docker"] is False, "容器:默认关闭")
+    ok(post("/api/docker/cfg", {"on": True, "url": "unix:///var/run/docker.sock"})[0] == 400 and post("/api/docker/cfg", {"on": True, "url": "http://8.8.8.8:2375"})[0] == 400, "容器:拒绝直连 docker.sock 和公网地址")
+    ok(post("/api/docker/cfg", {"on": True, "url": "http://127.0.0.1:19331", "control": True})[0] == 400, "容器:没设访问密码不能开启控制")
+    ok(post("/api/docker/test", {"url": "http://127.0.0.1:1"})[0] == 400, "容器:连不上会报错")
+    c, r = post("/api/docker/test", {"url": "http://127.0.0.1:19331"}); ok(c == 200 and r["containers"] == 4, "容器:测试连接")
+    c, r = post("/api/docker/cfg", {"on": True, "url": "http://127.0.0.1:19331"}); ok(c == 200 and r["cfg"]["on"] and not r["cfg"]["control"], "容器:保存设置(默认只读)")
+    dk = get("/api/docker?force=1"); names = {x["name"]: x for x in dk["rows"]}
+    ok(dk["ok"] and set(names) == {"flux", "navidrome", "lrcapi", "docker-socket-proxy"} and names["navidrome"]["cpu"] == 40.0 and names["flux"]["locked"], f"容器:列表和资源占用 {sorted(names)}")
+    ok("hello /navidrome" in get("/api/docker/logs?id=" + "b" * 12)["text"], "容器:日志")
+    ok(get("/api/status")["docker"] is True, "容器:状态里带开关(前端据此显示导航)")
+    ok(post("/api/docker/act", {"id": "b" * 12, "action": "stop"})[0] == 400, "容器:只读模式下不能操作")
+    ok("docker" in get("/api/backup") and get("/api/backup")["docker"]["on"], "备份:包含容器设置")
+    ok(get("/api/diag")["docker"]["ok"] is True, "诊断包:容器状态")
+    post("/api/docker/cfg", {"on": False})
     ok(get("/api/backup")["syslog"]["port"] == sp and "ups" in get("/api/backup") and "expiry" in get("/api/backup"), "备份:包含日志/UPS/到期设置")
     c, r = post("/api/syslog/clear", {}); ok(c == 200 and get("/api/syslog")["rows"] == 0, "系统日志:清空")
     post("/api/syslog/cfg", {"on": False, "port": sp})

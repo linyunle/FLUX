@@ -2,8 +2,8 @@
 import os, subprocess, sys, tempfile, time, shutil
 ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT+'/tests')
-import mock_mihomo
-mock_mihomo.start(19091, 18998); mock_mihomo.start_agh(19445); mock_mihomo.STATE["leak"]=True
+import mock_mihomo, mock_docker
+mock_mihomo.start(19091, 18998); mock_mihomo.start_agh(19445); mock_docker.start(19332); mock_mihomo.STATE["leak"]=True
 data=tempfile.mkdtemp(); neigh=data+"/n"
 os.makedirs(data+"/geoip"); shutil.copy(ROOT+"/tests/data/country-test.mmdb",data+"/geoip/"); shutil.copy(ROOT+"/tests/data/asn-test.mmdb",data+"/geoip/")
 open(neigh,"w").write("192.168.1.10 dev br lladdr aa:bb:cc:dd:ee:01 REACHABLE\n")
@@ -134,6 +134,19 @@ try:
         assert "已保存" in pg.inner_text("#exMsg") and "127.0.0.1:1" in pg.inner_text("#exRes"), (pg.inner_text("#exMsg"), pg.inner_text("#exRes"))
         pg.click("#upTest"); pg.wait_for_timeout(1500); assert "连不上" in pg.inner_text("#upMsg"), pg.inner_text("#upMsg")
         pg.evaluate("fetch('/api/expiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({certs:'',domains:''})})")
+        pg.evaluate("S.set='docker';openSettings('docker')"); pg.wait_for_timeout(1200)
+        assert "docker-socket-proxy" in pg.inner_text("#dkYml1") and "ALLOW_RESTARTS" in pg.inner_text("#dkYml2"), "容器设置页没有 compose 示例"
+        pg.check("#dkOn"); pg.fill("#dkUrl","http://127.0.0.1:19332"); pg.click("#dkTest"); pg.wait_for_timeout(1500)
+        assert "4 个容器" in pg.inner_text("#dkMsg"), pg.inner_text("#dkMsg")
+        pg.click("#dkSave"); pg.wait_for_timeout(1500); assert "已保存" in pg.inner_text("#dkMsg"), pg.inner_text("#dkMsg")
+        assert "容器" in pg.inner_text("#nav"), "开启后导航里没有「容器」"
+        pg.evaluate("S.tab='docker';showTab();refresh()"); pg.wait_for_timeout(2500)
+        tb=pg.inner_text("#dkBody"); assert "navidrome" in tb and "lrcapi" in tb and "40%" in tb and "已停止" in tb, tb
+        assert pg.locator('#dkBody button[data-dk="stop"]').count()==0, "只读模式下不该有停止按钮"
+        pg.locator('#dkBody button[data-dk="logs"]').nth(1).click(); pg.wait_for_timeout(1500)
+        assert "hello /" in pg.input_value("#dkLog"), pg.input_value("#dkLog")
+        pg.evaluate("fetch('/api/docker/cfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:false})}).then(()=>status())"); pg.wait_for_timeout(800)
+        assert pg.evaluate("S.tab")=="overview" or "容器" not in pg.inner_text("#nav"), "关闭后导航里还有「容器」"
         pg.evaluate("S.tab='devices';S.dd='';showTab();refresh()"); pg.wait_for_timeout(4000)
         assert "在线" in pg.inner_text("#devTbl"), ("设备页没有显示在线状态", pg.inner_text("#devTbl")[:300])
         pg.locator("#devTbl .wch").first.click(); pg.wait_for_timeout(1500)

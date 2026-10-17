@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry
+from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
 
 MAX_THEME = 64 * 1024
 
@@ -69,6 +69,7 @@ def export(con, secrets=False):
     out["syslog"] = syslog.load_cfg(con)
     out["ups"] = ups.load_cfg(con)
     out["expiry"] = expiry.load_cfg(con)
+    out["docker"] = dockerapi.load_cfg(con)
     return out
 
 
@@ -141,4 +142,6 @@ def restore(con, d):
         step("UPS 设置", lambda: ups.save_cfg(con, d["ups"]))
     if isinstance(d.get("expiry"), dict):
         step("到期检查名单", lambda: expiry.save_cfg(con, d["expiry"]))
+    if isinstance(d.get("docker"), dict):
+        step("容器管理设置", lambda: dockerapi.save_cfg(con, d["docker"]))
     return {"ok": True, "done": done, "skipped": skipped}

@@ -51,6 +51,8 @@ KINDS = {
     "ups_lost": "读不到 UPS",
     "cert_expire": "证书到期",
     "domain_expire": "域名到期",
+    "docker_down": "容器停了 / 反复重启",
+    "docker_unhealthy": "容器不健康",
 }
 LEVELS = ("bad", "warn", "info", "ok", "note")
 
@@ -84,6 +86,8 @@ DEFAULT_RULES = {
     "ups_lost": {"on": True, "after_min": 10, "cool_min": 360},
     "cert_expire": {"on": True, "days": 14, "cool_min": 1440},
     "domain_expire": {"on": True, "days": 30, "cool_min": 1440},
+    "docker_down": {"on": True, "cool_min": 30},
+    "docker_unhealthy": {"on": True, "cool_min": 120},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
@@ -564,6 +568,11 @@ def check_expiry(con, cfg, now):
     expiry.check(con, cfg, now)
 
 
+def check_docker(con, cfg, now):
+    from . import dockerapi
+    dockerapi.check(con, cfg, now)
+
+
 def check_sub_stale(con, cfg, now):
     from . import providers
     providers.check_stale(con, cfg, now)
@@ -585,7 +594,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry), ("docker", check_docker)]
 
 
 def evaluate(con, now=None):

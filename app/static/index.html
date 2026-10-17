@@ -402,6 +402,16 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div></div>
 </section>
 
+<section id="tab-docker" style="display:none">
+  <div class="card"><h2>Docker 容器 <span class="sub" id="dkAge"></span><span class="sp"></span><button id="dkRefresh">刷新</button></h2>
+    <div class="tiles" id="dkTiles" style="margin-bottom:10px"></div>
+    <div class="msg" id="dkPageMsg"></div>
+    <div class="scroll" id="dkBody"><div class="sub">读取中…</div></div></div>
+  <div class="card" id="dkLogCard" style="display:none"><h2>日志:<span id="dkLogName"></span><span class="sp"></span><button id="dkLogReload">刷新</button><button id="dkLogClose">关闭</button></h2>
+    <div class="sub" style="margin-bottom:6px">最近 300 行(带时间戳,不含容器的环境变量)。</div>
+    <textarea id="dkLog" rows="18" readonly style="width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre"></textarea></div>
+</section>
+
 <section id="tab-security" style="display:none">
   <div class="tiles secgrid" id="secTiles" style="position:static"></div>
   <div class="card" id="secFindCard"><h2>需要关注 <span id="secLvl"></span><span class="sp"></span><span class="sub" id="secAt"></span></h2><div id="secFinds"></div></div>
@@ -611,6 +621,20 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="h3">磁盘空间</div>
   <div class="sub" style="margin-bottom:8px;line-height:1.7">面板能看到的所有挂载的硬盘/分区。容器里默认只看得到自己的数据盘;想看路由器上别的硬盘,在 compose 的 volumes 里加一行只读挂载:<code>- /mnt:/host/mnt:ro,rslave</code>,重建容器后就会列出来(只读,面板不会写这些盘)。也可以用环境变量 <code>DISK_PATHS=名称=路径,名称=路径</code> 指定。空间不足的告警在「告警与推送 → 磁盘空间不足」。</div>
   <div class="scroll" id="dkRows"></div></div>
+      <div class="card sec" id="sec-docker"><h2>Docker 容器</h2>
+  <div class="sub" style="margin-bottom:10px;line-height:1.7">在面板里看路由器上 Docker 容器的运行状态、CPU / 内存、日志,容器意外停了会告警;可选地允许启动 / 停止 / 重启。<b>面板不挂载 docker.sock</b>(挂了等于把整台路由器的 root 权限交给它),而是通过一个受限的 <b>docker-socket-proxy</b> 访问 Docker:代理只放行你指定的几类请求,面板读不到容器的环境变量(里面常有密码),也不能创建 / 删除容器或进入容器执行命令。</div>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="dkOn"> 开启容器页</label>
+  <div class="fld" style="margin-top:8px"><label>docker-socket-proxy 地址(只允许本机 / 内网地址)</label><input id="dkUrl" placeholder="http://127.0.0.1:2375"></div>
+  <label class="crow sub" style="cursor:pointer;margin-top:6px"><input type="checkbox" id="dkCtl"> 允许在面板里启动 / 停止 / 重启容器(默认关闭)</label>
+  <div class="sub" id="dkCtlNote" style="margin:4px 0 0 24px;line-height:1.6">开启后:必须已设置访问密码;不能操作 FLUX 自己和代理本身;每次操作都会记进「告警」时间线(哪个设备、哪个容器、什么时候)。另外代理那边也要放行这几个操作(见下面)。</div>
+  <div class="msg" id="dkMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button id="dkTest">测试连接</button><button id="dkSave" class="pri">保存</button></div>
+  <div class="h3">第一步:部署代理(只读)</div>
+  <div class="sub" style="margin-bottom:6px;line-height:1.6">在 flux 的 compose 文件里加一个服务(或单独一个 compose 文件),然后 <code>docker compose up -d</code>。端口只绑在 127.0.0.1,局域网里别的设备连不上它。</div>
+  <pre id="dkYml1" style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0"></pre>
+  <div class="h3">要在面板里启动 / 停止 / 重启:代理再多放行这几项</div>
+  <div class="sub" style="margin-bottom:6px;line-height:1.6">把代理的 environment 改成下面这样,<code>docker compose up -d</code> 重建代理。仍然不放行创建、删除、exec。如果面板里点操作提示 403,说明代理没放行,把这一段核对一遍。</div>
+  <pre id="dkYml2" style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0"></pre></div>
       <div class="card sec" id="sec-plog"><h2>访问记录与面板日志</h2>
   <div class="h3" style="margin-top:0">自检与诊断包</div>
   <div class="sub" style="margin-bottom:8px">自检会检查面板自己的运行状态、数据一致性和配置,把看起来不对劲的地方列出来(很多 bug 会先在这里露出来)。诊断包是一个 JSON 文件:版本、配置摘要、节点/订阅状态、最近告警、面板日志、页面脚本报错和自检结果;<b>不含任何密码或 Token</b>,默认把 IP / MAC / 设备名打码。</div>
@@ -665,7 +689,8 @@ const S={airport:"",apRules:"",merge:true,domRows:[],range:"today",from:"",to:""
 const RANGES=[["today","今天"],["yday","昨天"],["7d","7 天"],["30d","30 天"],["month","本月"],["custom","自定义"]];
 const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
-const TABS=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["security","安全"],["alerts","告警"],["settings","设置"]];
+const TABS_ALL=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["docker","容器"],["security","安全"],["alerts","告警"],["settings","设置"]];
+let TABS=TABS_ALL.filter(t=>t[0]!=="docker");
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
  airports:'<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>',
@@ -675,7 +700,8 @@ const ICON={
  domains:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
  rules:'<path d="M4 6h16M4 12h10M4 18h6"/><path d="M17 15l2 2 3-4"/>',
  security:'<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
- alerts:'<path d="M6 17h12l-1.5-2V10a4.5 4.5 0 00-9 0v5z"/><path d="M10 20a2 2 0 004 0"/>'};
+ alerts:'<path d="M6 17h12l-1.5-2V10a4.5 4.5 0 00-9 0v5z"/><path d="M10 20a2 2 0 004 0"/>',
+ docker:'<rect x="3" y="11" width="18" height="8" rx="1.5"/><path d="M6.5 11V8h3v3M10.5 11V8h3v3M14.5 11V8h3v3M10.5 8V5h3v3"/>'};
 const svgI=k=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]||""}</svg>`;
 
 function seg(el,items,cur,onpick){el.innerHTML=items.map(([k,l])=>`<button data-k="${esc(k)}" aria-pressed="${k===cur}">${esc(l)}</button>`).join("");el.onclick=e=>{const b=e.target.closest("button");if(b)onpick(b.dataset.k)}}
@@ -713,7 +739,7 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dat
   else if(k==="devs"){S.devs.clear();renderDevList()}
   else{S[k]="";if(k==="q")$("#hostQ").value=""}
   renderChrome();syncAp();refresh()};
-function showTab(){for(const [k] of TABS)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
+function showTab(){for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
 
 /* ---------- 设备下拉 ---------- */
 function devLabel(d){return d.name||d.ips.find(i=>!i.includes(":"))||d.ips[0]||d.key}
@@ -1526,6 +1552,8 @@ const RULE_META=[
  ["ups_lost","读不到 UPS","面板连续这么久读不到 NUT 的数据(NUT 服务停了、USB 线松了)",[["after_min","持续","分钟"],["cool_min","间隔","分钟"]]],
  ["cert_expire","证书到期","「设置 → UPS 与到期」里填的证书,到期前这些天数内提醒,已过期也提醒",[["days","提前","天"],["cool_min","同一证书间隔","分钟"]]],
  ["domain_expire","域名到期","同上,域名注册到期日(RDAP 查询)",[["days","提前","天"],["cool_min","同一域名间隔","分钟"]]],
+ ["docker_down","容器停了 / 反复重启","原本在运行的 Docker 容器停了、退出或一直在重启时提醒(在面板里点停止的不算);需要先在「设置 → 容器」开启",[["cool_min","同一容器间隔","分钟"]]],
+ ["docker_unhealthy","容器不健康","容器自带的健康检查(healthcheck)报 unhealthy 时提醒",[["cool_min","同一容器间隔","分钟"]]],
  ["traffic_spike","流量突增","设备这一小时的流量 ≥ 平时同一钟点均值 × 倍数,且不少于下限(没有历史基线时只看下限)",[["min_mb","下限","MB"],["factor","倍数","×"],["cool_min","同一设备间隔","分钟"]]],
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
@@ -1572,7 +1600,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["ext","UPS 与到期"],["plog","访问与日志"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1591,6 +1619,7 @@ async function loadSettings(){
     else if(S.set==="probe")await loadProbeSet();
     else if(S.set==="syslog")await loadSyslogSet();
     else if(S.set==="ext")await loadExtSet();
+    else if(S.set==="docker")await loadDockerSet();
     else if(S.set==="plog")await loadPlog();
     else if(S.set==="backup"){const j=await get("/api/ui");$("#bkInfo").textContent=j.at?"服务器上的外观设置最近同步:"+new Date(j.at*1000).toLocaleString():"服务器上还没有外观设置(改一下外观就会同步)"}
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
@@ -1782,6 +1811,59 @@ $("#quotaSave").onclick=async()=>{const m=$("#quotaMsg");m.className="msg";syncQ
 async function loadProbeSet(){const j=await get("/api/probe");$("#prOn").checked=j.cfg.on;$("#prMin").value=j.cfg.minutes;$("#prTop").value=j.cfg.top;$("#prUrl").value=j.cfg.url;$("#prMsg").textContent="";
   $("#prInfo").innerHTML=(j.last?`上一轮 ${fmtTs(j.last.at)}:测了 ${j.last.n} 个,${j.last.ok} 个有响应,${j.last.fail} 个超时/失败。<br>`:"还没有测过。")+`下一轮会测的节点(最近 24 小时流量最大的 ${j.cfg.top} 个):${j.nodes.length?j.nodes.map(esc).join("、"):"暂无"}`}
 $("#prSave").onclick=async()=>{const m=$("#prMsg");m.className="msg";try{await post("/api/probe",{on:$("#prOn").checked,minutes:+$("#prMin").value,top:+$("#prTop").value,url:$("#prUrl").value});const on=$("#prOn").checked;await loadProbeSet();m.className="msg ok";m.textContent="已保存"+(on?"(几分钟内开始第一轮,节点评分要积累一段时间才完整)":"")}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 容器页 */
+let DKJ=null,DKLOG="";
+const DKST={running:["ok","运行中"],exited:["note","已停止"],restarting:["bad","重启中"],paused:["warn","已暂停"],created:["note","已创建"],dead:["bad","已死亡"]};
+async function loadDocker(force){if(S.tab!=="docker")return;
+  try{const j=await get("/api/docker",force?{force:1}:{});DKJ=j;paintDocker(j)}catch(e){$("#dkBody").innerHTML='<div class="sub">读取失败:'+esc(e.message)+"</div>"}}
+function paintDocker(j){const el=$("#dkBody");
+  if(!j.cfg.on){$("#dkTiles").innerHTML="";$("#dkAge").textContent="";el.innerHTML='<div class="sub" style="line-height:1.7">还没有开启。到 <a href="#" id="dkGo">设置 → 容器</a> 打开,那里有部署 docker-socket-proxy 的 compose 示例。</div>';const g=$("#dkGo");if(g)g.onclick=e=>{e.preventDefault();openSettings("docker")};return}
+  if(j.ok===false){$("#dkTiles").innerHTML="";el.innerHTML=`<div class="msg err">${esc(j.error)}</div><div class="sub" style="margin-top:6px">检查 docker-socket-proxy 是否在跑,地址在 <a href="#" id="dkGo">设置 → 容器</a>。</div>`;const g=$("#dkGo");if(g)g.onclick=e=>{e.preventDefault();openSettings("docker")};return}
+  const rows=j.rows,run=rows.filter(r=>r.state==="running"),cpu=run.reduce((a,r)=>a+(r.cpu||0),0),mem=run.reduce((a,r)=>a+(r.mem||0),0);
+  const t=(l,v,s,c)=>`<div class="tile"><div class="l">${l}</div><div class="v ${c||""}">${v}</div><div class="s">${s||"&nbsp;"}</div></div>`;
+  $("#dkTiles").innerHTML=t("运行中",run.length+" / "+rows.length,"容器",run.length<rows.length&&rows.some(r=>r.state==="restarting")?"bad":"")+t("CPU 合计",cpu.toFixed(1)+"%","所有运行中容器")+t("内存合计",fmt(mem),"已扣除缓存")+t("控制",j.control.enabled?"已开启":"只读",j.control.enabled?"可启动/停止/重启":"设置里可开启");
+  $("#dkAge").textContent=j.age>20?`(数据 ${j.age} 秒前,刷新中)`:"";
+  const ctl=j.control.enabled;
+  el.innerHTML=rows.length?`<table><thead><tr><th>容器</th><th class="hide-s">镜像</th><th>状态</th><th class="n">CPU</th><th class="n">内存</th><th class="n hide-s">网络累计 ↓/↑</th><th class="hide-s">端口</th><th></th></tr></thead><tbody>${rows.map(r=>{const [c,l]=DKST[r.state]||["note",r.state];
+    const btns=[`<button data-dk="logs" data-id="${esc(r.id)}" data-name="${esc(r.name)}">日志</button>`];
+    if(ctl&&!r.locked){if(r.state==="running"){btns.push(`<button data-dk="restart" data-id="${esc(r.id)}" data-name="${esc(r.name)}">重启</button>`,`<button data-dk="stop" data-id="${esc(r.id)}" data-name="${esc(r.name)}">停止</button>`)}else btns.push(`<button data-dk="start" data-id="${esc(r.id)}" data-name="${esc(r.name)}">启动</button>`)}
+    else if(ctl&&r.locked)btns.push(`<span class="sub" title="${esc(r.locked)}">🔒</span>`);
+    return `<tr><td><b>${esc(r.name)}</b>${r.project?`<div class="sub">${esc(r.project)}${r.service&&r.service!==r.name?" / "+esc(r.service):""}</div>`:""}</td><td class="hide-s sub" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.image)}">${esc(r.image)}</td><td><span class="lv ${c}">${l}</span><div class="sub">${esc(r.status)}</div></td><td class="n">${r.cpu==null?"–":r.cpu+"%"}</td><td class="n">${r.mem==null?"–":fmt(r.mem)}${r.mem_limit?`<div class="sub">/ ${fmt(r.mem_limit)}</div>`:""}</td><td class="n hide-s">${r.rx==null?(r.net==="host"?'<span class="sub">host 网络</span>':"–"):fmt(r.rx)+" / "+fmt(r.tx)}</td><td class="hide-s sub">${esc(r.ports.join(" "))}</td><td style="white-space:nowrap;text-align:right">${btns.join(" ")}</td></tr>`}).join("")}</tbody></table>`:'<div class="sub">没有容器。</div>'}
+async function dkLogs(id,name){$("#dkLogCard").style.display="";$("#dkLogName").textContent=name;DKLOG=id;$("#dkLog").value="读取中…";
+  try{const j=await get("/api/docker/logs",{id,tail:300});$("#dkLog").value=j.text||"(没有日志)";const t=$("#dkLog");t.scrollTop=t.scrollHeight}catch(e){$("#dkLog").value="读取失败:"+e.message}
+  $("#dkLogCard").scrollIntoView({behavior:"smooth",block:"nearest"})}
+$("#dkBody").addEventListener("click",async e=>{const b=e.target.closest("button[data-dk]");if(!b)return;const a=b.dataset.dk,id=b.dataset.id,name=b.dataset.name;
+  if(a==="logs")return dkLogs(id,name);
+  const L={start:"启动",stop:"停止",restart:"重启"}[a];if(!confirm(`确定要${L}容器「${name}」吗?`))return;
+  const m=$("#dkPageMsg");m.className="msg";m.textContent=L+"中…";b.disabled=true;
+  try{const r=await post("/api/docker/act",{id,action:a});m.className="msg ok";m.textContent=`${L}「${r.name}」:${r.result}`}catch(er){m.className="msg err";m.textContent=er.message}
+  setTimeout(()=>loadDocker(true),1200)});
+$("#dkRefresh").onclick=()=>loadDocker(true);
+$("#dkLogReload").onclick=()=>DKLOG&&dkLogs(DKLOG,$("#dkLogName").textContent);$("#dkLogClose").onclick=()=>{$("#dkLogCard").style.display="none";DKLOG=""};
+/* 设置:容器 */
+const DK_YML1=`services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:2375:2375"      # 只绑本机
+    environment:
+      CONTAINERS: 1                # 允许看容器列表 / 状态 / 日志
+      POST: 0                      # 不放行任何写操作
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro`;
+const DK_YML2=`    environment:
+      CONTAINERS: 1
+      POST: 0
+      ALLOW_START: 1               # 只额外放行 启动 / 停止 / 重启
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 1`;
+async function loadDockerSet(){const j=await get("/api/docker/cfg"),c=j.cfg;$("#dkOn").checked=c.on;$("#dkUrl").value=c.url;$("#dkCtl").checked=c.control;$("#dkCtl").disabled=!j.password&&!c.control;
+  $("#dkCtlNote").innerHTML=(j.password?"":'<span class="warn">要先在「安全与隐私」设置访问密码才能开启。</span> ')+"开启后:不能操作 FLUX 自己和代理本身;每次操作都会记进「告警」时间线(哪个设备、哪个容器、什么时候)。另外代理那边也要放行这几个操作(见下面)。";
+  $("#dkYml1").textContent=DK_YML1;$("#dkYml2").textContent=DK_YML2;$("#dkMsg").textContent=""}
+$("#dkSave").onclick=async()=>{const m=$("#dkMsg");m.className="msg";try{await post("/api/docker/cfg",{on:$("#dkOn").checked,url:$("#dkUrl").value,control:$("#dkCtl").checked});await status();await loadDockerSet();m.className="msg ok";m.textContent="已保存"+($("#dkOn").checked?"(顶部导航里会出现「容器」)":"")}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#dkTest").onclick=async()=>{const m=$("#dkMsg");m.className="msg";m.textContent="连接中…";try{const r=await post("/api/docker/test",{url:$("#dkUrl").value});m.className="msg ok";m.textContent=`连上了:${r.containers} 个容器${r.version?",Docker "+r.version:""}`}catch(e){m.className="msg err";m.textContent=e.message}};
 /* 设置:路由器系统日志 */
 const SLCLS=v=>v<=2?"bad":v<=4?"warn":v===5?"info":"note";
 async function slRefresh(fill){const j=await get("/api/syslog",{level:$("#slLv").value,q:$("#slQ").value,n:200}),c=j.cfg;
@@ -1842,6 +1924,7 @@ $("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.docu
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
   const c=s.conn;$("#scStatus").title=c.ok?"已连接 nikki":(c.error||"未连接");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
+  {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=TABS_ALL.filter(t=>dk||t[0]!=="docker");if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
@@ -1854,6 +1937,7 @@ function refresh(){
   else if(S.tab==="nodes"){loadNodes();loadQuota();loadProv()}
   else if(S.tab==="alerts")loadAlerts();
   else if(S.tab==="security")loadSecurity();
+  else if(S.tab==="docker")loadDocker();
   else if(S.tab==="devices")loadDevicesTab();
   else if(S.tab==="domains")loadDomains();
   else if(S.tab==="rules")loadRules();

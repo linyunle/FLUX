@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -791,6 +791,7 @@ def q_status(p):
         "now": int(time.time()), "live_at": live()["at"],
         "auth": {"enabled": auth.enabled(), "env": auth.is_env()}, "alerts_unread": _wcon_ro(alerts.unread),
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
+        "docker": bool(_wcon_ro(lambda con: dockerapi.load_cfg(con)["on"])),
     }
 
 
@@ -1082,9 +1083,20 @@ POST_ROUTES = {"/api/clienterr": lambda body: panellog.add_client_error(body.get
 q_syslog = _q(lambda con, p: dict(syslog.status(con), rows_data=syslog.query(
     con, int(one(p, "level", "7") or 7), one(p, "q"), int(one(p, "n", "200") or 200), int(one(p, "before", "0") or 0))))
 q_ups = _q(lambda con, p: ups.status(con))
+q_docker = _q(lambda con, p: dockerapi.snapshot(con, force=one(p, "force") == "1"))
+q_docker_cfg = _q(lambda con, p: {"cfg": dockerapi.load_cfg(con), "password": dockerapi.control_ok()})
+q_docker_logs = _q(lambda con, p: dockerapi.logs(con, one(p, "id"), int(one(p, "tail", "200") or 200)))
+
+
+def p_docker_act(body):
+    return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
+
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 POST_ROUTES.update({
+    "/api/docker/cfg": lambda body: _wcon(lambda con: {"cfg": dockerapi.save_cfg(con, body)}),
+    "/api/docker/test": lambda body: dockerapi.test(body),
+    "/api/docker/act": p_docker_act,
     "/api/syslog/cfg": lambda body: _wcon(lambda con: (lambda c: {"cfg": c, "purged": syslog.purge_ignored(con, c)})(syslog.save_cfg(con, body))),
     "/api/syslog/clear": lambda body: _wcon(lambda con: syslog.clear(con)),
     "/api/ups": lambda body: _wcon(lambda con: {"cfg": ups.save_cfg(con, body)}),
@@ -1092,7 +1104,10 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单"})
+AUDIT.update({"/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+
+
+_ctx = threading.local()
 
 
 # ---------------------------------------------------------------- HTTP
@@ -1241,6 +1256,7 @@ class Handler(BaseHTTPRequestHandler):
         fn = POST_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})
+        _ctx.ip = self.client_address[0]
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n > 1024 * 1024:

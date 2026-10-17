@@ -129,3 +129,10 @@ python3 tests/smoke_ui.py   # 可选:需要 playwright + chromium,检查前端�
 
 ## v0.20.1
 - 路由器日志:新增「忽略这些日志」名单(每行一个关键词,不分大小写,匹配程序名+内容)。命中的不入库,保存时已存的同类日志也一并删掉,适合 crond 每分钟一条的定时任务日志这类噪音。名单包含在备份里。
+
+## Docker 容器页(v0.21.0)
+- 设置 → 容器:填 docker-socket-proxy 的地址(只允许本机/内网地址,**不支持直连 docker.sock**)并开启后,导航里出现「容器」页:每个容器的状态、CPU、内存(已扣除缓存)、网络累计、端口、日志(最近 300 行)。
+- 安全:面板不挂 docker.sock,只通过受限的 docker-socket-proxy 访问;读不到容器环境变量,不能创建/删除容器或 exec。设置页里有部署代理的 compose 示例(默认只读:CONTAINERS=1、POST=0)。
+- 可选的「启动/停止/重启」是单独的开关,默认关;开启要求已设置访问密码、代理侧再放行 ALLOW_START / ALLOW_STOP / ALLOW_RESTARTS;不能操作 flux 自己和 docker-socket-proxy;每次操作限速并写进告警时间线(哪个 IP、哪个容器、什么结果)。
+- 新告警规则:docker_down(原本在跑的容器停了/反复重启,面板自己操作的不算)、docker_unhealthy(健康检查失败)。
+- 备份包含容器设置;诊断包包含容器连接状态(不含日志内容)。

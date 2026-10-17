@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, wan
+from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -77,6 +77,8 @@ def selfcheck(con, now=None):
             out.append(_f("info", "系统日志还没收到任何日志", "面板在等路由器转发过来:到路由器上设置日志转发(设置页「系统日志」里有命令),并确认端口一致。"))
         if syslog._state["drop"]:
             out.append(_f("info", f"系统日志已丢弃 {syslog._state['drop']} 条", "短时间内日志太多(每秒超过 300 条),超出的被丢弃了。多半是某个服务在狂刷日志,值得去看看是谁。"))
+        if dockerapi.load_cfg(con)["on"] and dockerapi.STATE["ok"] is False:
+            out.append(_f("warn", "读不到 Docker 容器信息", dockerapi.STATE["err"]))
         if ups.load_cfg(con)["on"] and ups.STATE["ok"] is False:
             out.append(_f("warn", "读不到 UPS", ups.STATE["err"]))
         for t, v in list(expiry.STATE["certs"].items()) + list(expiry.STATE["domains"].items()):
@@ -222,6 +224,7 @@ def bundle(con, full=False, now=None):
         "ups": {"cfg_on": ups.load_cfg(con)["on"], "ok": ups.STATE["ok"], "err": ups.STATE["err"], "info": ups.STATE["info"]},
         "expiry": {"at": expiry.STATE["at"], "certs": [{"days": v.get("days"), "trusted": v.get("trusted"), "err": v.get("err")} for v in expiry.STATE["certs"].values()],
                    "domains": [{"days": v.get("days"), "err": v.get("err")} for v in expiry.STATE["domains"].values()]},
+        "docker": {"cfg_on": dockerapi.load_cfg(con)["on"], "control": dockerapi.load_cfg(con)["control"], "ok": dockerapi.STATE["ok"], "err": dockerapi.STATE["err"], "containers": dockerapi.STATE["n"]},
         "db": {"size_bytes": dbsize, "rows": counts},
         "threads": sorted(t.name for t in threading.enumerate()),
         "alerts_recent": ev,

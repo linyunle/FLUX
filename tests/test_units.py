@@ -448,8 +448,10 @@ def test_expiry_and_disks():
     class R(io.BytesIO):
         def __enter__(self): return self
         def __exit__(self, *a): pass
+    _orig_urlopen = expiry.urllib.request.urlopen
     expiry.urllib.request.urlopen = lambda req, timeout=0: R(json.dumps({"events": [{"eventAction": "expiration", "eventDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 20 * 86400 + 60))}]}).encode())
     assert expiry.check_domain("example.com")["days"] == 20
+    expiry.urllib.request.urlopen = _orig_urlopen
     con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
     try: expiry.save_cfg(con, {"certs": "bad host!"}); assert False
     except ValueError: pass
@@ -470,6 +472,79 @@ def test_expiry_and_disks():
     os.environ["DISK_PATHS"] = f"我的盘={d}"
     assert sysinfo._disks()[0]["name"] == "我的盘"
     del os.environ["DISK_PATHS"]
+
+
+def test_docker():
+    import sqlite3, time, copy, sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    import mock_docker
+    from app import dockerapi, alerts, db, auth
+    srv = mock_docker.start(0 or 19330)
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    url = "http://127.0.0.1:19330"
+    for bad in ("unix:///var/run/docker.sock", "http://8.8.8.8:2375", "http://example.com:2375", "http://127.0.0.1:2375/x", "http://u:p@127.0.0.1:2375", "https://127.0.0.1:2375"):
+        try: dockerapi.save_cfg(con, {"on": True, "url": bad}); assert False, bad
+        except ValueError: pass
+    for ok_ in ("http://localhost:2375", "http://docker-proxy:2375", "http://192.168.100.1:2375", "http://127.0.0.1:2375/"):
+        dockerapi.save_cfg(con, {"on": True, "url": ok_})
+    auth._st.update(hash="", env=False)       # 没有密码时不能开控制
+    try: dockerapi.save_cfg(con, {"on": True, "url": url, "control": True}); assert False
+    except ValueError as e: assert "访问密码" in str(e)
+    dockerapi.save_cfg(con, {"on": True, "url": url})
+    assert dockerapi.test({"url": url}) == {"ok": True, "version": "27.0.1", "containers": 4}
+    snap = dockerapi.snapshot(con, force=True)
+    rows = {r["name"]: r for r in snap["rows"]}
+    assert snap["ok"] and set(rows) == {"flux", "navidrome", "lrcapi", "docker-socket-proxy"}, rows.keys()
+    n = rows["navidrome"]
+    assert n["cpu"] == 40.0 and n["mem"] == 200_000_000 and n["mem_limit"] == 8_000_000_000 and n["rx"] == 1000 and n["ports"] == ["4533→4533/tcp"], n
+    assert rows["flux"]["locked"] and rows["docker-socket-proxy"]["locked"] and not n["locked"] and rows["lrcapi"]["cpu"] is None
+    assert not snap["control"]["enabled"] and not snap["control"]["password"]
+    assert "hello /navidrome line 0" in dockerapi.logs(con, "b" * 12)["text"] and "line 1" in dockerapi.logs(con, "b" * 12)["text"]
+    try: dockerapi.logs(con, "../etc"); assert False
+    except ValueError: pass
+    try: dockerapi.act(con, "b" * 12, "stop"); assert False       # 控制没开
+    except ValueError as e: assert "没有开启" in str(e)
+    import hashlib
+    auth._st.update(hash="x", salt="s", env=False)                # 假装设了密码
+    dockerapi.save_cfg(con, {"on": True, "url": url, "control": True})
+    assert dockerapi.snapshot(con)["control"]["enabled"]
+    for cid in ("a" * 12, "d" * 12):
+        try: dockerapi.act(con, cid, "stop"); assert False, cid
+        except ValueError as e: assert "不能操作" in str(e), e
+        dockerapi._last_act[0] = 0
+    for bad in ("kill", "rm", "exec"):
+        try: dockerapi.act(con, "b" * 12, bad); assert False
+        except ValueError: pass
+    dockerapi._last_act[0] = 0
+    r = dockerapi.act(con, "b" * 12, "stop", "192.168.1.9"); assert r["name"] == "navidrome" and ("/navidrome", "stop") in mock_docker.STATE["posts"], r
+    ev = con.execute("SELECT title,detail FROM alerts WHERE kind='audit'").fetchall()
+    assert ev and "停止 navidrome" in ev[-1][0] and "192.168.1.9" in ev[-1][1], ev
+    dockerapi._last_act[0] = time.time()
+    try: dockerapi.act(con, "b" * 12, "start"); assert False      # 限速
+    except ValueError as e: assert "太快" in str(e)
+    dockerapi._last_act[0] = 0
+    mock_docker.STATE["allow_post"] = False                       # 代理没放行 -> 403 要说清楚
+    try: dockerapi.act(con, "b" * 12, "start"); assert False
+    except ValueError as e: assert "ALLOW_" in str(e), e
+    mock_docker.STATE["allow_post"] = True
+    # 告警:容器停了 / 面板自己操作的不告警
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, key))
+    cfg = copy.deepcopy(alerts.DEFAULT_CFG); t0 = time.time()
+    for c in mock_docker.C:
+        if c["Names"][0] == "/navidrome": c["State"], c["Status"] = "running", "Up"
+    dockerapi._expected.clear(); dockerapi._prev.clear(); dockerapi._poll["t"] = 0
+    dockerapi.check(con, cfg, t0); assert not fired
+    mock_docker.C[1]["State"], mock_docker.C[1]["Status"] = "exited", "Exited (1) now"
+    dockerapi.check(con, cfg, t0 + 30); assert not fired          # 60 秒内不重复检查
+    dockerapi.check(con, cfg, t0 + 61); assert fired == [("docker_down", "navidrome")], fired
+    mock_docker.C[1]["State"] = "running"; dockerapi.check(con, cfg, t0 + 130)
+    dockerapi._expected["navidrome"] = t0 + 190; mock_docker.C[1]["State"] = "exited"
+    dockerapi.check(con, cfg, t0 + 200); assert len(fired) == 1, fired   # 面板自己操作过 -> 不告警
+    mock_docker.C[2]["Status"] = "Up 1 hour (unhealthy)"; mock_docker.C[2]["State"] = "running"
+    dockerapi.check(con, cfg, t0 + 300); dockerapi.check(con, cfg, t0 + 400)
+    assert ("docker_unhealthy", "lrcapi") in fired, fired
+    auth._st.update(hash="", env=False)
 
 
 if __name__ == "__main__":
