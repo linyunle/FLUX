@@ -199,15 +199,37 @@ def test_providers_compare():
     import sqlite3, time
     from app import providers, db, insight
     con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
-    D = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
-    insight._kv_set(con, "prov_hist", {"X": {D(3): 100, D(2): 300, D(1): 700, D(0): 50}})   # 最后一天读数变小 = 重置
-    cols = [r[1] for r in con.execute("PRAGMA table_info(traffic)")]
-    for n, v in ((2, 180), (1, 400)):
-        row = {c: 0 for c in cols}; row.update(day=D(n), node="n1", up=v)
-        con.execute(f"INSERT INTO traffic({','.join(cols)}) VALUES({','.join('?' * len(cols))})", [row[c] if c in row else "" if c in ("conn", "src", "host") else 0 for c in cols])
+    now = time.time(); T = lambda h: now - h * 3600
+    H = lambda h: time.strftime("%Y-%m-%d %H", time.localtime(T(h)))
+    # 三次更新:30h 前、6h 前(+200)、刚刚(+300);第四次读数变小 = 套餐重置
+    insight._kv_set(con, "prov_upd", {"X": [[T(30), 100], [T(6), 300], [T(0.1), 600]]})
+    for h, v in ((20, 150), (10, 40), (3, 100), (1, 9999)):   # 20h、10h 前在第一段,3h 前在第二段;1h 前超出范围
+        con.execute("INSERT INTO hourly(hour,client,node,up,down) VALUES(?,?,?,?,?)", (H(h), "c", "n1", v, 0))
     c = providers.compare(con, "X", ["n1"])
-    assert [r["official"] for r in c["rows"]] == [200, 400], c   # 重置那天被跳过
-    assert c["flux"] == 580 and c["ratio"] == 96.7, c
+    assert [r["official"] for r in c["rows"]] == [200, 300], c
+    assert [r["flux"] for r in c["rows"]] == [190, 100 + 9999], c
+    assert providers.parse_ts("2026-10-16T06:16:00.123456789+08:00") > 1e9 and providers.parse_ts("0001-01-01T00:00:00Z") == 0
+
+
+def test_probe_and_panellog():
+    import sqlite3, time
+    from app import probe, panellog, db
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    H = time.strftime("%Y-%m-%d %H", time.localtime())
+    for n, v in (("A", 500), ("B", 900), ("直连", 5000), ("C", 1)):
+        con.execute("INSERT INTO hourly(hour,client,node,up,down) VALUES(?,?,?,?,?)", (H, "c", n, v, 0))
+    assert probe.candidates(con, 2) == ["B", "A"]   # 按流量排序,直连不测
+    calls = []
+    probe.api_call = lambda path, **k: calls.append(path) or {"delay": 1}
+    probe._run(["a b", "C"], "https://x/y")
+    assert calls[0].startswith("/proxies/a%20b/delay?url=https%3A%2F%2Fx%2Fy") and len(calls) == 2, calls
+    assert panellog.short_ua("Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/120 Safari/537") == "Mac Chrome"
+    assert panellog.short_ua("Mozilla/5.0 (iPhone) Safari/604") == "iPhone Safari"
+    panellog.record(con, "192.168.1.9", "curl/8", "login_fail")
+    panellog.record(con, "192.168.1.9", "curl/8", "page")
+    c = panellog.clients(con)
+    assert len(c) == 1 and c[0]["fails"] == 1 and c[0]["n"] == 1, c
+    assert con.execute("SELECT COUNT(*) FROM alerts WHERE kind='audit'").fetchone()[0] == 1   # 登录失败记一条;新来源只在第一次(同一次已被失败那条占了)
 
 
 if __name__ == "__main__":

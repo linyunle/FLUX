@@ -251,8 +251,11 @@ def quota_status(con, today=None):
         elif once:
             start = datetime.date.fromisoformat(c["start"]) if c["start"] else t
         panel_used = used
+        since = 0
         if o:   # 机场官方的已用/总量/到期优先;面板自己的统计留作对比
             used = o["used"]
+            since = providers.panel_between(con, ns, o["at"], time.time()) if o.get("at") else 0   # 官方更新之后面板新增的流量,补上让数字更接近实时
+            used += since
             if not c["expire"] and o["expire"]:
                 exp = datetime.date.fromtimestamp(o["expire"])
                 if once:
@@ -277,7 +280,7 @@ def quota_status(con, today=None):
                     "start": start.isoformat() if start else "", "end": end.isoformat() if end else "",
                     "days_left": (end - t).days if end else None, "expire": exp.isoformat() if exp else "", "expire_days": (exp - t).days if exp else None,
                     "rate": round(rate), "exhaust": exhaust, "over": over, "known": bool(ns) or bool(o),
-                    "src": "official" if o else "panel", "panel_used": panel_used, "auto": bool(c.get("auto")),
+                    "src": "official" if o else "panel", "panel_used": panel_used, "off_used": o["used"] if o else None, "off_at": (o or {}).get("at") or None, "since": since if o else 0, "auto": bool(c.get("auto")),
                     "gb": round(limit / 1024 ** 3, 2) if o else c["gb"]})
     return out
 

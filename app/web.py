@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -905,6 +905,8 @@ q_agh_cfg = _q(lambda con, p: agh.public_cfg(con))
 q_rulehealth = _q(lambda con, p: insight.rule_health(con, _days_p(p, 30)))
 q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7)))
 q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, 14)))
+q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.tail(int(one(p, "n") or 400))})
+q_probe = _q(lambda con, p: probe.status(con))
 q_providers = _q(lambda con, p: providers.status(con))
 q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
@@ -951,7 +953,7 @@ def p_group_policy(body):
 AUDIT = {"/api/alerts/config": "修改告警规则 / 推送渠道", "/api/agh/config": "修改 AdGuard 连接", "/api/quota": "修改机场套餐",
          "/api/report/config": "修改周报设置", "/api/apps/rules": "修改应用识别规则", "/api/airports/rules": "修改机场归类规则",
          "/api/groups/policy": "修改分组白名单", "/api/restore": "从备份恢复设置", "/api/config": "修改 nikki 连接",
-         "/api/geo/proxy": "修改 GeoIP 下载代理"}
+         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/probe": "修改节点测速设置"}
 
 
 def _audit(path, body):
@@ -1005,7 +1007,7 @@ q_sys = lambda p: (200, sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", 
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/panel": q_panel, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -1062,7 +1064,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -1134,6 +1136,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed(params):
             return self._deny(page=u.path in ("/", "/index.html"))
         if u.path in ("/", "/index.html"):
+            self._seen("page")
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         fn = GET_ROUTES.get(u.path)
@@ -1145,6 +1148,14 @@ class Handler(BaseHTTPRequestHandler):
             log("接口出错", u.path, e)
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
         self._send(code, data)
+
+    def _seen(self, kind):
+        """记录是谁(哪个 IP、什么浏览器)打开/登录了面板;出错不影响正常访问。"""
+        try:
+            ip = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip() or self.client_address[0]
+            _wcon(lambda con: panellog.record(con, ip, self.headers.get("User-Agent", ""), kind))
+        except Exception as e:
+            log("记录面板访问出错", e)
 
     def _json_body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -1165,9 +1176,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": str(e)})
         if not auth.enabled() or auth.check(pw):
             auth.ok(ip)
+            if auth.enabled():
+                self._seen("login_ok")
             return self._send(200, {"ok": True}, extra={"Set-Cookie": auth.cookie_header(auth.make_cookie())} if auth.enabled() else None)
         auth.fail(ip)
         log("登录失败", ip)
+        self._seen("login_fail")
         return self._send(401, {"error": "密码不对"})
 
     def _auth_set(self):

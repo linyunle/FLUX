@@ -15,7 +15,13 @@ MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 
 
 def log(*a):
-    print(time.strftime("%F %T"), *a, flush=True)
+    line = time.strftime("%F %T") + " " + " ".join(str(x) for x in a)
+    print(line, flush=True)
+    try:
+        from . import panellog
+        panellog.add_line(line)
+    except Exception:
+        pass
 
 
 def is_mac(s):

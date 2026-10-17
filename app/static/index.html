@@ -573,6 +573,23 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authSave" class="pri">保存</button></div>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label></div>
+      <div class="card sec" id="sec-probe"><h2>节点测速(可选)</h2>
+  <div class="sub" style="margin-bottom:10px">nikki 只给策略组里的节点做延迟测试,其它节点没有测速数据,「节点评分」和「网络质量」就看不到它们。开启后,面板会定时让 nikki 给<b>最近 24 小时真正用过的节点</b>测一次延迟(只发测速请求,不改 nikki 的任何配置),结果进 nikki 的测速记录,再被面板读回去算评分。只测在用的节点,请求量很小。</div>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="prOn"> 开启节点测速</label>
+  <div class="row2" style="margin:8px 0"><span class="sub">每</span><input id="prMin" type="number" min="10" max="1440" style="width:80px"><span class="sub">分钟测一轮,每轮最多测</span><input id="prTop" type="number" min="1" max="40" style="width:70px"><span class="sub">个节点</span></div>
+  <div class="fld"><label>测速地址(默认和 nikki 的一样)</label><input id="prUrl" placeholder="https://www.gstatic.com/generate_204"></div>
+  <div class="msg" id="prMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button id="prSave" class="pri">保存</button></div>
+  <div class="sub" id="prInfo" style="margin-top:10px"></div></div>
+      <div class="card sec" id="sec-plog"><h2>访问记录与面板日志</h2>
+  <div class="h3" style="margin-top:0">谁打开过面板</div>
+  <div class="sub" style="margin-bottom:8px">按来源 IP + 浏览器记录;第一次出现的新设备、登录输错密码都会记进「告警」时间线。设备名来自「设备名」设置(按 IP 对应 MAC)。</div>
+  <div class="scroll" id="plClients"></div>
+  <div class="h3">面板运行日志</div>
+  <div class="sub" style="margin-bottom:8px">面板最近的运行日志(重启后清空,不含任何密码或 Token)。排查问题时可以复制或下载发给我。</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button id="plRefresh">刷新</button><button id="plCopy">复制</button><button id="plDl">下载 .txt</button></div>
+  <textarea id="plText" rows="16" readonly style="font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre"></textarea>
+  <div class="msg" id="plMsg"></div></div>
       <div class="card sec" id="sec-groups"><h2>设备分组与白名单</h2>
   <div class="sub" style="margin-bottom:10px;line-height:1.7">先在「设备」页给设备选分组(IoT / 手机 / 电脑 / 访客,也可以新建)。然后在这里给分组设「允许访问的域名」:组里的设备访问了名单之外的域名,会告警一次(同一设备同一域名 24 小时内不重复)。域名按后缀匹配,填 <code>apple.com</code> 就包含 <code>a.apple.com</code>。点「从最近 7 天学习」会列出这个分组实际访问过的主域名,先学习、再删掉不认识的,最后保存并启用。启用后的第一轮只记账不告警。只看域名,走代理时以 mihomo 记录的域名为准,没有域名的连接不判断。</div>
   <div id="grpBody"></div>
@@ -1484,7 +1501,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS(AdGuard)"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["plog","访问与日志"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1500,6 +1517,8 @@ async function loadSettings(){
     else if(S.set==="quota")await loadQuotaSet();
     else if(S.set==="report")await loadReportSet();
     else if(S.set==="groups")await loadGroupsSet();
+    else if(S.set==="probe")await loadProbeSet();
+    else if(S.set==="plog")await loadPlog();
     else if(S.set==="backup"){const j=await get("/api/ui");$("#bkInfo").textContent=j.at?"服务器上的外观设置最近同步:"+new Date(j.at*1000).toLocaleString():"服务器上还没有外观设置(改一下外观就会同步)"}
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
@@ -1645,7 +1664,7 @@ function loadProv(){load("prov","/api/providers",{},j=>{
   const c=$("#provCard"),rows=(j.rows||[]).filter(r=>r.has_info);if(!j.ok||!rows.length){c.style.display="none";return}c.style.display="";
   $("#provBody").innerHTML=rows.map(r=>{const pct=r.total?Math.round(r.used*1000/r.total)/10:0,col=pct>=95?"var(--bad)":pct>=80?"var(--warn)":"var(--accent)",ex=r.expire_days;
     const exTag=r.expire?`<span class="lv ${ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${new Date(r.expire*1000).toLocaleDateString("sv")}</span>`:`<span class="lv note">永不过期</span>`;
-    const m=r.cmp,cm=m.rows.length?`近 ${m.rows.length} 天:机场官方 ${fmt(m.official)} · 面板 ${fmt(m.flux)} · 面板是官方的 <b>${m.ratio}%</b>${m.ratio>=90&&m.ratio<=110?"(基本一致)":m.ratio<90?"(面板偏少:可能有流量没经过 nikki,或 nikki 重启时丢了几秒)":"(面板偏多:可能含本机之外的计费口径差异)"}`:"对比数据还在积累(需要连续两天的官方读数,明天起就有)";
+    const m=r.cmp,cm=m.rows.length?`最近 ${m.rows.length} 次更新之间:机场官方 ${fmt(m.official)} · 面板同期 ${fmt(m.flux)} · 面板是官方的 <b>${m.ratio}%</b>${m.ratio>=90&&m.ratio<=110?"(基本一致)":m.ratio<90?"(面板偏少:可能有流量没经过 nikki,或 nikki 重启时丢了几秒)":"(面板偏多:可能含本机之外的计费口径差异)"}`:"对比数据还在积累(要等 nikki 再更新一次订阅,按两次更新之间的增量来比)";
     return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.name)}</b>${r.airport!==r.name?`<span class="sub">面板里归为「${esc(r.airport)}」</span>`:""}<span>${fmt(r.used)} / ${r.total?fmt(r.total):"不限"}${r.total?" · "+pct+"%":""}</span>${exTag}</div>
     ${r.total?barR(pct,col):""}<div class="sub">${cm} · ${r.nodes} 个节点${r.updated?" · nikki 更新于 "+esc(r.updated.slice(0,16).replace("T"," ")):""}</div></div>`}).join("")})}
 function loadQuota(){load("quota","/api/quota",{},j=>{
@@ -1653,7 +1672,7 @@ function loadQuota(){load("quota","/api/quota",{},j=>{
   $("#quotaBody").innerHTML=j.rows.map(q=>{const col=q.pct>=95?"var(--bad)":q.pct>=80?"var(--warn)":"var(--accent)";
     const once=q.type==="once",ex=q.expire_days;
     const exTag=q.expire?`<span class="lv ${ex<0||ex<=1?"bad":ex<=7?"warn":"note"}">${ex<0?"已到期":ex===0?"今天到期":ex+" 天后到期"} · ${q.expire}</span>`:`<span class="lv note">${once||off?"永不过期":"无到期日"}</span>`;
-    const off=q.src==="official",per=off&&q.auto?`官方数据 · 周期以机场后台为准${q.type==="monthly"?"":""} · 面板统计到的 ${fmt(q.panel_used)}`:off?`${once?"一次性流量":"周期 "+q.start.slice(5)+" → "+q.end.slice(5)}(官方数据) · 面板统计到的 ${fmt(q.panel_used)}`:once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
+    const off=q.src==="official",live=off?`官方 ${fmt(q.off_used)}${q.off_at?"(更新于 "+fmtTs(q.off_at)+")":""} + 此后面板新增 ${fmt(q.since)}`:"",per=off&&q.auto?`${live} · 周期以机场后台为准`:off?`${once?"一次性流量":"周期 "+q.start.slice(5)+" → "+q.end.slice(5)}(${live})`:once?`一次性流量${q.start?"(自 "+q.start+" 起算)":""}`:`周期 ${q.start.slice(5)} → ${q.end.slice(5)}(每月 ${q.reset_day} 日重置,还有 ${q.days_left} 天)`;
     return `<div style="margin:8px 0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(q.airport)}</b><span>${fmt(q.used)} / ${fmtGB(q.gb)} · ${q.pct}%</span>${exTag}<span class="sub">${per} · 近 7 天日均 ${fmt(q.rate)}${q.exhaust?` · 预计 ${q.exhaust.slice(5)} 用完${q.over?" ⚠ 早于"+(once?"到期日":"重置日"):""}`:""}</span></div>${barR(q.pct,col)}${q.known?"":'<div class="sub">还没有节点归到这个机场(检查机场名是否和「机场归类」一致)</div>'}</div>`}).join("")})}
 $("#quotaGo").onclick=()=>openSettings("quota");
 
@@ -1686,6 +1705,17 @@ function syncQuota(){const n={};document.querySelectorAll("#quotaRows .qrow").fo
 $("#quotaRows").addEventListener("change",e=>{if(e.target.dataset.f==="type"){syncQuota();renderQuotaSet()}});
 $("#quotaAdd").onclick=()=>{syncQuota();QC[(window.QAP||[])[0]&&!QC[window.QAP[0]]?window.QAP[0]:"新机场"+(Object.keys(QC).length+1)]={type:"monthly",gb:500,reset_day:1,start:"",expire:""};renderQuotaSet()};
 $("#quotaSave").onclick=async()=>{const m=$("#quotaMsg");m.className="msg";syncQuota();try{const r=await post("/api/quota",{quota:QC});QC=r.cfg;renderQuotaSet();m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 设置:节点测速 */
+async function loadProbeSet(){const j=await get("/api/probe");$("#prOn").checked=j.cfg.on;$("#prMin").value=j.cfg.minutes;$("#prTop").value=j.cfg.top;$("#prUrl").value=j.cfg.url;$("#prMsg").textContent="";
+  $("#prInfo").innerHTML=(j.last?`上一轮 ${fmtTs(j.last.at)}:测了 ${j.last.n} 个,${j.last.ok} 个有响应,${j.last.fail} 个超时/失败。<br>`:"还没有测过。")+`下一轮会测的节点(最近 24 小时流量最大的 ${j.cfg.top} 个):${j.nodes.length?j.nodes.map(esc).join("、"):"暂无"}`}
+$("#prSave").onclick=async()=>{const m=$("#prMsg");m.className="msg";try{await post("/api/probe",{on:$("#prOn").checked,minutes:+$("#prMin").value,top:+$("#prTop").value,url:$("#prUrl").value});const on=$("#prOn").checked;await loadProbeSet();m.className="msg ok";m.textContent="已保存"+(on?"(几分钟内开始第一轮,节点评分要积累一段时间才完整)":"")}catch(e){m.className="msg err";m.textContent=e.message}};
+/* 设置:访问记录与面板日志 */
+async function loadPlog(){const j=await get("/api/panel",{n:500});
+  $("#plClients").innerHTML=j.clients.length?`<table><thead><tr><th>设备</th><th>IP</th><th>浏览器</th><th>首次</th><th>最近</th><th>次数</th><th>登录失败</th></tr></thead><tbody>${j.clients.map(c=>`<tr><td>${esc(c.name||"–")}</td><td>${esc(c.ip)}</td><td>${esc(c.ua)}</td><td>${fmtTs(c.first)}</td><td>${fmtTs(c.last)}</td><td>${c.n}</td><td>${c.fails?`<span class="lv warn">${c.fails}</span>`:0}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">还没有记录。</div>';
+  const t=$("#plText");t.value=j.log.join("\n");t.scrollTop=t.scrollHeight}
+$("#plRefresh").onclick=loadPlog;
+$("#plCopy").onclick=async()=>{const m=$("#plMsg");try{await navigator.clipboard.writeText($("#plText").value);m.className="msg ok";m.textContent="已复制"}catch(e){$("#plText").select();m.className="msg";m.textContent="浏览器不让自动复制,已选中全部文字,请手动复制"}};
+$("#plDl").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([$("#plText").value],{type:"text/plain"}));a.download="flux-log-"+ymd(new Date())+".txt";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 /* 设置:周报 */
 async function loadReportSet(){const j=await get("/api/report/config");$("#repWd").innerHTML=WD.map((w,i)=>`<option value="${i}" ${i===j.weekday?"selected":""}>${w}</option>`).join("");$("#repHr").innerHTML=[...Array(24).keys()].map(i=>`<option value="${i}" ${i===j.hour?"selected":""}>${pad(i)}:00</option>`).join("");$("#repOn").checked=j.on;$("#repMsg").textContent=""}
 $("#repSave").onclick=async()=>{const m=$("#repMsg");m.className="msg";try{await post("/api/report/config",{on:$("#repOn").checked,weekday:+$("#repWd").value,hour:+$("#repHr").value});m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};

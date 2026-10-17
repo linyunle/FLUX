@@ -112,6 +112,12 @@ try:
         assert gap<45, ("内存图表没有撑满卡片", gap)
         pg.evaluate("S.tab='nodes';showTab();refresh()"); pg.wait_for_timeout(2500)
         assert "MyAir" in pg.inner_text("#provBody"), "机场官方数据卡没有显示"
+        pg.evaluate("S.set='plog';openSettings('plog')"); pg.wait_for_timeout(1500)
+        assert "127.0.0.1" in pg.inner_text("#plClients") and pg.input_value("#plText").strip(), "访问记录/面板日志没有内容"
+        pg.evaluate("S.set='probe';openSettings('probe')"); pg.wait_for_timeout(1000)
+        pg.check("#prOn"); pg.click("#prSave"); pg.wait_for_timeout(800)
+        assert "已保存" in pg.inner_text("#prMsg"), pg.inner_text("#prMsg")
+        assert pg.evaluate("fetch('/api/probe').then(r=>r.json()).then(j=>j.cfg.on)") is True, "节点测速设置没保存"
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

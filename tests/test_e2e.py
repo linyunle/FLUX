@@ -271,6 +271,14 @@ try:
     pv = get("/api/providers"); r0 = (pv.get("rows") or [{}])[0]
     ok(pv["ok"] and r0.get("name") == "MyAir" and r0["used"] == 6 << 30 and r0["total"] == 100 << 30 and r0["expire"] == 1893456000 and r0["nodes"] == 2, f"机场官方数据:读到订阅信息 {r0}")
     ok("default" not in [x["name"] for x in pv["rows"]], "机场官方数据:跳过 default")
+    pr = get("/api/probe"); ok(pr["cfg"]["on"] is False and pr["cfg"]["minutes"] == 30 and "HK-01" in pr["nodes"], f"节点测速:默认关闭,候选是在用的节点 {pr['nodes']}")
+    ok(post("/api/probe", {"on": True, "minutes": 5, "top": 3, "url": "ftp://x"})[0] == 400, "节点测速:非法地址被拒")
+    c, r = post("/api/probe", {"on": True, "minutes": 5, "top": 3}); ok(c == 200 and r["on"] and r["minutes"] == 10 and r["top"] == 3, f"节点测速:保存(间隔最少 10 分钟) {r}")
+    post("/api/probe", {"on": False})
+    import urllib.request as _u
+    _u.urlopen(_u.Request(B + "/", headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit Safari/605.1"})).read()
+    pn = get("/api/panel"); ok(any(c["ua"] == "iPhone Safari" and c["n"] >= 1 for c in pn["clients"]), f"面板访问记录:{pn['clients'][:1]}")
+    ok(isinstance(pn["log"], list) and pn["log"], "面板日志:有内容")
     rp = get("/api/report"); ok(rp["up"] + rp["down"] > 0 and rp["devices"] and rp["kinds"]["proxy"] > 0 and rp["quota"], "周报:数据")
     ok(post("/api/report/config", {"on": True, "weekday": 2, "hour": 8})[1] == {"on": True, "weekday": 2, "hour": 8}, "周报:计划保存")
     post("/api/report/send", {}); rr = wait_kind("report", 10); ok(rr and "总流量" in rr[0]["detail"], f"周报:推送 {rr[:1]}")

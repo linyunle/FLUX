@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, groups, insight
+from . import agh, airports, alerts, appsig, config, devices, groups, insight, probe
 
 MAX_THEME = 64 * 1024
 
@@ -64,6 +64,7 @@ def export(con, secrets=False):
     out["devices"] = devices.stored_names(con)
     out["dev_groups"] = groups.dev_groups(con)
     out["group_policy"] = groups.policy(con)
+    out["probe"] = probe.load_cfg(con)
     return out
 
 
@@ -123,4 +124,6 @@ def restore(con, d):
                 if isinstance(v, dict):
                     groups.save_policy(con, g, v.get("on"), v.get("allow"))
         step("分组白名单", i)
+    if isinstance(d.get("probe"), dict):
+        step("节点测速", lambda: probe.save_cfg(con, d["probe"]))
     return {"ok": True, "done": done, "skipped": skipped}

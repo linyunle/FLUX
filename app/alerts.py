@@ -471,6 +471,11 @@ def check_providers(con, cfg, now):
     providers.sample(con, now)
 
 
+def check_probe(con, cfg, now):
+    from . import probe
+    probe.check(con, cfg, now)
+
+
 def check_forecast(con, cfg, now):
     from . import advisor
     advisor.check_quota_forecast(con, cfg, now)
@@ -487,7 +492,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe)]
 
 
 def evaluate(con, now=None):

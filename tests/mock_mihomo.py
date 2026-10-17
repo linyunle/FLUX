@@ -76,6 +76,9 @@ class API(BaseHTTPRequestHandler):
                 "JP-01": {"type": "Trojan", "history": hist("JP-01", 0 if STATE["jp_down"] else 120)},
                 "Proxy": {"type": "Selector", "now": "HK-01", "all": ["HK-01", "JP-01"]},
                 "egress-probe": {"type": "Selector", "now": STATE["probe_sel"], "all": ["HK-01", "JP-01"]}}})
+        if p.split("?")[0].startswith("/proxies/") and p.split("?")[0].endswith("/delay"):
+            STATE.setdefault("delays", []).append(p.split("?")[0].split("/")[2])
+            return self._j(200, {"delay": 99})
         if p == "/providers/proxies":
             return self._j(200, {"providers": {
                 "default": {"type": "Proxy", "vehicleType": "Compatible", "proxies": []},
