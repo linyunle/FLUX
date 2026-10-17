@@ -263,6 +263,44 @@ def test_presence():
     assert con.execute("SELECT COUNT(*) FROM alerts WHERE kind='dev_offline' AND key=?", (A,)).fetchone()[0] == 0
 
 
+def test_wan_and_diag():
+    import os, tempfile, time, copy, sqlite3
+    from app import wan, diag, alerts, providers, db
+    d = tempfile.mkdtemp(); os.makedirs(d + "/net")
+    open(d + "/net/route", "w").write("Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+                                       "eth1\t00000000\t0101A8C0\t0003\t0\t0\t0\t00000000\neth0\t0001A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\n")
+    wan.PROC = d
+    assert wan.default_route() == ("eth1", "192.168.1.1")
+    wan.iface_ip = lambda n: "100.64.1.2" if n == "eth1" else ""
+    seq = iter([5.0, 6.0, None, None, None, None, 30.0, None, None])
+    wan.probe = lambda addr, s: next(seq, None)
+    wan.SERIES.clear()
+    now = time.time()
+    wan.sample(["223.5.5.5"], now)
+    w = wan.window(300, now + 1)
+    assert w["192.168.1.1"]["gw"] and w["192.168.1.1"]["lost"] == 1 and w["223.5.5.5"]["loss"] == 100, w
+    wan.iface_ip = lambda n: "100.64.9.9"
+    wan.sample(["223.5.5.5"], now + 30)
+    assert wan.snapshot()["ip_changed"]["new"] == "100.64.9.9"
+    os.remove(d + "/net/route"); open(d + "/net/route", "w").write("Iface\tDestination\n")
+    wan.sample(["223.5.5.5"], now + 60)
+    assert wan.snapshot()["up"] is False and wan.snapshot()["down_since"]
+    con = sqlite3.connect(":memory:"); con.executescript(db.SCHEMA)
+    wan.flush(con, now + 61); assert con.execute("SELECT COUNT(*) FROM wanq").fetchone()[0] >= 1
+    # 打码
+    t = diag.mask_text("设备 张三的手机 192.168.1.23 aa:bb:cc:dd:ee:ff 连上了", ["张三的手机"])
+    assert "192.168.*.*" in t and "aa:bb:cc:**:**:**" in t and "张三" not in t and "设备1" in t, t
+    # 订阅过期提醒
+    fired = []
+    alerts.fire = lambda con_, cfg_, kind, level, key, title, detail, now=None: fired.append((kind, key))
+    providers._cache.update(t=time.time(), v=[{"name": "A", "has_info": True, "updated": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() - 60 * 3600)),
+                                               "used": 1, "total": 2, "expire": 0, "nodes": [], "vehicle": "HTTP"},
+                                              {"name": "B", "has_info": True, "updated": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() - 3600)),
+                                               "used": 1, "total": 2, "expire": 0, "nodes": [], "vehicle": "HTTP"}])
+    providers.check_stale(con, copy.deepcopy(alerts.DEFAULT_CFG), time.time())
+    assert fired == [("sub_stale", "A")], fired
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

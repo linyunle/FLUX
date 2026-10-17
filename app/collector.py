@@ -403,7 +403,7 @@ class Collector:
             self.con.execute("DELETE FROM proto WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM app WHERE day < ?", (day_cut,))
             self.con.execute("DELETE FROM geo WHERE day < ?", (day_cut,))
-            for t in ("app_hourly", "proto_hourly", "qoe", "tcp"):
+            for t in ("app_hourly", "proto_hourly", "qoe", "tcp", "wanq"):
                 self.con.execute(f"DELETE FROM {t} WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM hourly WHERE hour < ?", (hour_cut,))
             self.con.execute("DELETE FROM wan_hourly WHERE hour < ?", (hour_cut,))

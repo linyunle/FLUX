@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -908,6 +908,8 @@ q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14,
 q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.tail(int(one(p, "n") or 400))})
 q_probe = _q(lambda con, p: probe.status(con))
 q_presence = _q(lambda con, p: presence.status(con))
+q_selfcheck = _q(lambda con, p: {"findings": diag.selfcheck(con)})
+q_diag = _q(lambda con, p: diag.bundle(con, full=one(p, "full") == "1"))
 q_providers = _q(lambda con, p: providers.status(con))
 q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
@@ -1002,13 +1004,19 @@ q_backup = lambda p: _backup_resp(one(p, "secrets") == "1")
 q_groups = _q(lambda con, p: {"groups": groups.dev_groups(con), "names": groups.names(con), "policy": groups.policy(con)})
 q_group_learn = _q(lambda con, p: {"rows": groups.learn(con, one(p, "group", ""))})
 q_nodescore = _q(lambda con, p: {"rows": advisor.node_scores(con)})
-q_sys = lambda p: (200, sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", "120") or 120)))))
+def q_sys(p):
+    s = sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", "120") or 120))))
+    s["wan"] = wan.snapshot()
+    return 200, s
+
+
+q_wan = _q(lambda con, p: {**wan.snapshot(), "hours": wan.hours(con, 24)})
 
 
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -1065,7 +1073,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

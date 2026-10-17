@@ -164,3 +164,22 @@ def status(con):
                     "expire_days": exp_days, "updated": p["updated"], "nodes": len(p["nodes"]), "has_info": p["has_info"],
                     "cmp": c})
     return {"ok": True, "rows": out}
+
+
+def check_stale(con, cfg, now):
+    """订阅超过 N 小时没更新(nikki 更新失败、机场订阅地址失效都会这样)就提醒;每个订阅只在跨过门槛时提醒一次(间隔见规则)。"""
+    from . import alerts
+    r = cfg["rules"]["sub_stale"]
+    try:
+        ps = fetch()
+    except Exception:
+        return
+    for p in ps:
+        at = parse_ts(p["updated"])
+        if not at or not p["has_info"]:
+            continue
+        age = now - at
+        if age >= r["hours"] * 3600 and alerts._allow("sub_stale", p["name"], r["cool_min"], now):
+            alerts.fire(con, cfg, "sub_stale", "warn", p["name"], f"订阅「{p['name']}」{int(age // 3600)} 小时没更新",
+                        f"nikki 上次更新这个订阅是 {time.strftime('%m-%d %H:%M', time.localtime(at))}。可能是订阅地址失效、机场换了域名,或 nikki 更新失败;"
+                        "到 nikki 里手动更新一次看看报什么错。官方用量/到期数据也会停在旧值。", now)

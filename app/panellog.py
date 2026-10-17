@@ -81,3 +81,30 @@ def clients(con):
     for c in sorted(d.values(), key=lambda c: -c["last"]):
         out.append({**c, "name": _label(con, c["ip"])})
     return out
+
+
+_cerr = {}   # 消息 -> {msg, n, first, last};页面脚本报错回传,最多 50 种
+_ctotal = [0]
+
+
+def add_client_error(msg, src="", ua=""):
+    msg = re.sub(r"\s+", " ", str(msg or ""))[:300]
+    if not msg:
+        return
+    now = int(time.time())
+    with _lock:
+        _ctotal[0] += 1
+        e = _cerr.get(msg)
+        if e:
+            e["n"] += 1
+            e["last"] = now
+            return
+        if len(_cerr) >= 50:
+            return
+        _cerr[msg] = {"msg": msg, "n": 1, "first": now, "last": now, "src": str(src)[:120], "ua": short_ua(ua)}
+    add_line(f"{time.strftime('%F %T')} 前端错误 {msg} ({str(src)[:80]})")
+
+
+def client_errors():
+    with _lock:
+        return sorted(_cerr.values(), key=lambda e: -e["last"])

@@ -26,6 +26,7 @@ try:
         assert not bad, bad
         pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(3500)
         assert pg.inner_text("#sysTiles").strip(), "路由器状态卡片为空"
+        assert "宽带" in pg.inner_text("#sysTiles"), "路由器状态卡片没有宽带质量"
         # 外观设置:刷新后要还在;浏览器清空后要从服务器取回
         pg.evaluate("applyView('ts');TH.vh.ts=['trend'];TH.hide=['trend'];themeChanged(true)"); pg.wait_for_timeout(2500)
         pg.reload(); pg.wait_for_timeout(2500)
@@ -115,6 +116,9 @@ try:
         qb=pg.inner_text("#quotaBody"); assert "MyAir" in qb and "NoExp" in qb and "永不过期" in qb, ("套餐用量卡没有显示官方机场(含无到期日的)", qb)
         pg.evaluate("S.set='plog';openSettings('plog')"); pg.wait_for_timeout(1500)
         assert "127.0.0.1" in pg.inner_text("#plClients") and pg.input_value("#plText").strip(), "访问记录/面板日志没有内容"
+        pg.wait_for_timeout(1500); assert pg.inner_text("#plFinds").strip() and "自检中" not in pg.inner_text("#plFinds"), "自检没有结果"
+        with pg.expect_download() as dd: pg.click("#dgDl")
+        import json as _j2; dj=_j2.load(open(dd.value.path())); assert dj["flux_diag"]==1 and dj["masked"], "诊断包下载内容不对"
         pg.evaluate("S.set='probe';openSettings('probe')"); pg.wait_for_timeout(1000)
         pg.check("#prOn"); pg.click("#prSave"); pg.wait_for_timeout(800)
         assert "已保存" in pg.inner_text("#prMsg"), pg.inner_text("#prMsg")

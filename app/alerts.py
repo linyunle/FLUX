@@ -41,6 +41,10 @@ KINDS = {
     "router_reboot": "路由器重启",
     "dev_online": "设备上线",
     "dev_offline": "设备离线",
+    "wan_down": "宽带掉线",
+    "wan_ip": "公网 IP 变化",
+    "wan_loss": "宽带丢包",
+    "sub_stale": "订阅长时间没更新",
 }
 LEVELS = ("bad", "warn", "info", "ok", "note")
 
@@ -64,10 +68,14 @@ DEFAULT_RULES = {
     "sys_mem": {"on": True, "pct": 92, "cool_min": 120},
     "dev_online": {"on": True, "all": 0, "cool_min": 30},
     "dev_offline": {"on": True, "all": 0, "grace_min": 10, "cool_min": 30},
+    "wan_down": {"on": True, "cool_min": 30},
+    "wan_ip": {"on": True, "cool_min": 60},
+    "wan_loss": {"on": True, "pct": 30, "cool_min": 30},
+    "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
@@ -485,6 +493,48 @@ def check_presence(con, cfg, now):
     presence.check(con, cfg, now)
 
 
+def check_wan(con, cfg, now):
+    from . import wan
+    s = wan.snapshot()
+    if not s["at"]:
+        return
+    was = _state.get("wan_up")
+    _state["wan_up"] = s["up"]
+    if s["up"] is False and s["down_since"] and now - s["down_since"] >= 60 and not _state.get("wan_down_sent"):
+        _state["wan_down_sent"] = True
+        if cfg["rules"]["wan_down"]["on"] and _allow("wan_down", "wan", cfg["rules"]["wan_down"]["cool_min"], now):
+            fire(con, cfg, "wan_down", "bad", "wan", "宽带掉线了", "路由器没有默认路由(外网断了)。先看光猫/线路;恢复后会再提醒一次。", now)
+        else:
+            note(con, "wan_down", "wan", "宽带掉线了", "路由器没有默认路由(外网断了)。", level="bad", now=now)
+    elif s["up"] and _state.get("wan_down_sent"):
+        _state["wan_down_sent"] = False
+        note(con, "wan_down", "wan", "宽带恢复了", f"外网已恢复,公网侧地址 {s['ip'] or '读不到'}。", level="ok", now=now)
+    ch = s.get("ip_changed")
+    if ch and ch["at"] != _state.get("wan_ip_seen"):
+        _state["wan_ip_seen"] = ch["at"]
+        r = cfg["rules"]["wan_ip"]
+        detail = f"WAN 口地址从 {ch['old']} 变成 {ch['new']}。如果你用了 DDNS 或外网访问,要确认它跟着更新了。"
+        if r["on"] and _allow("wan_ip", "wan", r["cool_min"], now):
+            fire(con, cfg, "wan_ip", "info", "wan", "公网 IP 变化", detail, now)
+        else:
+            note(con, "wan_ip", "wan", "公网 IP 变化", detail, now=now)
+    t = wan.window(300, now)
+    ext = [v for k, v in t.items() if not v["gw"] and v["n"] >= 6]
+    pct = cfg["rules"]["wan_loss"]["pct"]
+    if s["up"] and ext and sum(1 for v in ext if v["loss"] >= pct) * 2 >= len(ext) and cfg["rules"]["wan_loss"]["on"]:
+        gw = next((v for v in t.values() if v["gw"]), None)
+        where = ("到网关也在丢包,问题多半在路由器到光猫之间或线路本身" if gw and gw["loss"] >= pct else
+                 "到网关正常,说明路由器和光猫没问题,是运营商/上游线路的问题(和机场无关)" if gw else "")
+        if _allow("wan_loss", "wan", cfg["rules"]["wan_loss"]["cool_min"], now):
+            fire(con, cfg, "wan_loss", "warn", "wan", "宽带丢包偏高",
+                 f"最近 5 分钟到公共 DNS 的丢包 {'、'.join(k + ' ' + str(v['loss']) + '%' for k, v in t.items() if not v['gw'])}。{where}", now)
+
+
+def check_sub_stale(con, cfg, now):
+    from . import providers
+    providers.check_stale(con, cfg, now)
+
+
 def check_forecast(con, cfg, now):
     from . import advisor
     advisor.check_quota_forecast(con, cfg, now)
@@ -501,7 +551,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale)]
 
 
 def evaluate(con, now=None):

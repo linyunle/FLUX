@@ -582,7 +582,11 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="prSave" class="pri">保存</button></div>
   <div class="sub" id="prInfo" style="margin-top:10px"></div></div>
       <div class="card sec" id="sec-plog"><h2>访问记录与面板日志</h2>
-  <div class="h3" style="margin-top:0">谁打开过面板</div>
+  <div class="h3" style="margin-top:0">自检与诊断包</div>
+  <div class="sub" style="margin-bottom:8px">自检会检查面板自己的运行状态、数据一致性和配置,把看起来不对劲的地方列出来(很多 bug 会先在这里露出来)。诊断包是一个 JSON 文件:版本、配置摘要、节点/订阅状态、最近告警、面板日志、页面脚本报错和自检结果;<b>不含任何密码或 Token</b>,默认把 IP / MAC / 设备名打码。</div>
+  <div id="plFinds" style="margin-bottom:8px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button id="dgRun">重新自检</button><button id="dgDl" class="pri">下载诊断包(已打码)</button><button id="dgDlFull">下载完整版(含 IP / 设备名)</button></div>
+  <div class="h3">谁打开过面板</div>
   <div class="sub" style="margin-bottom:8px">按来源 IP + 浏览器记录;第一次出现的新设备、登录输错密码都会记进「告警」时间线。设备名来自「设备名」设置(按 IP 对应 MAC)。</div>
   <div class="scroll" id="plClients"></div>
   <div class="h3">面板运行日志</div>
@@ -609,6 +613,13 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <div class="modal" id="dtl"><div class="box"><h3><span id="dtlTitle"></span><span class="sp"></span><button id="dtlX" aria-label="关闭">✕</button></h3><div id="dtlLive"></div><div class="sub" id="dtlRange" style="margin-top:2px"></div><div id="dtlBody"></div><div id="dtlAct" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div></div>
 
 <script>
+/* 页面脚本报错回传到面板日志(最多 20 条、同样的只报一次),诊断包里能看到 */
+const REPORTED=new Set();let REPN=0;
+function reportErr(msg,src){try{if(REPN>=20)return;const k=String(msg).slice(0,300);if(REPORTED.has(k))return;REPORTED.add(k);REPN++;
+  fetch("/api/clienterr",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({msg:k,src:src||"",ua:navigator.userAgent})}).catch(()=>{})}catch(e){}}
+addEventListener("error",e=>reportErr(e.message,(e.filename||"").split("/").pop()+":"+e.lineno));
+addEventListener("unhandledrejection",e=>reportErr("Promise: "+((e.reason&&e.reason.message)||e.reason)));
+
 "use strict";
 const $=s=>document.querySelector(s);
 const TOKEN=new URLSearchParams(location.search).get("t")||"";
@@ -647,7 +658,7 @@ function dates(){const t=new Date();let f=ymd(t),to=f;
   return {from:f,to}}
 function base(extra={}){const d=dates();return {from:d.from,to:d.to,dev:[...S.devs].join(","),mode:S.mode,q:S.q,group:S.group,rule:S.rule,node:S.node,airport:S.airport,...extra}}
 // 防止旧请求覆盖新结果;请求期间保留上一次的渲染
-async function load(name,path,o,render){const id=(S.seq[name]=(S.seq[name]||0)+1);try{const j=await get(path,o);if(S.seq[name]===id)render(j)}catch(e){if(S.seq[name]===id)console.warn(path,e)}}
+async function load(name,path,o,render){const id=(S.seq[name]=(S.seq[name]||0)+1);try{const j=await get(path,o);if(S.seq[name]===id)render(j)}catch(e){if(S.seq[name]===id){console.warn(path,e);if(!/fetch|Load failed|NetworkError|aborted/i.test(String(e.message))&&/Error$/.test(e.name||""))reportErr(path+" 渲染出错 "+e.name+": "+e.message)}}}
 
 function renderChrome(){
   seg($("#range"),RANGES,S.range,k=>{S.range=k;$("#custom").style.display=k==="custom"?"":"none";renderChrome();refresh()});
@@ -1148,6 +1159,12 @@ function paintRt(j){
   paintMem(j)}
 document.addEventListener("click",e=>{if(!e.target.closest("[data-vz]"))return;TH.viz.style=TH.viz.style==="wave"?"line":"wave";saveTheme();if(S.rt)paintRt(S.rt);if(S.tab==="settings")renderLook()});
 const sysCls=(v,w,b)=>v==null?"":v>=b?"bad":v>=w?"warn":"";
+function wanTile(w,st){if(!w||!w.at)return st("–","宽带","探测中");
+  if(w.up===false)return st("断网","宽带","没有默认路由","bad");
+  const t=w.targets||{},ks=Object.keys(t),ext=ks.filter(k=>!t[k].gw),gw=ks.find(k=>t[k].gw);
+  const ok=ext.map(k=>t[k]).filter(x=>x.avg!=null),avg=ok.length?Math.round(Math.min(...ok.map(x=>x.avg))):null,loss=ext.length?Math.max(...ext.map(k=>t[k].loss)):0;
+  const sub=`丢包 ${loss}%${gw&&t[gw].avg!=null?" · 网关 "+Math.round(t[gw].avg)+" ms":""}`;
+  return st(avg==null?"不通":avg+" ms","宽带(公共 DNS)",sub,avg==null?"bad":sysCls(loss,10,30)||sysCls(avg,80,200))}
 function paintSys(j){
   const el=$("#sysCard");if(!el||el.offsetParent===null)return;
   const m=j.mem,mp=m&&m.total?Math.round(m.used*100/m.total):null,ct=j.ct,dk=j.disk,ld=j.load;
@@ -1158,6 +1175,7 @@ function paintSys(j){
     +st(ct?ct.n:"–","连接跟踪",ct&&ct.max?`上限 ${ct.max} · ${ct.pct}%`:"读不到",ct?sysCls(ct.pct,70,85):"")
     +st(j.tmax==null?"–":j.tmax+"℃","温度",j.tmax==null?"没有温度传感器":j.temps.map(t=>t.name).slice(0,2).join(" / "),sysCls(j.tmax,75,85))
     +st(dk&&dk.pct!=null?dk.pct+"%":"–","磁盘",dk?`剩余 ${fmt(dk.free)}`:"",dk?sysCls(dk.pct,85,95):"")
+    +wanTile(j.wan,st)
     +st(dur(j.uptime||0),"已运行","&nbsp;"));
   $("#sysNote").textContent=j.cpu==null?"刚启动,等几秒":"";
   drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),fitH($("#sysChart"),Math.max(70,(HGT.rt[TH.cards.sys.h]||150)-60)),{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
@@ -1462,6 +1480,10 @@ const RULE_META=[
  ["new_device","新设备入网","出现之前没见过的设备时提醒。首次启动后的学习期内见到的设备都算已知",[]],
  ["dev_online","设备上线","「关注」的设备(设备页点 🔔 关注)从离线变回在线时记录并提醒;范围选 1 则所有设备都提醒。这个开关只管推送,时间线照常记录",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["cool_min","同一设备间隔","分钟"]]],
  ["dev_offline","设备离线","「关注」的设备超过「离线判定」时间没有出现(内核邻居表里没有确认在线、也没有连接经过 nikki)才算离线,手机省电断 Wi-Fi 几分钟不会误报",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["grace_min","离线判定","分钟"],["cool_min","同一设备间隔","分钟"]]],
+ ["wan_down","宽带掉线 / 恢复","路由器没有默认路由超过 1 分钟(外网断了);恢复时记一条",[["cool_min","间隔","分钟"]]],
+ ["wan_ip","公网 IP 变化","WAN 口地址变了(拨号重连、运营商换地址)。用了 DDNS / 外网访问时有用",[["cool_min","间隔","分钟"]]],
+ ["wan_loss","宽带丢包","最近 5 分钟到公共 DNS 的 ICMP 丢包率超过阈值;同时看网关,提示问题在路由器侧还是运营商侧",[["pct","丢包率","%"],["cool_min","间隔","分钟"]]],
+ ["sub_stale","订阅长时间没更新","nikki 里的订阅超过这么久没更新(更新失败 / 订阅地址失效),官方用量和到期数据也会过期",[["hours","超过","小时"],["cool_min","间隔","分钟"]]],
  ["traffic_spike","流量突增","设备这一小时的流量 ≥ 平时同一钟点均值 × 倍数,且不少于下限(没有历史基线时只看下限)",[["min_mb","下限","MB"],["factor","倍数","×"],["cool_min","同一设备间隔","分钟"]]],
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
@@ -1717,7 +1739,11 @@ async function loadProbeSet(){const j=await get("/api/probe");$("#prOn").checked
   $("#prInfo").innerHTML=(j.last?`上一轮 ${fmtTs(j.last.at)}:测了 ${j.last.n} 个,${j.last.ok} 个有响应,${j.last.fail} 个超时/失败。<br>`:"还没有测过。")+`下一轮会测的节点(最近 24 小时流量最大的 ${j.cfg.top} 个):${j.nodes.length?j.nodes.map(esc).join("、"):"暂无"}`}
 $("#prSave").onclick=async()=>{const m=$("#prMsg");m.className="msg";try{await post("/api/probe",{on:$("#prOn").checked,minutes:+$("#prMin").value,top:+$("#prTop").value,url:$("#prUrl").value});const on=$("#prOn").checked;await loadProbeSet();m.className="msg ok";m.textContent="已保存"+(on?"(几分钟内开始第一轮,节点评分要积累一段时间才完整)":"")}catch(e){m.className="msg err";m.textContent=e.message}};
 /* 设置:访问记录与面板日志 */
-async function loadPlog(){const j=await get("/api/panel",{n:500});
+async function loadFinds(){const e=$("#plFinds");e.innerHTML='<span class="sub">自检中…</span>';
+  try{const j=await get("/api/selfcheck");e.innerHTML=j.findings.map(f=>`<div style="margin:4px 0"><span class="lv ${f.level==="ok"?"ok":f.level==="info"?"note":f.level}">${f.level==="bad"?"问题":f.level==="warn"?"注意":f.level==="ok"?"正常":"提示"}</span> <b>${esc(f.title)}</b>${f.detail?`<div class="sub" style="margin-left:2px">${esc(f.detail)}</div>`:""}</div>`).join("")}catch(er){e.innerHTML='<span class="sub">自检失败:'+esc(er.message)+"</span>"}}
+async function dlDiag(full){const m=$("#plMsg");try{const j=await get("/api/diag",full?{full:1}:{});const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(j,null,1)],{type:"application/json"}));a.download="flux-diag-"+ymd(new Date())+(full?"-full":"")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);m.className="msg ok";m.textContent="已生成"}catch(e){m.className="msg err";m.textContent=e.message}}
+$("#dgRun").onclick=loadFinds;$("#dgDl").onclick=()=>dlDiag(false);$("#dgDlFull").onclick=()=>dlDiag(true);
+async function loadPlog(){loadFinds();const j=await get("/api/panel",{n:500});
   $("#plClients").innerHTML=j.clients.length?`<table><thead><tr><th>设备</th><th>IP</th><th>浏览器</th><th>首次</th><th>最近</th><th>次数</th><th>登录失败</th></tr></thead><tbody>${j.clients.map(c=>`<tr><td>${esc(c.name||"–")}</td><td>${esc(c.ip)}</td><td>${esc(c.ua)}</td><td>${fmtTs(c.first)}</td><td>${fmtTs(c.last)}</td><td>${c.n}</td><td>${c.fails?`<span class="lv warn">${c.fails}</span>`:0}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">还没有记录。</div>';
   const t=$("#plText");t.value=j.log.join("\n");t.scrollTop=t.scrollHeight}
 $("#plRefresh").onclick=loadPlog;
