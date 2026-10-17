@@ -1161,9 +1161,9 @@ document.addEventListener("click",e=>{if(!e.target.closest("[data-vz]"))return;T
 const sysCls=(v,w,b)=>v==null?"":v>=b?"bad":v>=w?"warn":"";
 function wanTile(w,st){if(!w||!w.at)return st("–","宽带","探测中");
   if(w.up===false)return st("断网","宽带","没有默认路由","bad");
-  const t=w.targets||{},ks=Object.keys(t),ext=ks.filter(k=>!t[k].gw),gw=ks.find(k=>t[k].gw);
+  const t=w.targets||{},ks=Object.keys(t),ext=ks.filter(k=>!t[k].gw&&!t[k].silent),gw=ks.find(k=>t[k].gw),mute=ks.filter(k=>t[k].silent).length;
   const ok=ext.map(k=>t[k]).filter(x=>x.avg!=null),avg=ok.length?Math.round(Math.min(...ok.map(x=>x.avg))):null,loss=ext.length?Math.max(...ext.map(k=>t[k].loss)):0;
-  const sub=`丢包 ${loss}%${gw&&t[gw].avg!=null?" · 网关 "+Math.round(t[gw].avg)+" ms":""}`;
+  const sub=`丢包 ${loss}%${gw&&t[gw].avg!=null?" · 网关 "+Math.round(t[gw].avg)+" ms":""}${mute?` · ${mute} 个目标不回应 ICMP`:""}`;
   return st(avg==null?"不通":avg+" ms","宽带(公共 DNS)",sub,avg==null?"bad":sysCls(loss,10,30)||sysCls(avg,80,200))}
 function paintSys(j){
   const el=$("#sysCard");if(!el||el.offsetParent===null)return;
@@ -1482,7 +1482,7 @@ const RULE_META=[
  ["dev_offline","设备离线","「关注」的设备超过「离线判定」时间没有出现(内核邻居表里没有确认在线、也没有连接经过 nikki)才算离线,手机省电断 Wi-Fi 几分钟不会误报",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["grace_min","离线判定","分钟"],["cool_min","同一设备间隔","分钟"]]],
  ["wan_down","宽带掉线 / 恢复","路由器没有默认路由超过 1 分钟(外网断了);恢复时记一条",[["cool_min","间隔","分钟"]]],
  ["wan_ip","公网 IP 变化","WAN 口地址变了(拨号重连、运营商换地址)。用了 DDNS / 外网访问时有用",[["cool_min","间隔","分钟"]]],
- ["wan_loss","宽带丢包","最近 5 分钟到公共 DNS 的 ICMP 丢包率超过阈值;同时看网关,提示问题在路由器侧还是运营商侧",[["pct","丢包率","%"],["cool_min","间隔","分钟"]]],
+ ["wan_loss","宽带丢包","最近 5 分钟到所有「正常回应」的公共 DNS 的 ICMP 丢包率都超过阈值才提醒(运营商常对 ICMP 限速,单个目标丢包不算);同时看网关,提示问题在路由器侧还是运营商侧",[["pct","丢包率","%"],["cool_min","间隔","分钟"]]],
  ["sub_stale","订阅长时间没更新","nikki 里的订阅超过这么久没更新(更新失败 / 订阅地址失效),官方用量和到期数据也会过期",[["hours","超过","小时"],["cool_min","间隔","分钟"]]],
  ["traffic_spike","流量突增","设备这一小时的流量 ≥ 平时同一钟点均值 × 倍数,且不少于下限(没有历史基线时只看下限)",[["min_mb","下限","MB"],["factor","倍数","×"],["cool_min","同一设备间隔","分钟"]]],
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],

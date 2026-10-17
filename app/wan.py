@@ -146,8 +146,11 @@ def window(secs=300, now=None):
             if not v:
                 continue
             ok = [r for r in v if r is not None]
+            allv = [r for _, r in d]
+            # 整段记录(约 3 小时)里一次都没通过 = 这个目标不回应 ICMP(被运营商/目标屏蔽),不能当成「丢包」
+            silent = len(allv) >= 12 and all(r is None for r in allv)
             out[t] = {"n": len(v), "lost": len(v) - len(ok), "loss": round((len(v) - len(ok)) * 100 / len(v)),
-                      "avg": round(sum(ok) / len(ok), 1) if ok else None, "max": max(ok) if ok else None, "gw": t == STATE["gw"]}
+                      "avg": round(sum(ok) / len(ok), 1) if ok else None, "max": max(ok) if ok else None, "gw": t == STATE["gw"], "silent": silent}
     return out
 
 

@@ -301,6 +301,29 @@ def test_wan_and_diag():
     assert fired == [("sub_stale", "A")], fired
 
 
+def test_provider_nodes_probe_local():
+    import os, tempfile, urllib.error
+    from app import probe, devices, airports
+    calls = []
+    def fake(path, **k):
+        calls.append(path)
+        if path.startswith("/providers/"):
+            raise urllib.error.HTTPError(path, 404, "nf", {}, None)
+        if "bad" in path:
+            raise urllib.error.HTTPError(path, 504, "to", {}, None)
+        return {"delay": 5}
+    probe.api_call = fake
+    assert probe._test_one("n 1", "https://x/y", "P") == (True, "")
+    assert calls[0].startswith("/providers/proxies/P/n%201/healthcheck") and calls[1].startswith("/proxies/n%201/delay"), calls   # 订阅接口 404 -> 退回 /proxies
+    assert probe._test_one("bad", "https://x/y", "") == (False, "HTTP 504")
+    d = tempfile.mkdtemp(); os.makedirs(d + "/net")
+    open(d + "/net/fib_trie", "w").write("Main:\n  +-- 0.0.0.0/0 3 0 5\n     |-- 192.168.100.1\n        /32 host LOCAL\n     |-- 192.168.100.5\n        /32 link UNICAST\n")
+    open(d + "/net/if_inet6", "w").write("20010db8000000000000000000000001 02 40 00 00 eth0\n")
+    os.environ["SYS_PROC"] = d; devices._LOCAL["t"] = 0
+    assert devices.local_ips() == {"192.168.100.1", "2001:db8::1"}, devices.local_ips()
+    assert devices.NAMES.label("2001:db8::1", [], {}) == "路由器本机"
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

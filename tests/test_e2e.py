@@ -291,6 +291,8 @@ try:
     ok(get("/api/diag?full=1")["masked"] is False, "诊断包:完整版")
     ok("wan" in get("/api/sys") and "targets" in get("/api/wan") and isinstance(get("/api/wan")["hours"], dict), "宽带质量:接口")
     ar2 = get("/api/alerts/config")["rules"]; ok(all(k in ar2 for k in ("wan_down", "wan_ip", "wan_loss", "sub_stale")), "告警:宽带/订阅规则存在")
+    names_ = [n["node"] for n in get("/api/qoe")["nodes"]]
+    ok("XX-01" in names_ and "HK-01" in names_, f"节点:订阅(provider)里的节点也被读到 {names_[:6]}")
     rp = get("/api/report"); ok(rp["up"] + rp["down"] > 0 and rp["devices"] and rp["kinds"]["proxy"] > 0 and rp["quota"], "周报:数据")
     ok(post("/api/report/config", {"on": True, "weekday": 2, "hour": 8})[1] == {"on": True, "weekday": 2, "hour": 8}, "周报:计划保存")
     post("/api/report/send", {}); rr = wait_kind("report", 10); ok(rr and "总流量" in rr[0]["detail"], f"周报:推送 {rr[:1]}")

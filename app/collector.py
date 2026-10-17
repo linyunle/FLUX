@@ -89,24 +89,43 @@ class Collector:
             self.proxies_at = time.time() - 45
             return
         groups, ptype, nodes = {}, {}, {}
+
+        def add_node(n, p):
+            t = str(p.get("type") or "")
+            ptype[n] = t
+            if t.lower() in BUILTIN_TYPES:
+                return
+            hist = p.get("history") or []
+            delay = int(hist[-1].get("delay") or 0) if hist and isinstance(hist[-1], dict) else None
+            fails = 0
+            for h in reversed(hist):  # 末尾连续测速失败的次数(给告警用)
+                if isinstance(h, dict) and not int(h.get("delay") or 0):
+                    fails += 1
+                else:
+                    break
+            nodes[n] = {"type": t, "delay": delay, "fails": fails}
+            self.note_qoe(n, hist)
+
         for n, p in proxies.items():
             if not isinstance(p, dict):
                 continue
-            t = str(p.get("type") or "")
-            ptype[n] = t
             if isinstance(p.get("all"), list):
+                ptype[n] = str(p.get("type") or "")
                 groups[n] = (p.get("now") or "", [str(x) for x in p["all"]])
-            elif t.lower() not in BUILTIN_TYPES:
-                hist = p.get("history") or []
-                delay = int(hist[-1].get("delay") or 0) if hist and isinstance(hist[-1], dict) else None
-                fails = 0
-                for h in reversed(hist):  # 末尾连续测速失败的次数(给告警用)
-                    if isinstance(h, dict) and not int(h.get("delay") or 0):
-                        fails += 1
-                    else:
-                        break
-                nodes[n] = {"type": t, "delay": delay, "fails": fails}
-                self.note_qoe(n, hist)
+            else:
+                add_node(n, p)
+        # 订阅(provider)里的节点不在 /proxies 里,要从 /providers/proxies 读,否则只看得到本地配置的几个节点
+        try:
+            provs = api_call("/providers/proxies").get("providers", {})
+        except Exception:
+            provs = {}
+        for pn, pv in provs.items():
+            if pn == "default" or not isinstance(pv, dict):
+                continue
+            for p in pv.get("proxies") or []:
+                n = p.get("name") if isinstance(p, dict) else None
+                if n and n not in nodes and n not in groups:
+                    add_node(str(n), p)
         self.groups, self.ptype, self.nodes, self.proxies_at = groups, ptype, nodes, time.time()
 
     def note_qoe(self, node, hist):

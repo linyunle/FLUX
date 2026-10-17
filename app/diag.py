@@ -117,6 +117,18 @@ def selfcheck(con, now=None):
         out.append(_f("warn", "宽带质量没有数据", "探测线程没有产出样本。看面板日志里「宽带质量探测出错」。"))
     elif wn["at"] and wn["mode"] == "tcp":
         out.append(_f("info", "宽带质量在用 TCP 探测", "容器没有 ICMP 权限,退回用 TCP 53 的连接耗时,丢包判断会粗一些。"))
+    for t, v in (wn.get("targets") or {}).items():
+        if v.get("silent"):
+            out.append(_f("info", f"{t} 不回应 ICMP", "这个探测目标从没回应过(被运营商或对方屏蔽),不参与丢包判断。可以忽略。"))
+        elif v.get("gw") and v["n"] >= 12 and v["loss"] >= 20:
+            out.append(_f("info", f"到网关的 ICMP 丢包 {v['loss']}%", "运营商常对 PPPoE 对端的 ICMP 限速,不一定是真丢包。对照「TCP 重传率」和「告警」里的 TCP 重传提醒来判断线路是否真的有问题。"))
+    try:
+        for p in providers.fetch():
+            at = providers.parse_ts(p["updated"])
+            if at and p["has_info"] and now - at > 72 * 3600:
+                out.append(_f("warn", f"订阅「{p['name']}」{int((now - at) // 86400)} 天没更新", "官方用量/到期数据会停在旧值;到 nikki 里手动更新一次看报什么错。"))
+    except Exception:
+        pass
     named = devices.stored_names(con)
     un = [k for k in w.realtime.LIVE["clients"] if k not in named][:50]
     if len(un) >= 5:

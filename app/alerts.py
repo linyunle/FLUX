@@ -70,7 +70,7 @@ DEFAULT_RULES = {
     "dev_offline": {"on": True, "all": 0, "grace_min": 10, "cool_min": 30},
     "wan_down": {"on": True, "cool_min": 30},
     "wan_ip": {"on": True, "cool_min": 60},
-    "wan_loss": {"on": True, "pct": 30, "cool_min": 30},
+    "wan_loss": {"on": True, "pct": 50, "cool_min": 30},
     "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
 }
 # 阈值范围(防止填出离谱的值)
@@ -330,6 +330,12 @@ def check_new_device(con, cfg, now):
     for key, v in list(realtime.LIVE["clients"].items()):
         if not key or key in known or key.startswith(("127.", "::1", "fe80")):
             continue
+        if key in devices.local_ips() or (":" in key and not is_mac(key)):
+            # 路由器自己的地址;或查不到 MAC 的 IPv6(隐私临时地址,过一会儿就换了)——不当成新设备提醒
+            with con:
+                con.execute("INSERT OR IGNORE INTO known_dev(client, first) VALUES(?,?)", (key, int(now)))
+            known.add(key)
+            continue
         with con:
             con.execute("INSERT OR IGNORE INTO known_dev(client, first) VALUES(?,?)", (key, int(now)))
         known.add(key)
@@ -519,15 +525,16 @@ def check_wan(con, cfg, now):
         else:
             note(con, "wan_ip", "wan", "公网 IP 变化", detail, now=now)
     t = wan.window(300, now)
-    ext = [v for k, v in t.items() if not v["gw"] and v["n"] >= 6]
+    ext = [v for k, v in t.items() if not v["gw"] and v["n"] >= 6 and not v["silent"]]   # 不回应 ICMP 的目标不参与
     pct = cfg["rules"]["wan_loss"]["pct"]
-    if s["up"] and ext and sum(1 for v in ext if v["loss"] >= pct) * 2 >= len(ext) and cfg["rules"]["wan_loss"]["on"]:
+    # 所有「正常回应过」的公共目标都在丢包才算宽带有问题(单个目标丢包常是对方限速/屏蔽 ICMP)
+    if s["up"] and ext and all(v["loss"] >= pct for v in ext) and cfg["rules"]["wan_loss"]["on"]:
         gw = next((v for v in t.values() if v["gw"]), None)
         where = ("到网关也在丢包,问题多半在路由器到光猫之间或线路本身" if gw and gw["loss"] >= pct else
                  "到网关正常,说明路由器和光猫没问题,是运营商/上游线路的问题(和机场无关)" if gw else "")
         if _allow("wan_loss", "wan", cfg["rules"]["wan_loss"]["cool_min"], now):
             fire(con, cfg, "wan_loss", "warn", "wan", "宽带丢包偏高",
-                 f"最近 5 分钟到公共 DNS 的丢包 {'、'.join(k + ' ' + str(v['loss']) + '%' for k, v in t.items() if not v['gw'])}。{where}", now)
+                 f"最近 5 分钟到公共 DNS 的丢包 {'、'.join(k + ' ' + str(v['loss']) + '%' for k, v in t.items() if not v['gw'] and not v['silent'])}。{where}", now)
 
 
 def check_sub_stale(con, cfg, now):

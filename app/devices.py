@@ -279,12 +279,46 @@ class Names:
         for ip in ips:
             if ip in stored:
                 return stored[ip]
+        if key in local_ips() or any(i in local_ips() for i in ips):
+            return "路由器本机"
         if k in self.leases_mac:
             return self.leases_mac[k]
         for ip in list(ips) + [key]:
             if ip in self.leases_ip:
                 return self.leases_ip[ip]
         return ""
+
+
+_LOCAL = {"t": 0.0, "v": frozenset()}
+
+
+def local_ips():
+    """路由器自己的所有 IP(v4 读 fib_trie,v6 读 if_inet6)。容器是 host 网络,看到的就是路由器本机。60 秒缓存。"""
+    if time.time() - _LOCAL["t"] < 60:
+        return _LOCAL["v"]
+    base = os.environ.get("SYS_PROC", "/proc")
+    out = set()
+    try:
+        with open(base + "/net/fib_trie") as f:
+            last = ""
+            for line in f:
+                t = line.strip()
+                if t.startswith(("|--", "+--")) and "|--" in t:
+                    last = t.split("|--", 1)[1].strip()
+                elif "/32 host LOCAL" in t and last:
+                    out.add(last)
+    except OSError:
+        pass
+    try:
+        with open(base + "/net/if_inet6") as f:
+            for line in f:
+                h = line.split()[0]
+                if len(h) == 32:
+                    out.add(socket.inet_ntop(socket.AF_INET6, bytes.fromhex(h)))
+    except (OSError, ValueError):
+        pass
+    _LOCAL.update(t=time.time(), v=frozenset(out))
+    return _LOCAL["v"]
 
 
 NAMES = Names()

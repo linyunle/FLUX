@@ -76,6 +76,9 @@ class API(BaseHTTPRequestHandler):
                 "JP-01": {"type": "Trojan", "history": hist("JP-01", 0 if STATE["jp_down"] else 120)},
                 "Proxy": {"type": "Selector", "now": "HK-01", "all": ["HK-01", "JP-01"]},
                 "egress-probe": {"type": "Selector", "now": STATE["probe_sel"], "all": ["HK-01", "JP-01"]}}})
+        if p.split("?")[0].startswith("/providers/proxies/") and p.split("?")[0].endswith("/healthcheck") and p.count("/") >= 5:
+            STATE.setdefault("hc", []).append(unquote(p.split("?")[0]))
+            return self._j(200, {"delay": 77})
         if p.split("?")[0].startswith("/proxies/") and p.split("?")[0].endswith("/delay"):
             STATE.setdefault("delays", []).append(p.split("?")[0].split("/")[2])
             return self._j(200, {"delay": 99})
@@ -84,7 +87,7 @@ class API(BaseHTTPRequestHandler):
                 "default": {"type": "Proxy", "vehicleType": "Compatible", "proxies": []},
                 "MyAir": {"type": "Proxy", "vehicleType": "HTTP", "updatedAt": "2026-10-16T08:00:00+08:00",
                           "subscriptionInfo": {"Upload": 1 << 30, "Download": 5 << 30, "Total": 100 << 30, "Expire": 1893456000},
-                          "proxies": [{"name": "XX-01"}, {"name": "XX-02"}]},
+                          "proxies": [{"name": "XX-01", "type": "Vless", "history": [{"time": "2026-10-16T08:00:00+08:00", "delay": 88}]}, {"name": "XX-02", "type": "Trojan", "history": []}]},
                 "NoExp": {"type": "Proxy", "vehicleType": "HTTP", "updatedAt": "2026-10-16T06:16:00.123456789+08:00",
                           "subscriptionInfo": {"Upload": 0, "Download": 7 << 40, "Total": 24 << 40, "Expire": 4102444800},
                           "proxies": [{"name": "YY-01"}]}}})

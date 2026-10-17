@@ -3,6 +3,7 @@
 不改任何配置),结果会进 nikki 的测速记录,再被面板读回去算评分。只测在用的节点,请求量很小。"""
 import json
 import threading
+import urllib.error
 import time
 import urllib.parse
 
@@ -57,16 +58,42 @@ def candidates(con, top, now=None):
     return out[:top]
 
 
-def _run(nodes, url):
-    ok = bad = 0
-    for n in nodes:
+def _test_one(n, url, prov):
+    """让 nikki 测一个节点。订阅(provider)里的节点要走 /providers/proxies/<订阅>/<节点>/healthcheck,
+    本地配置的节点走 /proxies/<节点>/delay。返回 (是否有响应, 错误说明)。"""
+    q = f"url={urllib.parse.quote(url, safe='')}&timeout=5000"
+    paths = ([f"/providers/proxies/{urllib.parse.quote(prov, safe='')}/{urllib.parse.quote(n, safe='')}/healthcheck?{q}"] if prov else []) \
+        + [f"/proxies/{urllib.parse.quote(n, safe='')}/delay?{q}"]
+    err = ""
+    for path in paths:
         try:
-            api_call(f"/proxies/{urllib.parse.quote(n, safe='')}/delay?url={urllib.parse.quote(url, safe='')}&timeout=5000", timeout=8)
+            api_call(path, timeout=8)
+            return True, ""
+        except urllib.error.HTTPError as e:
+            err = f"HTTP {e.code}"
+            if e.code in (404, 400) and path is not paths[-1]:
+                continue   # 这个接口不认,换下一个
+            return False, err   # 504 之类 = 节点测速超时,是正常的失败
+        except Exception as e:
+            return False, type(e).__name__
+    return False, err
+
+
+def _run(nodes, url):
+    from . import airports
+    ok = bad = 0
+    errs = {}
+    for n in nodes:
+        with airports._lock:
+            prov = airports._prov.get(n, "")
+        good, err = _test_one(n, url, prov)
+        if good:
             ok += 1
-        except Exception:
-            bad += 1   # 超时/失败也会被 nikki 记成一次失败的测速,这正是评分要的数据
-    _state.update(running=False, result={"at": int(time.time()), "ok": ok, "fail": bad, "n": len(nodes)})
-    log(f"节点测速完成:{len(nodes)} 个节点,{ok} 个有响应,{bad} 个超时/失败")
+        else:
+            bad += 1   # 超时也会被 nikki 记成一次失败的测速,这正是评分要的数据
+            errs[err] = errs.get(err, 0) + 1
+    _state.update(running=False, result={"at": int(time.time()), "ok": ok, "fail": bad, "n": len(nodes), "errs": errs})
+    log(f"节点测速完成:{len(nodes)} 个节点,{ok} 个有响应,{bad} 个超时/失败" + (f"({'、'.join(f'{k}×{v}' for k, v in errs.items())})" if errs else ""))
 
 
 def check(con, cfg, now):
