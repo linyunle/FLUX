@@ -310,6 +310,13 @@ try:
         time.sleep(0.5)
     sl = get("/api/syslog", ) ; ok(sl["rows"] >= 2 and any("e2e-marker" in x["msg"] for x in sl["rows_data"]), "系统日志:收到并入库")
     ok(len(get("/api/syslog?level=3")["rows_data"]) == 1 and len(get("/api/syslog?q=e2e-marker")["rows_data"]) == 1, "系统日志:按级别和关键词筛选")
+    c, r = post("/api/syslog/cfg", {"on": True, "port": sp, "days": 2, "max_rows": 2000, "ignore": "e2e-skip"}); ok(c == 200 and r["cfg"]["ignore"] == ["e2e-skip"] and r["purged"] == 0, "系统日志:忽略名单保存")
+    time.sleep(6)
+    _c.sendto("<30>Oct 17 19:58:02 OpenWrt crond[1]: e2e-skip noise".encode(), ("127.0.0.1", sp)); _c.sendto("<30>Oct 17 19:58:03 OpenWrt app[1]: e2e-keep".encode(), ("127.0.0.1", sp))
+    for _ in range(20):
+        if get("/api/syslog?q=e2e-keep")["rows_data"]: break
+        time.sleep(0.5)
+    ok(get("/api/syslog?q=e2e-keep")["rows_data"] and not get("/api/syslog?q=e2e-skip")["rows_data"] and get("/api/syslog")["ignored"] >= 1, "系统日志:命中忽略名单的不入库")
     so_ = wait_kind("syslog_crit", 40); ok(so_ and "严重" in so_[0]["title"], f"系统日志:严重信息告警 {so_[:1]}")
     ok(get("/api/backup")["syslog"]["port"] == sp and "ups" in get("/api/backup") and "expiry" in get("/api/backup"), "备份:包含日志/UPS/到期设置")
     c, r = post("/api/syslog/clear", {}); ok(c == 200 and get("/api/syslog")["rows"] == 0, "系统日志:清空")

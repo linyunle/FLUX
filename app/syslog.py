@@ -17,10 +17,10 @@ import time
 from . import db
 from .util import log, stop
 
-DEFAULT = {"on": False, "port": 5514, "days": 7, "max_rows": 100000}
+DEFAULT = {"on": False, "port": 5514, "days": 7, "max_rows": 100000, "ignore": []}
 SEV = ["紧急", "警报", "严重", "错误", "警告", "注意", "信息", "调试"]
 RATE = 300
-_state = {"bound": 0, "last_rx": 0, "rx": 0, "drop": 0, "bad": 0, "err": "", "pruned": 0, "last_prune": 0, "sys_last": None}
+_state = {"bound": 0, "last_rx": 0, "rx": 0, "ignored": 0, "drop": 0, "bad": 0, "err": "", "pruned": 0, "last_prune": 0, "sys_last": None}
 _lock = threading.Lock()
 
 PRI = re.compile(r"^<(\d{1,3})>")
@@ -83,7 +83,25 @@ def load_cfg(con):
                 c[k] = max(lo, min(hi, int(v.get(k, c[k]))))
             except (TypeError, ValueError):
                 pass
+        c["ignore"] = _kw(v.get("ignore"))
     return c
+
+
+def _kw(v):
+    """忽略关键词:每行一个(不分大小写,匹配「程序名 + 内容」里的子串),最多 30 个。"""
+    if isinstance(v, str):
+        v = v.splitlines()
+    out = []
+    for x in v or []:
+        x = str(x).strip()[:80]
+        if x and x.lower() not in [o.lower() for o in out]:
+            out.append(x)
+    return out[:30]
+
+
+def ignored(cfg, tag, msg):
+    t = (tag + " " + msg).lower()
+    return any(k.lower() in t for k in cfg.get("ignore") or [])
 
 
 def save_cfg(con, body):
@@ -91,7 +109,7 @@ def save_cfg(con, body):
         def num(k, d):
             v = body.get(k)
             return d if v in (None, "") else int(v)
-        c = {"on": bool(body.get("on")), "port": num("port", 5514), "days": num("days", 7), "max_rows": num("max_rows", 100000)}
+        c = {"on": bool(body.get("on")), "port": num("port", 5514), "days": num("days", 7), "max_rows": num("max_rows", 100000), "ignore": _kw(body.get("ignore"))}
     except (TypeError, ValueError):
         raise ValueError("端口、天数、条数要填数字")
     if not 1024 <= c["port"] <= 65535:
@@ -101,8 +119,18 @@ def save_cfg(con, body):
     if not 1000 <= c["max_rows"] <= 1000000:
         raise ValueError("最大条数范围 1000–1000000")
     with con:
-        con.execute("INSERT INTO kv(k,v) VALUES('syslog',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(c),))
+        con.execute("INSERT INTO kv(k,v) VALUES('syslog',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(c, ensure_ascii=False),))
     return load_cfg(con)
+
+
+def purge_ignored(con, cfg):
+    """把库里已经存的、命中忽略关键词的日志删掉(保存忽略名单时调用)。"""
+    n = 0
+    with con:
+        for k in cfg.get("ignore") or []:
+            like = "%" + k.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            n += con.execute("DELETE FROM syslog WHERE (tag||' '||msg) LIKE ? ESCAPE '\\'", (like,)).rowcount
+    return n
 
 
 def _insert(con, rows):
@@ -181,7 +209,9 @@ def run():
                 _state["drop"] += 1
             else:
                 h, sv, tg, msg = parse(data, addr[0])
-                if msg:
+                if msg and ignored(cfg, tg, msg):
+                    _state["ignored"] += 1
+                elif msg:
                     buf.append((int(now), h, sv, tg, msg))
                     _state["rx"] += 1
                     _state["last_rx"] = int(now)
@@ -220,7 +250,7 @@ def status(con):
     cfg = load_cfg(con)
     n, lo, hi, sz = con.execute("SELECT COUNT(*),MIN(ts),MAX(ts),SUM(LENGTH(msg)+LENGTH(tag)+LENGTH(host)+40) FROM syslog").fetchone()
     by = {r[0]: r[1] for r in con.execute("SELECT sev,COUNT(*) FROM syslog WHERE ts>=? GROUP BY sev", (int(time.time()) - 86400,))}
-    return {"cfg": cfg, "bound": _state["bound"], "err": _state["err"], "rx": _state["rx"], "drop": _state["drop"], "bad": _state["bad"],
+    return {"cfg": cfg, "bound": _state["bound"], "err": _state["err"], "rx": _state["rx"], "ignored": _state["ignored"], "drop": _state["drop"], "bad": _state["bad"],
             "last_rx": _state["last_rx"], "rows": n or 0, "oldest": lo or 0, "newest": hi or 0, "bytes": sz or 0,
             "pruned": _state["pruned"], "by_sev_24h": {SEV[k]: v for k, v in sorted(by.items())}}
 

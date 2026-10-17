@@ -359,6 +359,11 @@ def test_syslog():
     assert fired and fired[0][0] == "syslog_crit", fired
     syslog._insert(con, [(int(now), "r", 6, "x", "all fine too")])
     n = len(fired); syslog.check(con, acfg, now + 2); assert len(fired) == n
+    c = syslog.save_cfg(con, {"on": True, "port": 5514, "ignore": "crond\nCROND\n  \nnut_onbatt"})
+    assert c["ignore"] == ["crond", "nut_onbatt"], c
+    syslog._insert(con, [(int(now), "r", 3, "crond", "USER root pid 1 cmd x"), (int(now), "r", 6, "a", "keep nut_onbatt_time"), (int(now), "r", 6, "a", "keep me")])
+    assert syslog.purge_ignored(con, c) == 2 and any("keep me" in r["msg"] for r in syslog.query(con, 7)) and not any("crond" in r["tag"] for r in syslog.query(con, 7))
+    assert syslog.ignored(c, "CROND", "x") and not syslog.ignored(c, "a", "keep me")
     # 真实收包:开线程监听本机一个端口
     d = tempfile.mkdtemp(); config.DB_PATH = d + "/t.db"; c2 = db.init_db()
     s = so.socket(so.AF_INET, so.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()

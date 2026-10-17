@@ -1085,7 +1085,7 @@ q_ups = _q(lambda con, p: ups.status(con))
 q_expiry = _q(lambda con, p: expiry.status(con))
 GET_ROUTES.update({"/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 POST_ROUTES.update({
-    "/api/syslog/cfg": lambda body: _wcon(lambda con: {"cfg": syslog.save_cfg(con, body)}),
+    "/api/syslog/cfg": lambda body: _wcon(lambda con: (lambda c: {"cfg": c, "purged": syslog.purge_ignored(con, c)})(syslog.save_cfg(con, body))),
     "/api/syslog/clear": lambda body: _wcon(lambda con: syslog.clear(con)),
     "/api/ups": lambda body: _wcon(lambda con: {"cfg": ups.save_cfg(con, body)}),
     "/api/ups/test": lambda body: _wcon(lambda con: ups.test(con, body)),
