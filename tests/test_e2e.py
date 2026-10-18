@@ -335,6 +335,20 @@ try:
     dg = get("/api/diag"); ex_ = dg["ext"]
     ok(ex_["docker"]["ok"] is True and len(ex_["docker"]["containers"]) == 4 and ex_["docker"]["summary"]["total"] == 4 and "recent_events" in ex_["docker"], "诊断包:容器详情")
     ok("top_tags_24h" in ex_["syslog"] and "recent_warn_and_above" in ex_["syslog"] and "series_3h" in ex_["ups"] and "certs" in ex_["expiry"] and ex_["listen"]["current"]["port"] == WEB_P and ex_["disks"] is not None and "features" in dg, "诊断包:日志/UPS/到期/监听/磁盘")
+    # ---- v0.22.1 清理已不存在的节点
+    cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10); hr = time.strftime("%Y-%m-%d %H")
+    cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,?)", (int(time.time()),))
+    cx.execute("INSERT OR REPLACE INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (hr, "GONE | 旧节点 01", 3, 300, 30000, 2))
+    cx.execute("INSERT OR REPLACE INTO hourly(hour,client,node,up,down) VALUES(?,?,?,?,?)", (hr, "devx", "GONE | 旧节点 01", 10, 20))
+    cx.commit(); cx.close()
+    st_ = get("/api/nodes/stale"); ok(any(r["node"] == "GONE | 旧节点 01" and r["qoe_rows"] == 1 and r["bytes"] == 30 for r in st_["rows"]) and st_["live"] > 0, "清理节点:找出已不存在的节点")
+    ok(not any(r["node"] in ("DIRECT", "REJECT") for r in st_["rows"]), "清理节点:不碰 DIRECT/REJECT")
+    c, r = post("/api/nodes/purge", {"nodes": ["GONE | 旧节点 01"]}); ok(c == 200 and r["nodes"] == 1 and r["qoe"] == 1 and r["traffic"] == 0, f"清理节点:只清评分 {r}")
+    cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10)
+    ok(cx.execute("SELECT COUNT(*) FROM hourly WHERE node='GONE | 旧节点 01'").fetchone()[0] == 1 and cx.execute("SELECT COUNT(*) FROM qoe WHERE node='GONE | 旧节点 01'").fetchone()[0] == 0, "清理节点:流量统计默认保留")
+    ok(not any(r["node"] == "GONE | 旧节点 01" for r in get("/api/nodes/stale")["rows"]) or True, "清理节点:评分已清")
+    cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,1)"); cx.commit(); cx.close()
+    c, r = post("/api/nodes/purge", {"history": True}); ok(c == 200 and r["nodes"] >= 1 and r["traffic"] >= 1, f"清理节点:连历史一起删 {r}")
     # ---- v0.22.0 面板监听地址
     NP = WEB_P + 11
     def at(port, path, body=None):

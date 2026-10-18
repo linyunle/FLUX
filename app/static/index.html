@@ -392,7 +392,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ndRules"></div></div>
     </div>
   </div>
-  <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span></h2><div class="scroll" id="nsBody"></div></div>
+  <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span><span class="sp"></span><button id="nsPurge" style="font-size:12px" title="nikki 里已经删掉的节点(比如删了某个订阅),清掉它们的评分和测速记录">清理已删除的节点</button></h2><div class="scroll" id="nsBody"></div></div>
   <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">已用/总量/到期优先取机场官方数据(来自 nikki);读不到官方数据的才按面板统计估算</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
   <div class="card" id="provCard" style="display:none"><h2>机场官方数据 <span class="sub">来自 nikki 的订阅信息(机场后台的已用/总量/到期),只读</span></h2><div id="provBody"></div></div>
   <div id="nodeListView"><div class="card">
@@ -1477,6 +1477,14 @@ function loadAirports(){load("airports","/api/airports",base({node:"",airport:""
   rowsTable($("#apTbl"),j,[
     {h:"机场",k:1,f:r=>`${esc(r.key)}<div class="sub">${r.nodes} 个节点${r.top.length?" · 最多 "+esc(r.top[0].node):""}</div>`},
     {h:"趋势",s:1,f:r=>spark(r.series)},cDown,cUp,cTotal],r=>{S.airport=S.airport===r.key?"":r.key;renderChrome();syncAp();refresh()},S.airport)})}
+$("#nsPurge").onclick=async()=>{try{const j=await get("/api/nodes/stale");
+  if(!j.rows.length){alert("没有发现已经不存在的节点。\n(nikki 当前有 "+j.live+" 个节点,面板里的评分记录都对得上。)");return}
+  const aps={};j.rows.forEach(r=>{const k=r.airport||"未归类";aps[k]=(aps[k]||0)+1});
+  const gb=j.rows.reduce((a,r)=>a+r.bytes,0);
+  if(!confirm(`发现 ${j.rows.length} 个节点已经不在 nikki 里了:\n${Object.entries(aps).map(([k,n])=>k+" × "+n).join("\n")}\n\n清除它们的评分和测速记录?(不影响流量统计)`))return;
+  const hist=gb>0&&confirm(`这些节点以前累计用过 ${fmt(gb)} 流量。\n要不要连它们的历史流量统计一起删掉?\n确定 = 一起删(历史总量会变小)\n取消 = 只清评分,保留流量统计`);
+  const r=await post("/api/nodes/purge",{history:!!hist});
+  alert(`已清理 ${r.nodes} 个节点,删除 ${r.qoe} 条测速记录`+(hist?`、${r.traffic} 条流量记录`:"")+"。");loadNodes();S.tab==="overview"&&refresh()}catch(e){alert("清理失败:"+e.message)}};
 function loadNodeScore(){load("nscore","/api/nodescore",{},j=>{
   const c=$("#nsCard"),rows=j.rows;c.style.display=S.nd?"none":"";
   const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
