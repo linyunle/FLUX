@@ -292,6 +292,12 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
  #scStatus{display:none!important}
  .brand{display:flex;align-items:center}
 }
+.arrbtn{white-space:nowrap}.arrbtn[aria-pressed=true]{background:var(--accent)!important;color:var(--on-accent)!important}
+@media(max-width:820px){.arrbtn{display:none}}
+body.arrange .gcard,body.arrange .sidert .scard{cursor:grab;outline:2px dashed color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:-2px;user-select:none;-webkit-user-select:none}
+body.arrange .gcard *,body.arrange .sidert .scard *{pointer-events:none}
+body.arrange .dragging{opacity:.4}
+.dp-l{box-shadow:inset 6px 0 0 var(--accent)!important}.dp-r{box-shadow:inset -6px 0 0 var(--accent)!important}.dp-t{box-shadow:inset 0 6px 0 var(--accent)!important}.dp-b{box-shadow:inset 0 -6px 0 var(--accent)!important}
 /* ================= v0.23.0 Apple 外观(设置 → 外观 → 配色 → Apple 开启;<html data-ui="apple">) =================
    颜色令牌全部集中在这里:浅色 / 深色 / 随系统由 data-mode 决定(JS 根据 prefers-color-scheme 计算);
    没有 JS 时也有 prefers-color-scheme 兜底(见下方最后一段)。 */
@@ -427,6 +433,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="seg" id="mode" role="group" aria-label="流向"></div>
   <input id="hostQ" placeholder="全局搜索:设备 / 域名 / 节点 / 规则" style="width:230px;max-width:100%">
   <div class="seg" id="viewSeg" role="group" aria-label="概览视图" title="一键切换概览里显示哪些卡片"></div>
+  <button id="btnArr" class="arrbtn" aria-pressed="false" title="整理布局:打开后可以用鼠标拖动概览卡片和左侧小卡片来调整位置(电脑端)">⠿ 整理</button>
   <button id="btnPriv" aria-pressed="false" title="隐私模式:模糊显示域名 / 目标 IP(悬停或点按显示)">隐私</button>
 </div>
 <div id="chips"></div>
@@ -488,7 +495,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card"><h2>命中规则</h2><div class="scroll" id="ndRules"></div></div>
     </div>
   </div>
-  <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面</span><span class="sp"></span><button id="nsPurge" style="font-size:12px" title="nikki 里已经删掉的节点(比如删了某个订阅),清掉它们的评分和测速记录">清理已删除的节点</button></h2><div class="scroll" id="nsBody"></div></div>
+  <div class="card" id="nsCard" style="display:none"><h2>节点评分 <span class="sub">近 24 小时 vs 过去 7 天 · 延迟 40% + 超时率 40% + 波动 20% · 最差的排前面 · 每页 10 个</span><span class="sp"></span><button id="nsPurge" style="font-size:12px" title="nikki 里已经删掉的节点(比如删了某个订阅),清掉它们的评分和测速记录">清理已删除的节点</button></h2><div class="scroll" id="nsBody"></div></div>
   <div class="card" id="quotaCard" style="display:none"><h2>机场套餐用量 <span class="sub">已用/总量/到期优先取机场官方数据(来自 nikki);读不到官方数据的才按面板统计估算</span><span class="sp"></span><button id="quotaGo">设置套餐</button></h2><div id="quotaBody"></div></div>
   <div class="card" id="provCard" style="display:none"><h2>机场官方数据 <span class="sub">来自 nikki 的订阅信息(机场后台的已用/总量/到期),只读</span></h2><div id="provBody"></div></div>
   <div id="nodeListView"><div class="card">
@@ -1137,7 +1144,7 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
   const k=b.closest(".pager").dataset.k,st=S.pg[k],a=b.dataset.a;
   if(a==="prev")st.p--;else if(a==="next")st.p++;
   else if(a==="pause"){st.pause=!st.pause;st.snap=st.pause?JSON.parse(JSON.stringify(st.cur||[])):null}
-  if(k==="devtop")paintDevTop();else paintPg(k)});
+  if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else paintPg(k)});
 for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
 /* 点一行弹出的详情 */
@@ -1430,6 +1437,7 @@ function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}ca
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
   if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
   if(r.viz.style!=="wave")r.viz.style="line";
+  r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
   if(!SHADOWS[r.shadow])r.shadow="s";r.op=Math.max(50,Math.min(100,+r.op||100));r.navOp=Math.max(10,Math.min(100,+r.navOp||45));if(r.sideViz!=="wave")r.sideViz="line";
   r.order=normOrder(r.order);r.hide=(Array.isArray(r.hide)?r.hide:[]).filter(k=>CARDS[k]);{const vh={};for(const v in VIEWS)if(Array.isArray((t.vh||{})[v]))vh[v]=t.vh[v].filter(k=>CARDS[k]);r.vh=vh}
@@ -1474,6 +1482,7 @@ function applyTheme(){
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
    R.style.setProperty("--bf",TH.op<100?"blur(8px)":"none")}
   for(const [k,,sel] of SIDE_ITEMS)document.querySelectorAll(sel).forEach(el=>el.classList.toggle("gone",!TH.sideShow[k]));
+  (TH.sideOrder||[]).forEach((k,i)=>{const el=$({speed:"#scSpeed",direct:"#scDirect",proxy:"#scProxy",conns:"#scConns"}[k]);if(el)el.style.order=i+1});
   R.style.setProperty("--navop",TH.navOp+"%");
   for(const [k,v] of [["a","--vzd"],["b","--vzu"]]){if(hexOk(TH.viz[k]))R.style.setProperty(v,TH.viz[k]);else R.style.removeProperty(v)}
   $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
@@ -1585,10 +1594,35 @@ $("#nsPurge").onclick=async()=>{try{const j=await get("/api/nodes/stale");
   const hist=gb>0&&confirm(`这些节点以前累计用过 ${fmt(gb)} 流量。\n要不要连它们的历史流量统计一起删掉?\n确定 = 一起删(历史总量会变小)\n取消 = 只清评分,保留流量统计`);
   const r=await post("/api/nodes/purge",{history:!!hist});
   alert(`已清理 ${r.nodes} 个节点,删除 ${r.qoe} 条测速记录`+(hist?`、${r.traffic} 条流量记录`:"")+"。");loadNodes();S.tab==="overview"&&refresh()}catch(e){alert("清理失败:"+e.message)}};
-function loadNodeScore(){load("nscore","/api/nodescore",{},j=>{
-  const c=$("#nsCard"),rows=j.rows;c.style.display=S.nd?"none":"";
+S.pg.nscore={p:0};S.nsRows=[];
+const NS_PER=10;
+function paintNs(){const rows=S.nsRows,per=NS_PER,n=Math.max(1,Math.ceil(rows.length/per)),st=S.pg.nscore;st.p=Math.max(0,Math.min(st.p,n-1));
   const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
-  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th><th class="n">评分</th><th class="n hide-s">变化</th><th class="n">延迟</th><th class="n hide-s">超时率</th><th class="hide-s">建议</th></tr></thead><tbody>${rows.slice(0,15).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>15?`<div class="sub" style="margin-top:6px">只显示最差的 15 个,共 ${rows.length} 个</div>`:""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')})}
+  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th><th class="n">评分</th><th class="n hide-s">变化</th><th class="n">延迟</th><th class="n hide-s">超时率</th><th class="hide-s">建议</th></tr></thead><tbody>${rows.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
+/* ---------- 拖动整理卡片(电脑端):概览卡片 + 左侧四张实时小卡 ---------- */
+const SIDE_CARDS=[["speed","#scSpeed"],["direct","#scDirect"],["proxy","#scProxy"],["conns","#scConns"]];
+S.arr=false;let DR=null;
+function setArrange(on){S.arr=!!on;document.body.classList.toggle("arrange",S.arr);$("#btnArr").setAttribute("aria-pressed",S.arr);
+  for(const k in CARDS){const el=$(CARDS[k][0]);if(el){el.draggable=S.arr;el.dataset.ck=k}}
+  for(const [k,id] of SIDE_CARDS){const el=$(id);el.draggable=S.arr;el.dataset.sk=k}}
+$("#btnArr").onclick=()=>setArrange(!S.arr);
+const DP=["dp-l","dp-r","dp-t","dp-b"];
+const clearDp=()=>document.querySelectorAll(".dp-l,.dp-r,.dp-t,.dp-b").forEach(el=>el.classList.remove(...DP));
+function dropSide(e,t){const r=t.getBoundingClientRect();if(DR.sk)return{before:e.clientY<r.top+r.height/2,v:true};
+  const wide=r.width>t.parentElement.getBoundingClientRect().width*.9;return wide?{before:e.clientY<r.top+r.height/2,v:true}:{before:e.clientX<r.left+r.width/2,v:false}}
+document.addEventListener("dragstart",e=>{if(!S.arr)return;const el=e.target.closest&&e.target.closest("[data-ck],[data-sk]");if(!el){return}
+  DR={ck:el.dataset.ck,sk:el.dataset.sk,el};e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain","flux")}catch(_){}el.classList.add("dragging")});
+document.addEventListener("dragover",e=>{if(!DR)return;const t=e.target.closest&&e.target.closest(DR.ck?"[data-ck]":"[data-sk]");if(!t||t===DR.el)return;
+  e.preventDefault();clearDp();const d=dropSide(e,t);t.classList.add(d.v?(d.before?"dp-t":"dp-b"):(d.before?"dp-l":"dp-r"))});
+document.addEventListener("drop",e=>{if(!DR)return;const t=e.target.closest&&e.target.closest(DR.ck?"[data-ck]":"[data-sk]");if(!t||t===DR.el){clearDp();return}
+  e.preventDefault();const d=dropSide(e,t);
+  if(DR.ck){const ord=TH.order.filter(k=>k!==DR.ck),i=ord.indexOf(t.dataset.ck);ord.splice(d.before?i:i+1,0,DR.ck);TH.order=ord}
+  else{const base=(TH.sideOrder&&TH.sideOrder.length?TH.sideOrder:SIDE_CARDS.map(x=>x[0])).filter(k=>k!==DR.sk),i=base.indexOf(t.dataset.sk);base.splice(d.before?i:i+1,0,DR.sk);TH.sideOrder=base}
+  clearDp();themeChanged(true)});
+document.addEventListener("dragend",()=>{clearDp();if(DR)DR.el.classList.remove("dragging");DR=null});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&S.arr)setArrange(false)});
+function loadNodeScore(){load("nscore","/api/nodescore",{},j=>{
+  $("#nsCard").style.display=S.nd?"none":"";S.nsRows=j.rows;paintNs()})}
 function loadNodes(){loadNodeScore();$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();
   seg($("#nview"),[["airport","按机场"],["node","按节点"]],S.nview,k=>{S.nview=k;loadNodes()});
   const ap=S.nview==="airport";$("#apTbl").style.display=$("#apNote").style.display=ap?"":"none";$("#nodeTbl").style.display=$("#nodeQ").style.display=ap?"none":"";
