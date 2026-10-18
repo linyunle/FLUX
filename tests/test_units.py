@@ -547,6 +547,28 @@ def test_docker():
     auth._st.update(hash="", env=False)
 
 
+def test_listen_fallback():
+    import socket, tempfile
+    from app import listen, config
+    from http.server import BaseHTTPRequestHandler
+    d = tempfile.mkdtemp(); config.DATA_DIR = d
+    blocker = socket.socket(); blocker.bind(("127.0.0.1", 0)); blocker.listen(1); port = blocker.getsockname()[1]
+    config.LISTEN_HOST, config.LISTEN_PORT = "127.0.0.1", port
+    srv = listen.boot(BaseHTTPRequestHandler)
+    try:
+        st = listen.status()
+        assert st["fallback_from"] == port and st["current"]["port"] != port and st["current"]["src"] == "fallback", st
+    finally:
+        listen._close(srv); blocker.close()
+    for bad in ("", "abc", "1.2.3", "999.1.1.1"):
+        try: listen.valid_host(bad); assert False, bad
+        except ValueError: pass
+    for bad in (0, 70000, "x", None):
+        try: listen.valid_port(bad); assert False, bad
+        except ValueError: pass
+    assert listen.valid_host("::") == "::" and listen.valid_port("8099") == 8099
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -1030,6 +1030,8 @@ def p_config(body):
         raise ValueError("地址不能为空")
     secret = body.get("secret")
     secret = None if secret is None else str(secret)
+    if body.get("clear_secret"):
+        secret = ""
     test = {"api": api, "secret": config.get()["secret"] if secret is None else secret}
     try:
         v = api_call("/version", timeout=5, conf=test)
@@ -1037,9 +1039,22 @@ def p_config(body):
         raise ValueError("密码不对(401)" if e.code == 401 else f"接口返回 {e.code}")
     except Exception as e:
         raise ValueError(f"连不上 {api}:{e}")
+    if body.get("test_only"):
+        return {"ok": True, "version": (v or {}).get("version", ""), "test_only": True}
     st = config.save(api, secret)
     log(f"连接设置已更新:{st['api']}")
     return {"ok": True, "version": (v or {}).get("version", "")}
+
+
+def p_listen(body):
+    if body.get("cancel"):
+        return listen.cancel()
+    r = listen.change(body.get("host"), body.get("port"), reset=bool(body.get("reset")))
+    return r
+
+
+def p_listen_confirm(body):
+    return listen.confirm(getattr(_ctx, "server", None))
 
 
 def p_airport_rules(body):
@@ -1092,8 +1107,9 @@ def p_docker_act(body):
     return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
 
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 POST_ROUTES.update({
+    "/api/listen": p_listen, "/api/listen/confirm": p_listen_confirm,
     "/api/docker/cfg": lambda body: _wcon(lambda con: {"cfg": dockerapi.save_cfg(con, body)}),
     "/api/docker/test": lambda body: dockerapi.test(body),
     "/api/docker/act": p_docker_act,
@@ -1104,7 +1120,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()
@@ -1257,6 +1273,7 @@ class Handler(BaseHTTPRequestHandler):
         if not fn:
             return self._send(404, {"error": "not found"})
         _ctx.ip = self.client_address[0]
+        _ctx.server = self.server
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n > 1024 * 1024:
@@ -1275,7 +1292,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve():
-    srv = ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), Handler)
-    srv.daemon_threads = True
-    threading.Thread(target=srv.serve_forever, name="http", daemon=True).start()
+    srv = listen.boot(Handler)
     return srv

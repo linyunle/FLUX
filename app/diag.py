@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan
+from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -151,6 +151,27 @@ def selfcheck(con, now=None):
     un = [k for k in w.realtime.LIVE["clients"] if k not in named][:50]
     if len(un) >= 5:
         out.append(_f("info", f"{len(un)} 台设备还没起名字", "到设备页点名字旁边的 ✎ 起个名,告警和统计更好认。"))
+    try:
+        ls = listen.status()
+        if ls["fallback_from"]:
+            out.append(_f("warn", f"面板端口 {ls['fallback_from']} 被占用,现在用的是 {ls['current']['port']}", "「设置 → 连接 → 面板自己的访问地址和端口」里改成一个固定的空闲端口,避免每次重启地址变化。"))
+    except Exception:
+        pass
+    try:
+        if ups.STATE.get("onbatt_since"):
+            out.append(_f("bad", "UPS 正在用电池供电", "市电断了,看「设置 → UPS 与到期」里的电量和预计续航。"))
+        if dockerapi.load_cfg(con)["on"] and dockerapi.STATE["ok"]:
+            rows = (dockerapi._cache["v"] or {}).get("rows") or []
+            bad = [r["name"] for r in rows if r["state"] == "restarting" or "unhealthy" in (r.get("status") or "")]
+            if bad:
+                out.append(_f("warn", f"{len(bad)} 个容器状态异常:{'、'.join(bad[:5])}", "在「容器」页看状态和日志。"))
+        if syslog.load_cfg(con)["on"]:
+            n = con.execute("SELECT COUNT(*) FROM syslog WHERE ts>=? AND sev<=3", (int(now) - 86400,)).fetchone()[0]
+            if n >= 5:
+                top = con.execute("SELECT tag,COUNT(*) FROM syslog WHERE ts>=? AND sev<=3 GROUP BY tag ORDER BY 2 DESC LIMIT 1", (int(now) - 86400,)).fetchone()
+                out.append(_f("warn", f"最近 24 小时路由器有 {n} 条 error 及以上的日志", f"最多的来源是「{top[0]}」({top[1]} 条)。到「路由器日志」页看内容;诊断包里附了最近的明细。"))
+    except Exception:
+        pass
     lv = {"bad": 0, "warn": 1, "info": 2}
     out.sort(key=lambda f: lv.get(f["level"], 3))
     if not out:
@@ -172,6 +193,82 @@ def mask_text(t, names=()):
         if len(n) >= 2:
             t = t.replace(n, f"设备{i + 1}")
     return t
+
+
+def _ext(con, m, full, now):
+    """路由器日志 / UPS / 到期 / 容器 / 监听地址 的详细诊断(默认打码;不含容器日志、环境变量、密码)。"""
+    out = {}
+    # ---- 路由器日志
+    try:
+        st = syslog.status(con)
+        cfg = st.pop("cfg")
+        since = int(now) - 86400
+        tags = [{"tag": r[0], "n": r[1], "worst": syslog.SEV[r[2]]} for r in con.execute(
+            "SELECT tag,COUNT(*),MIN(sev) FROM syslog WHERE ts>=? GROUP BY tag ORDER BY COUNT(*) DESC LIMIT 15", (since,))]
+        hourly = {time.strftime("%m-%d %H", time.localtime(r[0] * 3600)): r[1] for r in con.execute(
+            "SELECT ts/3600,COUNT(*) FROM syslog WHERE ts>=? AND sev<=3 GROUP BY ts/3600 ORDER BY 1", (since,))}
+        recent = [{"time": time.strftime("%m-%d %H:%M:%S", time.localtime(r["ts"])), "lv": r["lv"], "tag": r["tag"], "msg": m(r["msg"])[:220]}
+                  for r in syslog.query(con, level=4, n=60)]
+        out["syslog"] = dict(st, cfg=cfg, top_tags_24h=tags, error_per_hour_24h=hourly, recent_warn_and_above=recent)
+    except Exception as e:
+        out["syslog"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- UPS
+    try:
+        uc = ups.load_cfg(con)
+        ser = [r for r in list(ups.SERIES) if r[1] is not None]
+        sm = None
+        if ser:
+            col = lambda i: [r[i] for r in ser if r[i] is not None]
+            rng = lambda v: {"min": min(v), "max": max(v), "avg": round(sum(v) / len(v), 1)} if v else None
+            sm = {"samples": len(ser), "minutes": int((ser[-1][0] - ser[0][0]) // 60), "charge": rng(col(1)), "load": rng(col(2)), "runtime_sec": rng(col(3)), "input_v": rng(col(4))}
+        evs = [{"time": time.strftime("%F %T", time.localtime(e["ts"])), "kind": e["kind"], "level": e["level"], "title": e["title"], "detail": m(e["detail"])}
+               for k in ("ups_onbatt", "ups_low", "ups_lost") for e in alerts.list_events(con, kind=k, limit=15)]
+        evs.sort(key=lambda e: e["time"], reverse=True)
+        out["ups"] = {"cfg": {"on": uc["on"], "host": m(uc["host"]), "port": uc["port"], "name": uc["name"]}, "ok": ups.STATE["ok"], "err": ups.STATE["err"],
+                      "read_age_sec": int(now - ups.STATE["at"]) if ups.STATE["at"] else None, "info": ups.STATE["info"],
+                      "onbatt_since": ups.STATE["onbatt_since"] or None, "series_3h": sm, "recent_events": evs[:20]}
+    except Exception as e:
+        out["ups"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 到期
+    try:
+        ec = expiry.load_cfg(con)
+        expiry._restore(con)
+        nm = (lambda t, i, k: t) if full else (lambda t, i, k: f"{k}{i + 1}")
+        out["expiry"] = {"cfg_counts": {"certs": len(ec["certs"]), "domains": len(ec["domains"])}, "checked_age_sec": int(now - expiry.STATE["at"]) if expiry.STATE["at"] else None,
+                         "certs": [{"name": nm(t, i, "证书"), "days": v.get("days"), "trusted": v.get("trusted"), "issuer": v.get("issuer"), "err": v.get("err")} for i, (t, v) in enumerate(expiry.STATE["certs"].items())],
+                         "domains": [{"name": nm(t, i, "域名"), "days": v.get("days"), "err": v.get("err")} for i, (t, v) in enumerate(expiry.STATE["domains"].items())]}
+    except Exception as e:
+        out["expiry"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 容器
+    try:
+        dc = dockerapi.load_cfg(con)
+        d = {"cfg": {"on": dc["on"], "url": m(dc["url"]), "control": dc["control"], "control_password_set": dockerapi.control_ok()},
+             "ok": dockerapi.STATE["ok"], "err": dockerapi.STATE["err"], "n": dockerapi.STATE["n"]}
+        if dc["on"]:
+            snap = dockerapi.snapshot(con)
+            rows = snap.get("rows") or []
+            d["summary"] = {"running": sum(1 for r in rows if r["state"] == "running"), "total": len(rows),
+                            "not_running": [r["name"] for r in rows if r["state"] != "running"], "unhealthy": [r["name"] for r in rows if "unhealthy" in (r.get("status") or "")],
+                            "restarting": [r["name"] for r in rows if r["state"] == "restarting"]}
+            d["containers"] = [{"name": r["name"], "image": r["image"], "state": r["state"], "status": r["status"], "cpu": r["cpu"], "mem": r["mem"], "mem_limit": r["mem_limit"],
+                                "ports": r["ports"], "net": r["net"], "project": r["project"], "locked": r["locked"]} for r in rows][:80]
+        evs = [{"time": time.strftime("%F %T", time.localtime(e["ts"])), "kind": e["kind"], "level": e["level"], "title": e["title"], "detail": m(e["detail"])}
+               for e in alerts.list_events(con, limit=200) if e["kind"] in ("docker_down", "docker_unhealthy") or (e["kind"] == "audit" and e["key"] == "docker")]
+        d["recent_events"] = evs[:25]
+        out["docker"] = d
+    except Exception as e:
+        out["docker"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 磁盘 / 监听 / 功能开关
+    try:
+        out["disks"] = sysinfo.snapshot(1).get("disks")
+    except Exception:
+        out["disks"] = None
+    try:
+        ls = listen.status()
+        out["listen"] = {"current": ls["current"], "env": ls["env"], "fallback_from": ls["fallback_from"], "pending": bool(ls["pending"]), "last_msg": ls["msg"]}
+    except Exception:
+        out["listen"] = None
+    return out
 
 
 def bundle(con, full=False, now=None):
@@ -220,11 +317,9 @@ def bundle(con, full=False, now=None):
         "nodes": [{"name": n, "type": v.get("type"), "delay": v.get("delay"), "fails": v.get("fails")} for n, v in (c.nodes.items() if c else [])][:400],
         "sys": {k: v for k, v in sysinfo.snapshot(60).items() if k != "series"},
         "wan": wan.snapshot(),
-        "syslog": {k: v for k, v in syslog.status(con).items() if k != "rows_data"},
-        "ups": {"cfg_on": ups.load_cfg(con)["on"], "ok": ups.STATE["ok"], "err": ups.STATE["err"], "info": ups.STATE["info"]},
-        "expiry": {"at": expiry.STATE["at"], "certs": [{"days": v.get("days"), "trusted": v.get("trusted"), "err": v.get("err")} for v in expiry.STATE["certs"].values()],
-                   "domains": [{"days": v.get("days"), "err": v.get("err")} for v in expiry.STATE["domains"].values()]},
-        "docker": {"cfg_on": dockerapi.load_cfg(con)["on"], "control": dockerapi.load_cfg(con)["control"], "ok": dockerapi.STATE["ok"], "err": dockerapi.STATE["err"], "containers": dockerapi.STATE["n"]},
+        "ext": _ext(con, m, full, now),
+        "features": {"syslog": syslog.load_cfg(con)["on"], "ups": ups.load_cfg(con)["on"], "docker": dockerapi.load_cfg(con)["on"],
+                     "expiry": bool(expiry.load_cfg(con)["certs"] or expiry.load_cfg(con)["domains"])},
         "db": {"size_bytes": dbsize, "rows": counts},
         "threads": sorted(t.name for t in threading.enumerate()),
         "alerts_recent": ev,

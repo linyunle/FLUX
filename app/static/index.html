@@ -510,10 +510,29 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="sub" style="margin-bottom:10px">这里填的是路由器上 nikki(mihomo)的 external-controller 地址和密码。保存前会先连一次验证,密码只存在你自己的 data/config.json。</div>
   <div class="fld"><label>API 地址</label><input id="sApi" placeholder="http://127.0.0.1:9090"></div>
   <div class="fld"><label>密码(secret)</label><input id="sSec" type="password" autocomplete="off"></div>
+  <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin:4px 0 8px"><input type="checkbox" id="sClr"> nikki 现在没有设密码,清除已保存的密码</label>
   <div class="msg" id="sMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <button id="sTest">只测试连接</button>
     <button id="sSave" class="pri">验证并保存</button>
   </div>
+  <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">nikki 改了地址 / 密码 / 认证,各自在哪里改?</summary>
+  <div class="sub" style="line-height:1.7;margin-top:6px">
+  · <b>接口地址 + 密码(secret)</b>:就是上面这两项。nikki(mihomo)的接口没有用户名,只有「地址:端口 + 密码」。改了之后这里同步改,状态栏左下角的圆点会变灰/红并提示 401 或连不上,点它也能回到这里。<br>
+  · <b>代理认证的用户名和密码</b>(nikki 的 mixed-port 设了 user:pass):只有「下载 GeoIP 库走代理」会用到,在 设置 → 目的地数据库 里填。<br>
+  · <b>AdGuard Home 的用户名和密码</b>:在 设置 → DNS 里填。<br>
+  · 这些都只存在你自己的 data 目录里,不会出现在诊断包和备份里。</div></details>
+  <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <h3 style="margin:0 0 6px;font-size:14px">面板自己的访问地址和端口</h3>
+  <div class="sub" style="margin-bottom:8px">端口被别的程序占用时在这里换一个。改的时候会先在新地址多开一个监听、旧的保留,页面带你跳到新地址点一下确认才正式生效;<b>120 秒内没确认会自动撤销</b>,不会把自己锁在外面。(用 docker 的 host 网络,所以改的是容器里的监听,不需要改 compose。)</div>
+  <div id="lsInfo" class="sub" style="margin-bottom:8px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fld" style="margin:0"><label>监听地址</label><select id="lsHost"><option value="0.0.0.0">0.0.0.0(所有网卡,推荐)</option><option value="127.0.0.1">127.0.0.1(仅路由器本机)</option><option value="custom">指定某个 IP…</option></select></div>
+    <div class="fld" style="margin:0;display:none" id="lsCw"><label>IP</label><input id="lsCustom" placeholder="192.168.100.1" style="width:140px"></div>
+    <div class="fld" style="margin:0"><label>端口</label><input id="lsPort" inputmode="numeric" style="width:90px"></div>
+    <button id="lsApply" class="pri">应用</button><button id="lsReset">恢复默认</button><button id="lsCancel" style="display:none">撤销修改</button>
+  </div>
+  <div class="msg" id="lsMsg"></div>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <div id="updBox"></div></div>
       <div class="card sec" id="sec-airport"><h2>机场归类规则</h2>
@@ -1609,7 +1628,7 @@ async function loadSettings(){
   for(const [k] of SETS)$("#sec-"+k).style.display=k===S.set?"":"none";
   try{
     if(S.set==="look")renderLook();
-    else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sMsg").textContent="";renderUpd(st.update)}
+    else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sClr").checked=false;$("#sMsg").textContent="";renderUpd(st.update);loadListen()}
     else if(S.set==="alerts")await loadAlertCfg();
     else if(S.set==="dns")await loadAghCfg();
     else if(S.set==="geo")await loadGeoSet();
@@ -1659,8 +1678,32 @@ $("#bkFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!
     if(d.ui){try{localStorage.setItem("nt.theme.v1",JSON.stringify(d.ui))}catch(_){}}
     m.className="msg ok";m.textContent="已恢复:"+r.done.join("、")+(r.skipped.length?"。未恢复:"+r.skipped.join(";"):"")+" — 2 秒后刷新页面";
     setTimeout(()=>location.reload(),2000)}catch(er){m.className="msg err";m.textContent=er.message}};
+$("#scStatus").onclick=()=>{if(S.connOk===false){S.tab="settings";S.set="conn";showTab();refresh()}};
+$("#sTest").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="测试中…";
+  try{const body={api:$("#sApi").value,test_only:true};if($("#sClr").checked)body.clear_secret=true;else if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="连接成功"+(j.version?"(mihomo "+j.version+")":"")+",还没有保存"}catch(e){m.className="msg err";m.textContent=e.message}};
+function lsUrl(host,port){let h=location.hostname;if(host&&!["0.0.0.0","::","127.0.0.1"].includes(host))h=host;if(h.includes(":")&&!h.startsWith("["))h="["+h+"]";return location.protocol+"//"+h+":"+port+"/?confirm=1"+(TOKEN?"&t="+encodeURIComponent(TOKEN):"")}
+async function loadListen(){try{const j=await get("/api/listen");const c=j.current||{};let t=`现在:${esc(c.host)}:${c.port}`+(c.src==="file"?"(页面里设置的)":c.src==="fallback"?"(端口被占用,自动顺延)":"(默认)");
+  if(j.fallback_from)t+=`<br><span style="color:var(--bad)">⚠ 原定的 ${j.fallback_from} 端口被别的程序占用,这次自动用了 ${c.port}。想固定端口,下面改成一个没人用的端口。</span>`;
+  if(j.msg)t+=`<br><span style="color:var(--warn)">${esc(j.msg)}</span>`;
+  if(j.pending)t+=`<br>⏳ 正在等待从新地址 ${esc(j.pending.host)}:${j.pending.port} 确认(还剩 ${j.pending.left} 秒)。<a href="${esc(lsUrl(j.pending.host,j.pending.port))}">点这里去新地址确认</a>`;
+  $("#lsInfo").innerHTML=t;$("#lsCancel").style.display=j.pending?"":"none";
+  if(document.activeElement!==$("#lsPort")&&!$("#lsPort").value)$("#lsPort").value=c.port;
+  const sel=$("#lsHost");if(!sel.dataset.set){sel.dataset.set=1;if(["0.0.0.0","127.0.0.1"].includes(c.host))sel.value=c.host;else{sel.value="custom";$("#lsCustom").value=c.host;$("#lsCw").style.display=""}}
+}catch(e){$("#lsInfo").textContent="读取失败:"+e.message}}
+$("#lsHost").onchange=()=>{$("#lsCw").style.display=$("#lsHost").value==="custom"?"":"none"};
+async function lsGo(body){const m=$("#lsMsg");m.className="msg";m.textContent="处理中…";
+  try{const j=await post("/api/listen",body);m.className="msg ok";m.textContent=`新监听已开启(${j.host}:${j.port}),正在跳转到新地址确认 …`;
+    const url=lsUrl(j.host,j.port);setTimeout(()=>{location.href=url},900)}catch(e){m.className="msg err";m.textContent=e.message}}
+$("#lsApply").onclick=()=>{const v=$("#lsHost").value;const host=v==="custom"?$("#lsCustom").value.trim():v;
+  if(host==="127.0.0.1"&&!confirm("127.0.0.1 只有路由器自己能打开,局域网里的设备会访问不到。\n如果跳转后打不开,120 秒后会自动撤销。继续?"))return;
+  lsGo({host,port:$("#lsPort").value})};
+$("#lsReset").onclick=()=>{if(confirm("恢复成环境变量里的默认监听地址和端口?"))lsGo({reset:true})};
+$("#lsCancel").onclick=async()=>{try{await post("/api/listen",{cancel:true});loadListen()}catch(e){$("#lsMsg").className="msg err";$("#lsMsg").textContent=e.message}};
+(async()=>{const u=new URLSearchParams(location.search);if(u.get("confirm")!=="1")return;
+  u.delete("confirm");history.replaceState(null,"",location.pathname+(u.toString()?"?"+u.toString():""));
+  try{await post("/api/listen/confirm",{});alert("面板的新访问地址已确认生效:"+location.host+"\n旧地址已关闭。请把书签改成这个地址。")}catch(e){alert("确认没有成功:"+e.message)}})();
 $("#sSave").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="验证中…";
-  try{const body={api:$("#sApi").value};if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="已保存,连接成功"+(j.version?"(mihomo "+j.version+")":"");status()}
+  try{const body={api:$("#sApi").value};if($("#sClr").checked)body.clear_secret=true;else if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="已保存,连接成功"+(j.version?"(mihomo "+j.version+")":"");status()}
   catch(e){m.className="msg err";m.textContent=e.message}};
 function renderUpd(u){
   if(!u.enabled){$("#updBox").innerHTML='<div class="sub">当前是本地构建,没有绑定 GitHub 仓库,不检查更新。</div>';return}
@@ -1923,7 +1966,7 @@ $("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.docu
 /* ---------- 状态 ---------- */
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
-  const c=s.conn;$("#scStatus").title=c.ok?"已连接 nikki":(c.error||"未连接");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
+  const c=s.conn;S.connOk=!!c.ok;$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=TABS_ALL.filter(t=>dk||t[0]!=="docker");if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}

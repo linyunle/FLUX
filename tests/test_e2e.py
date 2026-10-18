@@ -332,7 +332,37 @@ try:
     ok(get("/api/status")["docker"] is True, "容器:状态里带开关(前端据此显示导航)")
     ok(post("/api/docker/act", {"id": "b" * 12, "action": "stop"})[0] == 400, "容器:只读模式下不能操作")
     ok("docker" in get("/api/backup") and get("/api/backup")["docker"]["on"], "备份:包含容器设置")
-    ok(get("/api/diag")["docker"]["ok"] is True, "诊断包:容器状态")
+    dg = get("/api/diag"); ex_ = dg["ext"]
+    ok(ex_["docker"]["ok"] is True and len(ex_["docker"]["containers"]) == 4 and ex_["docker"]["summary"]["total"] == 4 and "recent_events" in ex_["docker"], "诊断包:容器详情")
+    ok("top_tags_24h" in ex_["syslog"] and "recent_warn_and_above" in ex_["syslog"] and "series_3h" in ex_["ups"] and "certs" in ex_["expiry"] and ex_["listen"]["current"]["port"] == WEB_P and ex_["disks"] is not None and "features" in dg, "诊断包:日志/UPS/到期/监听/磁盘")
+    # ---- v0.22.0 面板监听地址
+    NP = WEB_P + 11
+    def at(port, path, body=None):
+        try:
+            rq = urllib.request.Request(f"http://127.0.0.1:{port}{path}", None if body is None else json.dumps(body).encode(), {"Content-Type": "application/json"})
+            return 200, json.load(urllib.request.urlopen(rq, timeout=6))
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+        except OSError:
+            return 0, None
+    ls = get("/api/listen"); ok(ls["current"]["port"] == WEB_P and ls["current"]["src"] == "env" and ls["pending"] is None, "监听:当前地址")
+    ok(post("/api/listen", {"host": "127.0.0.1", "port": WEB_P})[0] == 400 and post("/api/listen", {"host": "127.0.0.1", "port": 0})[0] == 400 and post("/api/listen", {"host": "not-ip", "port": NP})[0] == 400, "监听:相同/非法的输入被拒绝")
+    ok(post("/api/listen", {"host": "127.0.0.1", "port": API_P})[0] == 400, "监听:端口被占用时报错且不影响旧的")
+    ok(post("/api/listen", {"host": "127.0.0.1", "port": NP})[0] == 200 and get("/api/listen")["pending"]["port"] == NP, "监听:新地址已多开,等待确认")
+    ok(post("/api/listen", {"host": "127.0.0.1", "port": NP + 1})[0] == 400, "监听:确认前不能再改")
+    ok(post("/api/listen/confirm", {})[0] == 400, "监听:从旧地址确认不算数")
+    ok(at(NP, "/api/status")[0] == 200, "监听:新端口能访问")
+    ok(post("/api/listen", {"cancel": True})[0] == 200 and get("/api/listen")["pending"] is None, "监听:撤销修改"); time.sleep(0.8)
+    ok(at(NP, "/api/status")[0] == 0, "监听:撤销后新端口关闭")
+    post("/api/listen", {"host": "127.0.0.1", "port": NP})
+    c, r = at(NP, "/api/listen/confirm", {}); ok(c == 200, f"监听:从新地址确认 {c} {r}"); time.sleep(1.0)
+    ok(at(WEB_P, "/api/status")[0] == 0 and at(NP, "/api/status")[0] == 200, "监听:确认后旧端口关闭、新端口接管")
+    ok(os.path.exists(os.path.join(data, "listen.json")) and at(NP, "/api/listen")[1]["current"]["src"] == "file", "监听:设置已持久化")
+    c, r = at(NP, "/api/listen", {"reset": True}); ok(c == 200 and r["port"] == WEB_P, "监听:恢复默认(先多开)")
+    c, r = at(WEB_P, "/api/listen/confirm", {}); ok(c == 200, "监听:从默认地址确认"); time.sleep(1.0)
+    ok(at(NP, "/api/status")[0] == 0 and at(WEB_P, "/api/status")[0] == 200 and not os.path.exists(os.path.join(data, "listen.json")), "监听:恢复后文件被清掉")
+    c, r = post("/api/config", {"api": f"http://127.0.0.1:{API_P}", "test_only": True, "secret": "wrong"}); ok(c == 400, "nikki 连接:只测试(密码不对)不保存")
+    ok(post("/api/config", {"api": f"http://127.0.0.1:{API_P}", "test_only": True, "clear_secret": True})[0] in (200, 400), "nikki 连接:清除密码参数可用")
     post("/api/docker/cfg", {"on": False})
     ok(get("/api/backup")["syslog"]["port"] == sp and "ups" in get("/api/backup") and "expiry" in get("/api/backup"), "备份:包含日志/UPS/到期设置")
     c, r = post("/api/syslog/clear", {}); ok(c == 200 and get("/api/syslog")["rows"] == 0, "系统日志:清空")
