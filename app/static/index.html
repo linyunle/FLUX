@@ -285,6 +285,13 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
  input,select,textarea{font-size:16px!important}
  .nav.hid{transform:translate(-50%,calc(100% + 1.5cm + env(safe-area-inset-bottom)));opacity:0;pointer-events:none}
 }
+#verDot{display:none;cursor:pointer;margin:0}
+@media(max-width:820px){
+ #verDot{display:inline-block;margin-left:auto;flex:none}
+ #ver{margin-left:6px!important}
+ #scStatus{display:none!important}
+ .brand{display:flex;align-items:center}
+}
 /* ================= v0.23.0 Apple 外观(设置 → 外观 → 配色 → Apple 开启;<html data-ui="apple">) =================
    颜色令牌全部集中在这里:浅色 / 深色 / 随系统由 data-mode 决定(JS 根据 prefers-color-scheme 计算);
    没有 JS 时也有 prefers-color-scheme 兜底(见下方最后一段)。 */
@@ -362,14 +369,10 @@ html[data-ui=apple] #dataTop{background:var(--ap-glass);-webkit-backdrop-filter:
 @media(max-width:820px){
   html[data-ui=apple] .side{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:.5px solid var(--line);isolation:isolate}
   html[data-ui=apple] .side::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--ap-glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8)}
-  html[data-ui=apple] .brand h1{font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
-  html[data-ui=apple] .brand img.logo{width:30px;height:30px;border-radius:7px}
-  html[data-ui=apple] .nav{left:0;right:0;bottom:0;transform:none;width:auto;max-width:none;border:0;border-top:.5px solid var(--line);border-radius:0;
-    padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:var(--ap-glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);box-shadow:none}
-  html[data-ui=apple] .nav.hid{transform:translateY(110%)}
-  html[data-ui=apple] .navi{border-radius:0;font-weight:500;color:var(--muted);background:none;gap:3px}
-  html[data-ui=apple] .navi[aria-selected=true]{background:none;color:var(--accent);font-weight:600}
-  html[data-ui=apple] .main{padding:12px 16px calc(80px + env(safe-area-inset-bottom))}
+  html[data-ui=apple] .nav{border:1px solid var(--ap-border);border-radius:24px;padding:5px;background:var(--ap-glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);box-shadow:0 8px 30px rgba(0,0,0,.16),0 1px 0 rgba(255,255,255,.06) inset}
+  html[data-ui=apple] .navi{border-radius:18px;font-weight:500;color:var(--muted);background:none}
+  html[data-ui=apple] .navi[aria-selected=true]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
+  html[data-ui=apple] .main{padding:12px 16px calc(.5cm + 78px + env(safe-area-inset-bottom))}
   html[data-ui=apple] :where(.card,.tile,.scard,.stile){border-radius:14px}
   html[data-ui=apple] .card{padding:14px}
   html[data-ui=apple] td,html[data-ui=apple] th{padding-top:11px;padding-bottom:11px;border-bottom-width:.5px}
@@ -387,7 +390,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <body>
 <div class="app">
 <aside class="side">
-  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="badge" id="ver"></span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
+  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
   <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span><span class="badge new" id="noauth" style="display:none" role="button" tabindex="0" title="面板里能看到每台设备访问的域名,建议设置访问密码">未设密码</span>
   <div id="sideMini" class="sidemini" aria-hidden="true"><div id="smD">–</div><div id="smU">–</div><div id="smC" class="sub">–</div></div>
   <nav class="nav" id="nav" role="tablist" aria-label="页面"></nav>
@@ -1783,7 +1786,7 @@ $("#bkFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!
     if(d.ui){try{localStorage.setItem("nt.theme.v1",JSON.stringify(d.ui))}catch(_){}}
     m.className="msg ok";m.textContent="已恢复:"+r.done.join("、")+(r.skipped.length?"。未恢复:"+r.skipped.join(";"):"")+" — 2 秒后刷新页面";
     setTimeout(()=>location.reload(),2000)}catch(er){m.className="msg err";m.textContent=er.message}};
-$("#scStatus").onclick=()=>{if(S.connOk===false){S.tab="settings";S.set="conn";showTab();refresh()}};
+$("#scStatus").onclick=$("#verDot").onclick=()=>{if(S.connOk===false){S.tab="settings";S.set="conn";showTab();refresh()}};
 $("#sTest").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="测试中…";
   try{const body={api:$("#sApi").value,test_only:true};if($("#sClr").checked)body.clear_secret=true;else if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="连接成功"+(j.version?"(mihomo "+j.version+")":"")+",还没有保存"}catch(e){m.className="msg err";m.textContent=e.message}};
 function lsUrl(host,port){let h=location.hostname;if(host&&!["0.0.0.0","::","127.0.0.1"].includes(host))h=host;if(h.includes(":")&&!h.startsWith("["))h="["+h+"]";return location.protocol+"//"+h+":"+port+"/?confirm=1"+(TOKEN?"&t="+encodeURIComponent(TOKEN):"")}
@@ -2071,7 +2074,7 @@ $("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.docu
 /* ---------- 状态 ---------- */
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
-  const c=s.conn;S.connOk=!!c.ok;$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
+  const c=s.conn;S.connOk=!!c.ok;{const vd=$("#verDot");vd.className="dot "+(c.ok?"ok":"bad");vd.title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)")}$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=TABS_ALL.filter(t=>dk||t[0]!=="docker");if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
