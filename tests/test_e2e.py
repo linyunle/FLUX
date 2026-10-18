@@ -335,6 +335,31 @@ try:
     dg = get("/api/diag"); ex_ = dg["ext"]
     ok(ex_["docker"]["ok"] is True and len(ex_["docker"]["containers"]) == 4 and ex_["docker"]["summary"]["total"] == 4 and "recent_events" in ex_["docker"], "诊断包:容器详情")
     ok("top_tags_24h" in ex_["syslog"] and "recent_warn_and_above" in ex_["syslog"] and "series_3h" in ex_["ups"] and "certs" in ex_["expiry"] and ex_["listen"]["current"]["port"] == WEB_P and ex_["disks"] is not None and "features" in dg, "诊断包:日志/UPS/到期/监听/磁盘")
+    # ---- v0.24.2 温度来源 / 日志导出 / 诊断含日志明细
+    sy_ = get("/api/sys?seconds=10"); ok("tmain" in sy_ and sy_["temp_src"] == "auto", "温度:主传感器字段")
+    ok(post("/api/sys/temp", {"src": "max"})[0] == 200 and get("/api/sys?seconds=10")["temp_src"] == "max", "温度:可以改成最高值")
+    post("/api/sys/temp", {"src": "auto"})
+    post("/api/syslog/cfg", {"on": True, "port": sp})
+    ex_ = urllib.request.urlopen(B + "/api/syslog/export?level=7&n=50&dl=1", timeout=5); tx_ = ex_.read().decode()
+    ok("attachment" in (ex_.headers.get("Content-Disposition") or "") and ex_.headers.get("Content-Type", "").startswith("text/plain"), "日志导出:文本附件")
+    ok("logs" not in get("/api/diag")["ext"]["syslog"] and "recent_all_levels" in get("/api/diag?logs=1")["ext"]["syslog"], "诊断包:可选附带日志明细")
+    post("/api/syslog/cfg", {"on": False, "port": sp})
+    # ---- v0.24.2 登录页壁纸
+    import base64
+    png_ = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 64).decode()
+    ok(post("/api/wallpaper", {"data": "data:image/png;base64," + base64.b64encode(b"<html>x").decode()})[0] == 400, "壁纸:非图片被拒")
+    c, r = post("/api/wallpaper", {"data": "data:image/png;base64," + png_}); ok(c == 200 and r["has"] and r["type"] == "image/png", "壁纸:上传 PNG")
+    ok(post("/api/wallpaper", {"data": "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 950000).decode()})[0] in (400, 413), "壁纸:太大被拒")
+    post("/api/auth/set", {"new": "secret123"})
+    wr = urllib.request.build_opener().open(urllib.request.Request(B + "/wallpaper"))
+    ok(wr.status == 200 and wr.headers["Content-Type"] == "image/png", "壁纸:未登录也能取图")
+    ok(b"/wallpaper?v=" in urllib.request.build_opener().open(urllib.request.Request(B + "/")).read(), "壁纸:登录页带壁纸背景")
+    cj.clear(); rq("/api/login", {"password": "secret123"})
+    ok(rq("/api/auth/set", {"old": "secret123", "new": ""})[0] == 200, "壁纸:关闭密码")
+    post("/api/wallpaper", {"remove": True})
+    try: c404 = urllib.request.urlopen(B + "/wallpaper").status
+    except urllib.error.HTTPError as e: c404 = e.code
+    ok(c404 == 404, "壁纸:移除后 404")
     # ---- v0.22.1 清理已不存在的节点
     cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10); hr = time.strftime("%Y-%m-%d %H")
     cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,?)", (int(time.time()),))

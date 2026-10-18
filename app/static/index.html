@@ -299,6 +299,12 @@ body.arrange .gcard *,body.arrange .sidert .scard *{pointer-events:none}
 body.arrange .dragging{opacity:.4}
 .dp-l{box-shadow:inset 6px 0 0 var(--accent)!important}.dp-r{box-shadow:inset -6px 0 0 var(--accent)!important}.dp-t{box-shadow:inset 0 6px 0 var(--accent)!important}.dp-b{box-shadow:inset 0 -6px 0 var(--accent)!important}
 .srt{cursor:pointer;user-select:none}.srt:hover{color:var(--ink)}.srt .arw{color:var(--accent);font-size:10px}
+.rzh{display:none;position:absolute;right:2px;bottom:2px;width:24px;height:24px;cursor:nwse-resize;z-index:6;touch-action:none;border-bottom-right-radius:8px;
+  background:linear-gradient(135deg,transparent 52%,var(--accent) 52%,var(--accent) 60%,transparent 60%,transparent 72%,var(--accent) 72%,var(--accent) 80%,transparent 80%)}
+body.arrange .rzh{display:block}
+body.arrange .gcard{position:relative}
+body.arrange .gcard .rzh{pointer-events:auto!important}
+body.resizing,body.resizing *{user-select:none!important;cursor:nwse-resize!important}
 /* ================= v0.23.0 Apple 外观(设置 → 外观 → 配色 → Apple 开启;<html data-ui="apple">) =================
    颜色令牌全部集中在这里:浅色 / 深色 / 随系统由 data-mode 决定(JS 根据 prefers-color-scheme 计算);
    没有 JS 时也有 prefers-color-scheme 兜底(见下方最后一段)。 */
@@ -705,7 +711,12 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="msg" id="authMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authSave" class="pri">保存</button></div>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-  <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label></div>
+  <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label>
+  <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <div style="font-weight:600;margin-bottom:6px">登录页壁纸</div>
+  <div class="sub" style="margin-bottom:8px">设置了访问密码后,登录页可以像路由器 Argon 主题那样显示一张壁纸(登录框为毛玻璃)。图片会在浏览器里自动压缩后存到面板的数据目录;登录前任何人都能看到这张图,所以别用私人照片。壁纸不包含在备份里。</div>
+  <div id="wpPrev" style="display:none;height:120px;border-radius:10px;background:#888 center/cover;margin-bottom:8px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="file" id="wpFile" accept="image/jpeg,image/png,image/webp"><button id="wpDel" style="display:none">移除壁纸</button><span class="msg" id="wpMsg"></span></div></div>
       <div class="card sec" id="sec-probe"><h2>节点测速(可选)</h2>
   <div class="sub" style="margin-bottom:10px">nikki 只给策略组里的节点做延迟测试,其它节点没有测速数据,「节点评分」和「网络质量」就看不到它们。开启后,面板会定时让 nikki 给<b>最近 24 小时真正用过的节点</b>测一次延迟(只发测速请求,不改 nikki 的任何配置),结果进 nikki 的测速记录,再被面板读回去算评分。只测在用的节点,请求量很小。</div>
   <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="prOn"> 开启节点测速</label>
@@ -725,7 +736,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="h3">在路由器上要做的设置(SSH 里执行,只改这一条转发)</div>
   <pre id="slCmd" style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0"></pre>
   <div class="h3">日志</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="slGo">刷新</button><button id="slClear">清空</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="slGo">刷新</button><button id="slClear">清空</button><button id="slCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="slExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="slMask" checked> 打码 IP / MAC</label></div>
   <div class="scroll" id="slRows"></div></div>
       <div class="card sec" id="sec-ext"><h2>UPS、证书/域名到期、磁盘</h2>
   <div class="h3" style="margin-top:0">UPS(NUT)</div>
@@ -741,6 +752,10 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="msg" id="exMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="exSave" class="pri">保存并立即检查</button></div>
   <div class="scroll" id="exRes" style="margin-top:8px"></div>
+  <div class="h3">温度传感器</div>
+  <div class="sub" style="margin-bottom:8px;line-height:1.7">路由器可能有好几个温度传感器(CPU、WiFi 芯片等),读数各不相同。概览里的「温度」默认取名字像 CPU / SoC 的那个;如果和你路由器页面上看到的对不上,在这里选成对应的传感器。</div>
+  <div class="row2" style="margin-bottom:6px"><select id="tpSrc"></select><button id="tpSave" class="pri">保存</button></div>
+  <div class="msg" id="tpMsg"></div><div class="sub" id="tpList" style="line-height:1.7"></div>
   <div class="h3">磁盘空间</div>
   <div class="sub" style="margin-bottom:8px;line-height:1.7">面板能看到的所有挂载的硬盘/分区。容器里默认只看得到自己的数据盘;想看路由器上别的硬盘,在 compose 的 volumes 里加一行只读挂载:<code>- /mnt:/host/mnt:ro,rslave</code>,重建容器后就会列出来(只读,面板不会写这些盘)。也可以用环境变量 <code>DISK_PATHS=名称=路径,名称=路径</code> 指定。空间不足的告警在「告警与推送 → 磁盘空间不足」。</div>
   <div class="scroll" id="dkRows"></div></div>
@@ -762,7 +777,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="h3" style="margin-top:0">自检与诊断包</div>
   <div class="sub" style="margin-bottom:8px">自检会检查面板自己的运行状态、数据一致性和配置,把看起来不对劲的地方列出来(很多 bug 会先在这里露出来)。诊断包是一个 JSON 文件:版本、配置摘要、节点/订阅状态、最近告警、面板日志、页面脚本报错和自检结果;<b>不含任何密码或 Token</b>,默认把 IP / MAC / 设备名打码。</div>
   <div id="plFinds" style="margin-bottom:8px"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button id="dgRun">重新自检</button><button id="dgDl" class="pri">下载诊断包(已打码)</button><button id="dgDlFull">下载完整版(含 IP / 设备名)</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button id="dgRun">重新自检</button><button id="dgDl" class="pri">下载诊断包(已打码)</button><button id="dgDlFull">下载完整版(含 IP / 设备名)</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="dgLogs" checked> 包含路由器日志明细(最近 300 条)</label></div>
   <div class="h3">谁打开过面板</div>
   <div class="sub" style="margin-bottom:8px">按来源 IP + 浏览器记录;第一次出现的新设备、登录输错密码都会记进「告警」时间线。设备名来自「设备名」设置(按 IP 对应 MAC)。</div>
   <div class="scroll" id="plClients"></div>
@@ -1359,7 +1374,7 @@ function paintSys(j){
   setH($("#sysTiles"),st(j.cpu==null?"–":j.cpu+"%","CPU",ld?`负载 ${ld[0]} / ${j.ncpu} 核`:"",sysCls(j.cpu,70,90))
     +st(mp==null?"–":mp+"%","内存",m?`${fmt(m.used)} / ${fmt(m.total)}`:"",sysCls(mp,85,92))
     +st(ct?ct.n:"–","连接跟踪",ct&&ct.max?`上限 ${ct.max} · ${ct.pct}%`:"读不到",ct?sysCls(ct.pct,70,85):"")
-    +st(j.tmax==null?"–":j.tmax+"℃","温度",j.tmax==null?"没有温度传感器":j.temps.map(t=>t.name).slice(0,2).join(" / "),sysCls(j.tmax,75,85))
+    +st(j.tmain==null?"–":j.tmain+"℃","温度",j.tmain==null?"没有温度传感器":(j.tmain_name||"")+(j.temps.length>1?" · 共 "+j.temps.length+" 个传感器":""),sysCls(j.tmain,75,85))
     +diskTile(j.disks,dk,st)
     +upsTile(j.ups,st)
     +wanTile(j.wan,st)
@@ -1539,6 +1554,10 @@ function renderLook(){
   $("#lkTiles").checked=TH.tiles;
   seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
 }
+function paintWp(j){const on=!!(j&&j.has);$("#wpPrev").style.display=on?"":"none";$("#wpDel").style.display=on?"":"none";if(on)$("#wpPrev").style.backgroundImage="url(/wallpaper?v="+j.v+(TOKEN?"&t="+encodeURIComponent(TOKEN):"")+")"}
+function wpShrink(file){return new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(file);im.onload=()=>{URL.revokeObjectURL(u);let w=im.naturalWidth,h=im.naturalHeight;const m=Math.max(w,h),sc=m>1920?1920/m:1;w=Math.round(w*sc);h=Math.round(h*sc);const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);let q=.85,d=c.toDataURL("image/jpeg",q);while(d.length>930000&&q>.3){q-=.1;d=c.toDataURL("image/jpeg",q)}d.length>930000?no(new Error("图片太大,换一张")):ok(d)};im.onerror=()=>no(new Error("读不出这张图片"));im.src=u})}
+$("#wpFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;const m=$("#wpMsg");m.className="msg";m.textContent="处理中…";try{const d=await wpShrink(f);const j=await post("/api/wallpaper",{data:d});paintWp(j);m.className="msg ok";m.textContent="已设置,退出登录后可看到效果"}catch(x){m.className="msg warn";m.textContent=x.message}e.target.value=""};
+$("#wpDel").onclick=async()=>{try{paintWp(await post("/api/wallpaper",{remove:true}));$("#wpMsg").className="msg ok";$("#wpMsg").textContent="已移除"}catch(x){$("#wpMsg").textContent=x.message}};
 $("#lkPriv").onchange=e=>{TH.priv=e.target.checked;saveTheme();applyTheme();renderChrome()};
 $("#btnPriv").onclick=()=>{TH.priv=!TH.priv;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()};
 for(const [id,k] of [["#cVzA","a"],["#cVzB","b"]])$(id).oninput=e=>{TH.viz[k]=e.target.value;saveTheme();applyTheme()};
@@ -1638,6 +1657,16 @@ document.addEventListener("drop",e=>{if(!DR)return;const t=e.target.closest&&e.t
   clearDp();themeChanged(true)});
 document.addEventListener("dragend",()=>{clearDp();if(DR)DR.el.classList.remove("dragging");DR=null});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&S.arr)setArrange(false)});
+/* 拖右下角手柄调整卡片宽度(吸附到 1/4、1/3、1/2、2/3、3/4、整行)和高度(自动 / 矮 / 中 / 高) */
+for(const k in CARDS){const el=$(CARDS[k][0]);if(el&&!el.querySelector(":scope>.rzh")){const g=document.createElement("div");g.className="rzh";g.title="拖动调整大小(吸附到网格)";g.dataset.k=k;el.appendChild(g)}}
+let RZ=null;
+document.addEventListener("pointerdown",e=>{const g=e.target.closest&&e.target.closest(".rzh");if(!g||!S.arr)return;e.preventDefault();e.stopPropagation();
+  const k=g.dataset.k,el=$(CARDS[k][0]),r=el.getBoundingClientRect();el.draggable=false;
+  RZ={k,el,x:e.clientX,y:e.clientY,w:r.width,h:r.height,pw:el.parentElement.getBoundingClientRect().width};document.body.classList.add("resizing")},true);
+document.addEventListener("pointermove",e=>{if(!RZ)return;const f=(RZ.w+e.clientX-RZ.x)/RZ.pw;let w=CW[0][0],bd=9;for(const [v] of CW){const d=Math.abs(v/12-f);if(d<bd){bd=d;w=v}}
+  const H=RZ.h+e.clientY-RZ.y;let hh="",bh=Math.abs(H-150);for(const k in BH){const d=Math.abs(BH[k]-H);if(d<bh){bh=d;hh=k}}
+  const c=TH.cards[RZ.k];if(c.w!==w||(c.h||"")!==hh){c.w=w;c.h=hh;RZ.el.style.setProperty("--span",w);RZ.el.style.minHeight=(BH[hh]||0)+"px";RZ.dirty=true}});
+document.addEventListener("pointerup",()=>{if(!RZ)return;const z=RZ;RZ=null;document.body.classList.remove("resizing");z.el.draggable=S.arr;if(z.dirty)themeChanged(true)});
 function loadNodeScore(){load("nscore","/api/nodescore",{},j=>{
   $("#nsCard").style.display=S.nd?"none":"";S.nsRows=j.rows;paintNs()})}
 function loadNodes(){loadNodeScore();$("#nodeListView").style.display=S.nd?"none":"";$("#nodeDetail").style.display=S.nd?"":"none";if(S.nd)return loadNodeDetail();
@@ -1803,7 +1832,7 @@ async function loadSettings(){
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
       $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
-      $("#authMsg").className="msg"+(a.enabled?" ok":" warn");$("#authMsg").textContent=a.env?"访问密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里修改":a.enabled?"已启用访问密码":"目前没有设置访问密码:局域网里任何人打开这个页面都能看到所有设备的访问记录";$("#lkPriv").checked=!!TH.priv}
+      $("#authMsg").className="msg"+(a.enabled?" ok":" warn");$("#authMsg").textContent=a.env?"访问密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里修改":a.enabled?"已启用访问密码":"目前没有设置访问密码:局域网里任何人打开这个页面都能看到所有设备的访问记录";$("#lkPriv").checked=!!TH.priv;paintWp(await get("/api/wallpaper"))}
     else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
   }catch(e){console.warn(e)}}
@@ -2075,11 +2104,22 @@ async function slRefresh(fill){const j=await get("/api/syslog",{level:$("#slLv")
   $("#slInfo").innerHTML=(!c.on?"未开启。":j.err?`<span class="warn">${esc(j.err)}</span>`:j.bound?`正在监听 UDP ${j.bound}。`:"正在启动…")+`<br>库里 ${j.rows} 条(约 ${mb} MB)${j.oldest?`,最早 ${fmtTs(j.oldest)}`:""}。本次启动后收到 ${j.rx} 条${j.last_rx?`,最近一条 ${fmtTs(j.last_rx)}`:""}${j.ignored?`,按忽略名单跳过 ${j.ignored} 条`:""}${j.drop?`,因太多丢弃 ${j.drop} 条`:""}${j.bad?`,拒绝非内网来源 ${j.bad} 条`:""}${j.pruned?`,已自动清理 ${j.pruned} 条`:""}。`+(Object.keys(j.by_sev_24h).length?`<br>近 24 小时:${Object.entries(j.by_sev_24h).map(([k,v])=>`${k} ${v}`).join(" · ")}`:"");
   $("#slRows").innerHTML=j.rows_data.length?`<table><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>程序</th><th>内容</th></tr></thead><tbody>${j.rows_data.map(r=>`<tr><td style="white-space:nowrap">${fmtTs(r.ts)}</td><td><span class="lv ${SLCLS(r.sev)}">${esc(r.lv)}</span></td><td class="hide-s">${esc(r.host)}</td><td class="hide-s">${esc(r.tag)}</td><td style="white-space:normal;word-break:break-all;font-size:12px">${esc(r.msg)}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">没有符合条件的日志。</div>'}
 async function loadSyslogSet(){await slRefresh(true)}
+function copyText(t){return new Promise((res,rej)=>{try{if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t).then(res,rej)}catch(e){}
+  const ta=document.createElement("textarea");ta.value=t;ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();
+  let ok=false;try{ok=document.execCommand("copy")}catch(e){}ta.remove();ok?res():rej(new Error("浏览器不允许复制,请用「导出」"))})}
+const slQs=(n,dl)=>new URLSearchParams({level:$("#slLv").value,q:$("#slQ").value,n,mask:$("#slMask").checked?"1":"0",...(dl?{dl:1}:{})}).toString()+(TOKEN?"&t="+encodeURIComponent(TOKEN):"");
+$("#slCopy").onclick=async()=>{const m=$("#slMsg");m.className="msg";try{const r=await fetch("/api/syslog/export?"+slQs(1000));if(!r.ok)throw new Error("读取失败 "+r.status);const t=await r.text();await copyText(t);m.className="msg ok";m.textContent=`已复制 ${t.split("\n").length-1} 行(按当前筛选条件)`}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#slExp").onclick=()=>{const a=document.createElement("a");a.href="/api/syslog/export?"+slQs(5000,true);document.body.appendChild(a);a.click();a.remove()};
 $("#slGo").onclick=()=>slRefresh(false);$("#slLv").onchange=()=>slRefresh(false);$("#slQ").onkeydown=e=>{if(e.key==="Enter")slRefresh(false)};
 $("#slSave").onclick=async()=>{const m=$("#slMsg");m.className="msg";try{const r=await post("/api/syslog/cfg",{on:$("#slOn").checked,port:+$("#slPort").value,days:+$("#slDays").value,max_rows:+$("#slMax").value,ignore:$("#slIgn").value});m.className="msg ok";m.textContent="已保存(几秒内生效)"+(r.purged?`,已删掉库里 ${r.purged} 条匹配的日志`:"");setTimeout(()=>slRefresh(false),6000);await slRefresh(false)}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#slClear").onclick=async()=>{if(!confirm("清空面板里存的全部路由器系统日志?(路由器自己的日志不受影响)"))return;try{await post("/api/syslog/clear",{});await slRefresh(false)}catch(e){$("#slMsg").className="msg err";$("#slMsg").textContent=e.message}};
 /* 设置:UPS / 证书与域名到期 / 磁盘 */
 const upText=i=>i?`${esc(i.status_text)}${i.charge!=null?` · 电量 ${i.charge}%`:""}${i.load!=null?` · 负载 ${i.load}%`:""}${i.runtime?` · 预计续航 ${Math.round(i.runtime/60)} 分钟`:""}${i.input_v?` · 输入 ${i.input_v} V`:""}${i.model?`<br>${esc((i.mfr+" "+i.model).trim())}`:""}`:"";
+function fillTemp(sy){const ts=sy.temps||[],sel=$("#tpSrc");
+  sel.innerHTML=`<option value="auto">自动(优先 CPU / SoC 传感器)</option><option value="max">所有传感器的最高值</option>`+ts.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  sel.value=[...sel.options].some(o=>o.value===sy.temp_src)?sy.temp_src:"auto";
+  $("#tpList").innerHTML=ts.length?`现在读到:${ts.map(t=>`<b>${esc(t.name)}</b> ${t.c}℃`).join(" · ")}<br>面板显示的是「${esc(sy.tmain_name||"–")}」${sy.tmain==null?"":sy.tmain+"℃"}。`:"没有读到温度传感器(路由器没有 /sys/class/thermal 或容器看不到)。"}
+$("#tpSave").onclick=async()=>{const m=$("#tpMsg");m.className="msg";try{await post("/api/sys/temp",{src:$("#tpSrc").value});m.className="msg ok";m.textContent="已保存";setTimeout(()=>{if(S.tab==="settings"&&S.set==="ext")loadExtSet()},300)}catch(e){m.className="msg err";m.textContent=e.message}};
 async function loadExtSet(){const [u,x,sy]=await Promise.all([get("/api/ups"),get("/api/expiry"),get("/api/sys",{seconds:10})]);
   const c=u.cfg;$("#upOn").checked=c.on;$("#upHost").value=c.host;$("#upPort").value=c.port;$("#upName").value=c.name;$("#upMsg").textContent="";
   const s=u.state;$("#upInfo").innerHTML=!c.on?"未开启。":s.ok===null?"等待第一次读取(30 秒内)…":s.ok?upText(s.info)+(s.onbatt_for?`<br><span class="warn">已经用了 ${Math.round(s.onbatt_for/60)} 分钟电池</span>`:""):`<span class="warn">读不到:${esc(s.err)}</span>`;
@@ -2087,14 +2127,14 @@ async function loadExtSet(){const [u,x,sy]=await Promise.all([get("/api/ups"),ge
   const dd=v=>v.pending?"检查中…":v.days==null?`<span class="sub">${esc(v.err||"读不到")}</span>`:`<b class="${v.days<0?"bad":v.days<=14?"warn":""}">${v.days<0?"已过期 "+(-v.days)+" 天":"还有 "+v.days+" 天"}</b> <span class="sub">(${new Date(v.not_after*1000).toLocaleDateString()})</span>`;
   const rows=[...x.certs.map(v=>`<tr><td>证书</td><td>${esc(v.target)}</td><td>${dd(v)}</td><td class="sub">${v.pending?"":v.trusted===false?"不受信任/域名不匹配:"+esc(v.err):v.trusted?"受信任"+(v.issuer?" · "+esc(v.issuer):""):esc(v.err)}</td></tr>`),...x.domains.map(v=>`<tr><td>域名</td><td>${esc(v.target)}</td><td>${dd(v)}</td><td class="sub"></td></tr>`)];
   $("#exRes").innerHTML=rows.length?`<table><thead><tr><th></th><th>名称</th><th>到期</th><th>备注</th></tr></thead><tbody>${rows.join("")}</tbody></table>`+(x.at?`<div class="sub" style="margin-top:4px">最近检查 ${fmtTs(x.at)}</div>`:""):'<div class="sub">还没有填名单。</div>';
-  const ds=sy.disks||[];$("#dkRows").innerHTML=ds.length?`<table><thead><tr><th>磁盘</th><th>挂载点</th><th>已用</th><th>剩余 / 总量</th></tr></thead><tbody>${ds.map(d=>`<tr><td>${esc(d.name)}</td><td class="sub">${esc(d.mp)} ${esc(d.fs)}</td><td><b class="${sysCls(d.pct,85,95)}">${d.pct}%</b></td><td>${fmt(d.free)} / ${fmt(d.total)}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">读不到磁盘信息。</div>'}
+  fillTemp(sy);const ds=sy.disks||[];$("#dkRows").innerHTML=ds.length?`<table><thead><tr><th>磁盘</th><th>挂载点</th><th>已用</th><th>剩余 / 总量</th></tr></thead><tbody>${ds.map(d=>`<tr><td>${esc(d.name)}</td><td class="sub">${esc(d.mp)} ${esc(d.fs)}</td><td><b class="${sysCls(d.pct,85,95)}">${d.pct}%</b></td><td>${fmt(d.free)} / ${fmt(d.total)}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">读不到磁盘信息。</div>'}
 $("#upSave").onclick=async()=>{const m=$("#upMsg");m.className="msg";try{await post("/api/ups",{on:$("#upOn").checked,host:$("#upHost").value,port:+$("#upPort").value,name:$("#upName").value});m.className="msg ok";m.textContent="已保存(30 秒内读取)";await loadExtSet();m.className="msg ok";m.textContent="已保存(30 秒内读取)"}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#upTest").onclick=async()=>{const m=$("#upMsg");m.className="msg";m.textContent="连接中…";try{const r=await post("/api/ups/test",{host:$("#upHost").value,port:+$("#upPort").value,name:$("#upName").value});m.className="msg ok";m.innerHTML="连上了:"+upText(r.info)}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#exSave").onclick=async()=>{const m=$("#exMsg");m.className="msg";try{await post("/api/expiry",{certs:$("#exCerts").value,domains:$("#exDoms").value});await loadExtSet();m.className="msg ok";m.textContent="已保存,正在检查(几秒后点页面空白处或重新打开本页看结果)";setTimeout(()=>{if(S.tab==="settings"&&S.set==="ext")loadExtSet()},8000)}catch(e){m.className="msg err";m.textContent=e.message}};
 /* 设置:访问记录与面板日志 */
 async function loadFinds(){const e=$("#plFinds");e.innerHTML='<span class="sub">自检中…</span>';
   try{const j=await get("/api/selfcheck");e.innerHTML=j.findings.map(f=>`<div style="margin:4px 0"><span class="lv ${f.level==="ok"?"ok":f.level==="info"?"note":f.level}">${f.level==="bad"?"问题":f.level==="warn"?"注意":f.level==="ok"?"正常":"提示"}</span> <b>${esc(f.title)}</b>${f.detail?`<div class="sub" style="margin-left:2px">${esc(f.detail)}</div>`:""}</div>`).join("")}catch(er){e.innerHTML='<span class="sub">自检失败:'+esc(er.message)+"</span>"}}
-async function dlDiag(full){const m=$("#plMsg");try{const j=await get("/api/diag",full?{full:1}:{});const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(j,null,1)],{type:"application/json"}));a.download="flux-diag-"+ymd(new Date())+(full?"-full":"")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);m.className="msg ok";m.textContent="已生成"}catch(e){m.className="msg err";m.textContent=e.message}}
+async function dlDiag(full){const m=$("#plMsg");try{const j=await get("/api/diag",{...(full?{full:1}:{}),...($("#dgLogs").checked?{logs:1}:{})});const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(j,null,1)],{type:"application/json"}));a.download="flux-diag-"+ymd(new Date())+(full?"-full":"")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);m.className="msg ok";m.textContent="已生成"}catch(e){m.className="msg err";m.textContent=e.message}}
 $("#dgRun").onclick=loadFinds;$("#dgDl").onclick=()=>dlDiag(false);$("#dgDlFull").onclick=()=>dlDiag(true);
 async function loadPlog(){loadFinds();const j=await get("/api/panel",{n:500});
   $("#plClients").innerHTML=j.clients.length?`<table><thead><tr><th>设备</th><th>IP</th><th>浏览器</th><th>首次</th><th>最近</th><th>次数</th><th>登录失败</th></tr></thead><tbody>${j.clients.map(c=>`<tr><td>${esc(c.name||"–")}</td><td>${esc(c.ip)}</td><td>${esc(c.ua)}</td><td>${fmtTs(c.first)}</td><td>${fmtTs(c.last)}</td><td>${c.n}</td><td>${c.fails?`<span class="lv warn">${c.fails}</span>`:0}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">还没有记录。</div>';

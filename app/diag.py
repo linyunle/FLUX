@@ -195,7 +195,7 @@ def mask_text(t, names=()):
     return t
 
 
-def _ext(con, m, full, now):
+def _ext(con, m, full, now, logs=False):
     """路由器日志 / UPS / 到期 / 容器 / 监听地址 的详细诊断(默认打码;不含容器日志、环境变量、密码)。"""
     out = {}
     # ---- 路由器日志
@@ -210,6 +210,9 @@ def _ext(con, m, full, now):
         recent = [{"time": time.strftime("%m-%d %H:%M:%S", time.localtime(r["ts"])), "lv": r["lv"], "tag": r["tag"], "msg": m(r["msg"])[:220]}
                   for r in syslog.query(con, level=4, n=60)]
         out["syslog"] = dict(st, cfg=cfg, top_tags_24h=tags, error_per_hour_24h=hourly, recent_warn_and_above=recent)
+        if logs:      # 勾选「包含日志明细」:最近 300 条(任何级别),已打码
+            out["syslog"]["recent_all_levels"] = [f"{time.strftime('%m-%d %H:%M:%S', time.localtime(r['ts']))} [{r['lv']}] {m(r['tag'])}: {m(r['msg'])[:240]}"
+                                                  for r in syslog.query(con, level=7, n=300)]
     except Exception as e:
         out["syslog"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- UPS
@@ -271,7 +274,7 @@ def _ext(con, m, full, now):
     return out
 
 
-def bundle(con, full=False, now=None):
+def bundle(con, full=False, now=None, logs=False):
     now = now or time.time()
     w = _web()
     names = [] if full else _names(con)
@@ -317,7 +320,7 @@ def bundle(con, full=False, now=None):
         "nodes": [{"name": n, "type": v.get("type"), "delay": v.get("delay"), "fails": v.get("fails")} for n, v in (c.nodes.items() if c else [])][:400],
         "sys": {k: v for k, v in sysinfo.snapshot(60).items() if k != "series"},
         "wan": wan.snapshot(),
-        "ext": _ext(con, m, full, now),
+        "ext": _ext(con, m, full, now, logs),
         "features": {"syslog": syslog.load_cfg(con)["on"], "ups": ups.load_cfg(con)["on"], "docker": dockerapi.load_cfg(con)["on"],
                      "expiry": bool(expiry.load_cfg(con)["certs"] or expiry.load_cfg(con)["domains"])},
         "db": {"size_bytes": dbsize, "rows": counts},

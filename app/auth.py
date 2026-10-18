@@ -124,8 +124,8 @@ def ok(ip):
     _fails.pop(ip, None)
 
 
-LOGIN_HTML = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>FLUX 登录</title><link rel="icon" href="/favicon.png">
+_LOGIN = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>FLUX 登录</title><!--WP--><link rel="icon" href="/favicon.png">
 <style>:root{color-scheme:light dark;--bg:#f6f6f4;--s:#fcfcfb;--ink:#1d1d1b;--mut:#8a8a82;--line:#e3e3de;--acc:#2a6fdb}
 @media(prefers-color-scheme:dark){:root{--bg:#121211;--s:#1a1a19;--ink:#ecece8;--mut:#85857e;--line:#2c2c2a;--acc:#6aa5f5}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
@@ -138,3 +138,16 @@ button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;backgr
 <script>document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
 try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
 const j=await r.json();if(r.ok)location.reload();else m.textContent=j.error||"登录失败"}catch(x){m.textContent="连接失败"}}</script></body></html>"""
+
+_WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}
+form{background:rgba(255,255,255,.58);-webkit-backdrop-filter:blur(22px) saturate(1.7);backdrop-filter:blur(22px) saturate(1.7);border:1px solid rgba(255,255,255,.45);box-shadow:0 12px 40px rgba(0,0,0,.28)}
+input{background:rgba(255,255,255,.55)}
+@media(prefers-color-scheme:dark){form{background:rgba(28,28,30,.55);border-color:rgba(255,255,255,.12)}input{background:rgba(0,0,0,.25)}}</style>"""
+
+
+def login_html():
+    """登录页;上传了壁纸就带上壁纸背景(毛玻璃卡片)。"""
+    from . import wallpaper
+    v = wallpaper.info()
+    return _LOGIN.replace("<!--WP-->", (_WP_CSS % v["v"]) if v["has"] else "", 1)
+

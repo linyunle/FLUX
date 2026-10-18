@@ -3,7 +3,9 @@
 读不到的项(例如没有温度传感器)会直接缺省,页面上不显示。"""
 import collections
 import glob
+import json
 import os
+import re
 import threading
 import time
 
@@ -188,11 +190,54 @@ def sample():
                            sum(i["down"] for i in ifs), sum(i["up"] for i in ifs)))
 
 
-def snapshot(secs=120):
+TEMP_SRC = {"v": "auto", "at": 0.0}
+CPU_RE = re.compile(r"cpu|soc|core|package|ap\d|mt7|bcm|ipq", re.I)
+
+
+def temp_src(con=None):
+    """主温度读哪个传感器:auto = 名字像 CPU / SoC 的优先,没有就取最高;max = 所有传感器的最高值;其它 = 指定传感器名。"""
+    if con is not None and time.time() - TEMP_SRC["at"] > 20:
+        try:
+            r = con.execute("SELECT v FROM kv WHERE k='temp_src'").fetchone()
+            TEMP_SRC["v"] = (json.loads(r[0]) if r else "auto") or "auto"
+        except Exception:
+            pass
+        TEMP_SRC["at"] = time.time()
+    return TEMP_SRC["v"]
+
+
+def save_temp_src(con, v):
+    v = str(v or "auto")[:60]
+    with con:
+        con.execute("INSERT INTO kv(k,v) VALUES('temp_src',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(v),))
+    TEMP_SRC.update(v=v, at=time.time())
+    return v
+
+
+def pick_temp(temps, src="auto"):
+    """返回 (主温度, 用的哪个传感器)。"""
+    if not temps:
+        return None, ""
+    if src not in ("auto", "max"):
+        for t in temps:
+            if t["name"] == src:
+                return t["c"], t["name"]
+    if src == "auto":
+        cands = [t for t in temps if CPU_RE.search(t["name"])]
+        if cands:
+            t = max(cands, key=lambda x: x["c"])
+            return t["c"], t["name"]
+    t = max(temps, key=lambda x: x["c"])
+    return t["c"], t["name"]
+
+
+def snapshot(secs=120, src="auto"):
     now = time.time()
     with _lock:
         s = dict(STATE)
         rows = [r for r in SERIES if r[0] >= now - secs]
     s["series"] = [[round(r[0], 1), r[1], r[2], r[3], r[4]] for r in rows]
     s["tmax"] = max((t["c"] for t in s["temps"]), default=None)
+    s["tmain"], s["tmain_name"] = pick_temp(s["temps"], src)
+    s["temp_src"] = src
     return s

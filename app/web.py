@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -910,7 +910,7 @@ q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.t
 q_probe = _q(lambda con, p: probe.status(con))
 q_presence = _q(lambda con, p: presence.status(con))
 q_selfcheck = _q(lambda con, p: {"findings": diag.selfcheck(con)})
-q_diag = _q(lambda con, p: diag.bundle(con, full=one(p, "full") == "1"))
+q_diag = _q(lambda con, p: diag.bundle(con, full=one(p, "full") == "1", logs=one(p, "logs") == "1"))
 q_providers = _q(lambda con, p: providers.status(con))
 q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
@@ -1006,7 +1006,12 @@ q_groups = _q(lambda con, p: {"groups": groups.dev_groups(con), "names": groups.
 q_group_learn = _q(lambda con, p: {"rows": groups.learn(con, one(p, "group", ""))})
 q_nodescore = _q(lambda con, p: {"rows": advisor.node_scores(con)})
 def q_sys(p):
-    s = sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", "120") or 120))))
+    con = ro()
+    try:
+        src = sysinfo.temp_src(con)
+    finally:
+        con.close()
+    s = sysinfo.snapshot(max(10, min(600, int(one(p, "seconds", "120") or 120))), src)
     s["wan"] = wan.snapshot()
     u = ups.STATE
     s["ups"] = {"ok": u["ok"], "info": u["info"], "onbatt_since": u["onbatt_since"]} if u["ok"] is not None else None
@@ -1113,8 +1118,10 @@ def p_docker_act(body):
     return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
 
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/wallpaper": lambda p=None: (200, wallpaper.info()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 POST_ROUTES.update({
+    "/api/wallpaper": lambda body: {"ok": True, **(wallpaper.remove() if body.get("remove") else wallpaper.save(body.get("data")))},
+    "/api/sys/temp": lambda body: _wcon(lambda con: {"ok": True, "src": sysinfo.save_temp_src(con, body.get("src"))}),
     "/api/nodes/purge": lambda body: _wcon(lambda con: _purge_nodes(con, body)),
     "/api/listen": p_listen, "/api/listen/confirm": p_listen_confirm,
     "/api/docker/cfg": lambda body: _wcon(lambda con: {"cfg": dockerapi.save_cfg(con, body)}),
@@ -1127,7 +1134,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/wallpaper": "修改登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()
@@ -1172,7 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _deny(self, page=False):
         if auth.enabled() and page:
-            return self._send(200, auth.LOGIN_HTML.encode(), "text/html; charset=utf-8")
+            return self._send(200, auth.login_html().encode(), "text/html; charset=utf-8")
         if auth.enabled():
             return self._send(401, {"error": "需要登录", "login": True})
         return self._send(401, {"error": "需要 ?t=<token>"})
@@ -1187,6 +1194,11 @@ class Handler(BaseHTTPRequestHandler):
             name = "favicon.png" if u.path in ("/favicon.png", "/favicon.ico") else "logo.png"
             with open(os.path.join(STATIC, name), "rb") as f:
                 return self._send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
+        if u.path == "/wallpaper":          # 登录页要在登录前就能拿到壁纸,所以不需要口令(只会返回壁纸图片本身)
+            b, ty, _ = wallpaper.read()
+            if not b:
+                return self._send(404, {"error": "no wallpaper"})
+            return self._send(200, b, ty, {"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"})
         if u.path == "/metrics":
             tok = config.METRICS_TOKEN
             given = self.headers.get("Authorization", "")
@@ -1204,6 +1216,8 @@ class Handler(BaseHTTPRequestHandler):
             self._seen("page")
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
+        if u.path == "/api/syslog/export":
+            return self._syslog_export(params)
         fn = GET_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})
@@ -1213,6 +1227,21 @@ class Handler(BaseHTTPRequestHandler):
             log("接口出错", u.path, e)
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
         self._send(code, data)
+
+    def _syslog_export(self, params):
+        """把当前筛选条件下的路由器日志导出成纯文本(最多 5000 条);默认把 IP / MAC / 设备名打码,方便发给别人看。"""
+        con = ro()
+        try:
+            rows = syslog.query(con, int(one(params, "level", "7") or 7), one(params, "q"), min(5000, int(one(params, "n", "1000") or 1000)))
+            names = [] if one(params, "mask") == "0" else diag._names(con)
+        finally:
+            con.close()
+        mk = (lambda t: t) if one(params, "mask") == "0" else (lambda t: diag.mask_text(t, names))
+        lines = [f"{time.strftime('%F %T', time.localtime(r['ts']))} [{r['lv']}] {mk(r['tag'])}: {mk(r['msg'])}" for r in reversed(rows)]
+        body = ("\n".join(lines) + "\n").encode("utf-8")
+        name = "flux-router-log-" + time.strftime("%Y%m%d-%H%M%S") + ".txt"
+        extra = {"Content-Disposition": f'attachment; filename="{name}"'} if one(params, "dl") == "1" else None
+        return self._send(200, body, "text/plain; charset=utf-8", extra)
 
     def _seen(self, kind):
         """记录是谁(哪个 IP、什么浏览器)打开/登录了面板;出错不影响正常访问。"""
