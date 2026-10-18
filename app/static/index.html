@@ -298,6 +298,7 @@ body.arrange .gcard,body.arrange .sidert .scard{cursor:grab;outline:2px dashed c
 body.arrange .gcard *,body.arrange .sidert .scard *{pointer-events:none}
 body.arrange .dragging{opacity:.4}
 .dp-l{box-shadow:inset 6px 0 0 var(--accent)!important}.dp-r{box-shadow:inset -6px 0 0 var(--accent)!important}.dp-t{box-shadow:inset 0 6px 0 var(--accent)!important}.dp-b{box-shadow:inset 0 -6px 0 var(--accent)!important}
+.srt{cursor:pointer;user-select:none}.srt:hover{color:var(--ink)}.srt .arw{color:var(--accent);font-size:10px}
 /* ================= v0.23.0 Apple 外观(设置 → 外观 → 配色 → Apple 开启;<html data-ui="apple">) =================
    颜色令牌全部集中在这里:浅色 / 深色 / 随系统由 data-mode 决定(JS 根据 prefers-color-scheme 计算);
    没有 JS 时也有 prefers-color-scheme 兜底(见下方最后一段)。 */
@@ -1095,9 +1096,10 @@ const fCls=f=>f==null?"":f<.02?"good":f<.1?"warn":"bad";
 const rCls=r=>r==null?"":r<1?"good":r<3?"warn":"bad";
 async function loadQoe(){
   const id=(S.seq.qoe=(S.seq.qoe||0)+1);
-  try{const [q,t]=await Promise.all([get("/api/qoe",{hours:24}),get("/api/tunnels",{...base()})]);if(S.seq.qoe!==id)return;
+  try{const [q,t]=await Promise.all([get("/api/qoe",{hours:24}),get("/api/tunnels",{...base()})]);if(S.seq.qoe!==id)return;S.qoeLast=[q,t];paintQoe()}catch(e){console.warn("qoe",e)}}
+function paintQoe(){const [q,t]=S.qoeLast||[];if(!q)return;{
     const el=$("#qoeBody"),tc=q.tcp,T=t.rows.reduce((a,r)=>a+r.up+r.down,0);
-    const nodes=q.nodes.filter(r=>r.tests>0||r.delay!=null).slice(0,crows("qoe"));
+    const all=sortRows(q.nodes.filter(r=>r.tests>0||r.delay!=null),S.qoeSort,QOE_GET),per=crows("qoe"),pst=S.pg.qoe;pst.p=Math.max(0,Math.min(pst.p,Math.max(0,Math.ceil(all.length/per)-1)));const nodes=all.slice(pst.p*per,pst.p*per+per);
     const sm=q.summary||{};
     const stat=(v,l,c)=>`<div><div class="v ${c||""}">${v}</div><div class="l">${l}</div></div>`;
     let h=`<div class="qstat">${stat(sm.avg==null?"–":sm.avg+" ms",`节点平均延迟(${sm.basis||"–"})`,dCls(sm.avg))}${stat(sm.jitter==null?"–":sm.jitter+" ms","延迟波动(测速标准差)")}${stat(sm.fail_rate==null?"–":(sm.fail_rate*100).toFixed(1)+"%","测速超时/失败率",fCls(sm.fail_rate))}${stat(tc.now&&tc.now.rate!=null?tc.now.rate+"%":"–","TCP 重传率(此刻 · 1 分钟)",rCls(tc.now&&tc.now.rate))}${stat(tc.avg_rate==null?"–":tc.avg_rate+"%","TCP 重传率(24 小时均值)",rCls(tc.avg_rate))}</div>`;
@@ -1108,9 +1110,9 @@ async function loadQoe(){
     else h+='<div class="sub">这个范围内没有流量</div>';
     h+='<div class="qsec">节点延迟 / 波动(来自 nikki 对节点的测速)</div>';
     if(!nodes.length||q.test_note)h+=`<div class="sub">${esc(q.test_note||"没有数据")}</div>`;
-    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th><th class="hide-s">类型</th><th class="n">当前</th><th class="n">平均</th><th class="n hide-s">波动</th><th class="n">超时率</th><th class="hide-s">24 小时</th></tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${sparkW(r.series)}</td></tr>`).join("")}</tbody></table></div>`;
+    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th>${thS(S.qoeSort,"type","类型","hide-s")}${thS(S.qoeSort,"delay","当前","n")}${thS(S.qoeSort,"avg","平均","n")}${thS(S.qoeSort,"jitter","波动","n hide-s")}${thS(S.qoeSort,"fail","超时率","n")}${thS(S.qoeSort,"series","24 小时","hide-s")}</tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${sparkW(r.series)}</td></tr>`).join("")}</tbody></table></div>${all.length>per?pagerBar("qoe",all.length,per):""}`;
     h+='<div class="sub" style="margin-top:8px;line-height:1.6">口径说明:① 这张卡是全局数据,不随顶部筛选变化。② 延迟 / 波动 / 超时来自 nikki 对节点的主动测速(url-test),反映路由器到节点的链路;「平均延迟」按各节点实际流量加权(没有流量数据时退回简单平均);「波动」是测速结果的标准差,反映稳定性,不是严格意义的包间抖动。③ TCP 重传率读的是路由器内核的全局计数(重传报文 ÷ 发出报文),包含局域网和不经过代理的流量,不分设备、不分节点,不能直接当作某个节点的质量。④ 应用层丢包率需要抓包 / 流量镜像,mihomo 接口里没有这项数据,所以不提供。</div>';
-    el.innerHTML=h}catch(e){console.warn("qoe",e)}}
+    el.innerHTML=h}}
 function loadDevTop(){seg($("#dtMode"),[["","全部"],["proxy","代理"],["direct","直连"]],S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();S.pg.devtop.p=0;loadDevTop()});
   load("devtop","/api/summary",{...base({mode:S.dtMode}),by:"client",limit:100},j=>{S.dtJ=j;paintDevTop()})}
 function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=S.pg.devtop,n=Math.max(1,Math.ceil(j.rows.length/per));st.p=Math.max(0,Math.min(st.p,n-1));
@@ -1144,7 +1146,7 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
   const k=b.closest(".pager").dataset.k,st=S.pg[k],a=b.dataset.a;
   if(a==="prev")st.p--;else if(a==="next")st.p++;
   else if(a==="pause"){st.pause=!st.pause;st.snap=st.pause?JSON.parse(JSON.stringify(st.cur||[])):null}
-  if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else paintPg(k)});
+  if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else if(k==="qoe")paintQoe();else paintPg(k)});
 for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
 /* 点一行弹出的详情 */
@@ -1594,11 +1596,26 @@ $("#nsPurge").onclick=async()=>{try{const j=await get("/api/nodes/stale");
   const hist=gb>0&&confirm(`这些节点以前累计用过 ${fmt(gb)} 流量。\n要不要连它们的历史流量统计一起删掉?\n确定 = 一起删(历史总量会变小)\n取消 = 只清评分,保留流量统计`);
   const r=await post("/api/nodes/purge",{history:!!hist});
   alert(`已清理 ${r.nodes} 个节点,删除 ${r.qoe} 条测速记录`+(hist?`、${r.traffic} 条流量记录`:"")+"。");loadNodes();S.tab==="overview"&&refresh()}catch(e){alert("清理失败:"+e.message)}};
-S.pg.nscore={p:0};S.nsRows=[];
+/* ---------- 表头点击排序(升 / 降;空值始终排最后) ---------- */
+S.pg.nscore=S.pg.nscore||{p:0};
+const thS=(st,k,label,cls)=>`<th class="${cls||""} srt" data-sk="${k}" role="button" tabindex="0" title="点击排序" aria-sort="${st.k===k?(st.d>0?"ascending":"descending"):"none"}">${label}<span class="arw">${st.k===k?(st.d>0?" ▲":" ▼"):""}</span></th>`;
+function sortRows(rows,st,get){if(!st.k||!get[st.k])return rows;const g=get[st.k];
+  return rows.map((r,i)=>[r,i]).sort((A,B)=>{const x=g(A[0]),y=g(B[0]);if(x==null&&y==null)return A[1]-B[1];if(x==null)return 1;if(y==null)return -1;
+    const c=typeof x==="string"?x.localeCompare(y,"zh"):x-y;return c?c*st.d:A[1]-B[1]}).map(a=>a[0])}
+function toggleSort(st,k){if(st.k===k)st.d=-st.d;else{st.k=k;st.d=1}st.p=0}
+const serMean=a=>{const v=(a||[]).filter(x=>x!=null);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null};
+S.nsSort={k:"",d:1};S.qoeSort={k:"",d:1};S.pg.qoe={p:0};S.pg.nscore.sort=0;
+const NS_GET={score:r=>r.score,delta:r=>r.delta,avg:r=>r.avg,fail:r=>r.fail};
+const QOE_GET={type:r=>r.type||"",delay:r=>r.delay,avg:r=>r.avg,jitter:r=>r.jitter,fail:r=>r.fail_rate,series:r=>serMean(r.series)};
+document.addEventListener("click",e=>{const th=e.target.closest&&e.target.closest("th.srt[data-sk]");if(!th)return;
+  if(th.closest("#nsBody")){toggleSort(S.nsSort,th.dataset.sk);S.pg.nscore.p=0;paintNs()}
+  else if(th.closest("#qoeBody")){toggleSort(S.qoeSort,th.dataset.sk);S.pg.qoe.p=0;paintQoe()}});
+document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches&&e.target.matches("th.srt")){e.preventDefault();e.target.click()}});
+S.pg.nscore.p=S.pg.nscore.p||0;S.nsRows=[];
 const NS_PER=10;
-function paintNs(){const rows=S.nsRows,per=NS_PER,n=Math.max(1,Math.ceil(rows.length/per)),st=S.pg.nscore;st.p=Math.max(0,Math.min(st.p,n-1));
+function paintNs(){const rows=S.nsRows,view=sortRows(rows,S.nsSort,NS_GET),per=NS_PER,n=Math.max(1,Math.ceil(rows.length/per)),st=S.pg.nscore;st.p=Math.max(0,Math.min(st.p,n-1));
   const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
-  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th><th class="n">评分</th><th class="n hide-s">变化</th><th class="n">延迟</th><th class="n hide-s">超时率</th><th class="hide-s">建议</th></tr></thead><tbody>${rows.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
+  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th>${thS(S.nsSort,"score","评分","n")}${thS(S.nsSort,"delta","变化","n hide-s")}${thS(S.nsSort,"avg","延迟","n")}${thS(S.nsSort,"fail","超时率","n hide-s")}<th class="hide-s">建议</th></tr></thead><tbody>${view.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
 /* ---------- 拖动整理卡片(电脑端):概览卡片 + 左侧四张实时小卡 ---------- */
 const SIDE_CARDS=[["speed","#scSpeed"],["direct","#scDirect"],["proxy","#scProxy"],["conns","#scConns"]];
 S.arr=false;let DR=null;

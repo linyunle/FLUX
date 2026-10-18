@@ -460,7 +460,7 @@ def q_qoe(p):
     tot_o, tot_r = sum(x["out"] for x in hourly), sum(x["retrans"] for x in hourly)
     w = [r for r in list(netstat.SERIES) if r[0] >= now - 60]
     wo, wr = sum(r[1] for r in w), sum(r[2] for r in w)
-    return 200, {"hours": n, "nodes": nodes[:60], "summary": summ, "tcp": {"ok": netstat.STATE["ok"], "hourly": hourly,
+    return 200, {"hours": n, "nodes": nodes[:400], "summary": summ, "tcp": {"ok": netstat.STATE["ok"], "hourly": hourly,
                  "avg_rate": round(tot_r / tot_o * 100, 3) if tot_o else None,
                  "now": {"rate": round(wr / wo * 100, 3) if wo else None, "out": wo, "retrans": wr}},
                  "test_note": "" if per else "还没有延迟测试记录(需要 nikki 里的策略组开启 url-test / 自动测速)"}
