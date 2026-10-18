@@ -2,10 +2,129 @@
 
 <img src="assets/logo.png" width="96" alt="FLUX">
 
-FLUX —— 给 nikki(mihomo)用的流量面板:按 **设备 / 机场 / 节点 / 策略组 / 规则 / 访问目标** 统计流量,看小时、天趋势。
-数据只存在你自己的路由器上(SQLite),不联网上报。
+FLUX —— 给 **nikki(mihomo)** 用的流量与路由器状态面板:按 **设备 / 机场 / 节点 / 策略组 / 规则 / 访问目标** 统计流量,看实时速度和小时 / 天趋势;还能看路由器自身状态、DNS 拦截、告警、UPS、Docker 容器。
+数据只存在你自己的路由器上(SQLite),不联网上报。面板对路由器和 nikki **只读**,只给建议,不替你改配置。
 
-## 功能
+> 下面的截图用的是演示数据(模拟的 nikki 和 Docker),不是真实流量。外观默认是 Apple 风格,支持浅色 / 深色 / 随系统。
+
+## 界面一览
+
+| 概览(浅色) | 概览(深色) |
+|---|---|
+| ![概览](docs/img/overview.png) | ![概览-深色](docs/img/overview-dark.png) |
+
+| 机场与节点(评分 / 套餐) | 设备 |
+|---|---|
+| ![节点](docs/img/nodes.png) | ![设备](docs/img/devices.png) |
+
+| 安全(DNS / 分流检查 / 需要关注) | 告警 |
+|---|---|
+| ![安全](docs/img/security.png) | ![告警](docs/img/alerts.png) |
+
+| Docker 容器 | 设置 → 外观 |
+|---|---|
+| ![容器](docs/img/docker.png) | ![设置](docs/img/settings.png) |
+
+手机端(底部浮动导航,iOS 风格):
+
+<img src="docs/img/mobile-light.png" width="260" alt="手机-浅色"> <img src="docs/img/mobile-dark.png" width="260" alt="手机-深色">
+
+## 快速开始
+
+需要:一台跑着 **nikki(mihomo)** 的路由器(ImmortalWrt / OpenWrt 均可),并装好 Docker 和 docker compose。
+
+1. 在 nikki 里确认 external-controller 已开启(默认 `127.0.0.1:9090`),记下密码(secret)。
+2. 在路由器上建目录并放入本仓库的 `docker-compose.yml`:
+   ```sh
+   mkdir -p /mnt/data/docker/flux && cd /mnt/data/docker/flux
+   # 放入 docker-compose.yml;可选再建一个 .env(见下面的环境变量,空文件也行)
+   touch .env
+   docker compose up -d
+   ```
+3. 浏览器打开 `http://路由器IP:8099/`。
+4. 到 **设置 → 连接** 填 nikki 的 API 地址(同机一般是 `http://127.0.0.1:9090`)和密码,点「验证并保存」。保存前会先连一次验证。
+5. 等几分钟,概览页就有数据了(每 10 秒采样一次 `/connections`)。
+
+建议第一次用就去 **设置 → 安全与隐私** 设一个登录密码。
+
+更新:
+```sh
+cd /mnt/data/docker/flux && docker compose pull && docker compose up -d
+```
+数据在 `./data`,更新不丢。升级前可以在 **设置 → 备份与恢复** 下载一份备份。
+
+## 怎么用
+
+| 页面 | 看什么 |
+|---|---|
+| 概览 | 总流量、走代理 / 直连占比、实时速度、路由器状态(CPU / 内存 / 磁盘 / 宽带质量)、趋势图、设备 Top、应用 Top、网络质量。卡片可在「设置 → 外观」里拖动顺序、调宽度、显示 / 隐藏 |
+| 机场节点 | 节点评分(延迟 / 超时 / 波动)、机场套餐用量与到期、各机场 / 节点的流量。nikki 里删了订阅后,点「清理已删除的节点」清掉残留记录 |
+| 设备 | 每台设备的流量、访问的域名、用到的节点;可以给设备起名字、分组、设白名单 |
+| 域名 / 规则策略 | 谁访问了什么、走直连还是代理;规则命中和策略组实际走了哪些节点 |
+| 容器 | Docker 容器列表和资源占用、日志;可选开启启动 / 停止 / 重启 |
+| 安全 | AdGuard Home 的 DNS 统计、分流检查(国内站点是否误走代理等)、需要关注的清单 |
+| 告警 | 时间线:新设备入网、节点故障、流量突增、套餐用量、UPS 断电、容器停止、路由器日志里的严重错误等,可推送到手机 |
+| 设置 | 外观、连接、告警与推送、备份与恢复、可选功能的开关(见下) |
+
+顶部的时间、去向(全部 / 代理 / 直连 / 拒绝)和视图预设(全部 / 总览 / 排障 / 安全)可以组合筛选;点任何一行都能继续钻取。
+
+## 可选功能(都在「设置」里,默认关闭)
+
+- **AdGuard Home(只读)**:设置 → DNS 填 AdGuard 的地址、用户名、密码,安全页就能看 DNS 查询和拦截统计。账号密码只保存在你的 data 目录。
+- **路由器日志**:设置 → 路由器日志 开启接收(默认 UDP 5514),然后让路由器把日志转发过来:
+  ```sh
+  uci set system.@system[0].log_ip='127.0.0.1'
+  uci set system.@system[0].log_port='5514'
+  uci set system.@system[0].log_proto='udp'
+  uci commit system && /etc/init.d/log restart
+  ```
+  严重级别的日志(磁盘 I/O 错误、OOM、内核崩溃等)会进告警。可以设忽略关键词来过滤 crond 之类的噪音。
+- **UPS(NUT)**:设置 → UPS 与到期,填 NUT 的地址、端口(默认 3493)和 UPS 名称。只读,不发控制命令,断电 / 电量低 / 读不到会告警。
+- **证书 / 域名到期**:同一页,填要检查的域名(证书)和注册域名,到期前提醒。
+- **Docker 容器页**:不要把 `docker.sock` 直接挂进容器。用只读的 socket-proxy,再在「设置 → 容器」填 `http://127.0.0.1:2375`:
+  ```yaml
+  services:
+    docker-socket-proxy:
+      image: tecnativa/docker-socket-proxy:latest
+      container_name: docker-socket-proxy
+      restart: unless-stopped
+      ports:
+        - "127.0.0.1:2375:2375"
+      environment:
+        CONTAINERS: 1
+        POST: 0
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+  ```
+  默认只读;要在页面里启动 / 停止 / 重启容器,需要先设面板访问密码并在设置里单独开启(面板自己和 socket-proxy 不允许被操作)。
+- **机场套餐 / 周报 / 推送渠道**:设置 → 机场套餐、周报与监控、告警与推送。
+- **GeoIP 库**:设置 → 目的地数据库(下载可走 nikki 的代理,代理认证在这里填)。
+
+## 常见问题
+
+- **打不开 / 8099 端口被占用?** 在 **设置 → 连接 → 面板自己的访问地址和端口** 改端口:会先在新地址多开一个监听,跳到新地址点确认才生效,120 秒内没确认自动撤销。启动时端口被占用会自动顺延到下一个空闲端口。实在打不开:删掉 `data/listen.json` 再 `docker restart flux`。
+- **nikki 改了密码或地址?** 设置 → 连接 里重新填,可以先点「只测试连接」。mihomo 的接口只有「地址 + 密码」,没有用户名;代理认证(GeoIP 下载走代理)和 AdGuard 的账号分别在「目的地数据库」和「DNS」里填。状态栏的圆点变红时,点一下直接跳到这里。
+- **想换回以前的外观?** 设置 → 外观 → 配色,选「默认」(或别的预设)即可,不用重装。
+- **每台设备显示成 IP / MAC?** 在设备页点名字旁边的 ✎ 起名,或「设备 → 导入设备名」粘贴 `uci show dhcp` 的静态表。
+- **诊断问题?** 设置 → 访问与日志 可以导出「诊断包」(默认把 IP / MAC / 设备名打码,不含任何密码或口令),发给别人帮忙看很方便;「安全」页顶部还有自检清单。
+- **重启路由器后容器页连不上?** 若 Docker 比磁盘挂载先启动,执行一次 `docker restart flux`。
+
+## 环境变量(都可选,写在 `.env`)
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `NIKKI_API` / `NIKKI_SECRET` | `http://127.0.0.1:9090` / 空 | nikki 接口,也可以在网页「设置 → 连接」里填 |
+| `LISTEN_HOST` / `LISTEN_PORT` | `0.0.0.0` / `8099` | 面板监听地址;也可以在网页里改 |
+| `PANEL_PASSWORD` | 空 | 登录密码(也可在网页里设置) |
+| `INTERVAL_SEC` | `10` | 采样间隔 |
+| `KEEP_DAYS` / `HOUR_KEEP_DAYS` | `90` / `14` | 按天 / 按小时数据保留天数 |
+| `WAN_IFACE` | 自动 | WAN 网卡名,用于和路由器实际总量对账 |
+| `METRICS_TOKEN` | 空 | 给 Prometheus 抓 `/metrics` 的口令 |
+| `PAGE_TOKEN` | 空 | 非空则网页和接口都要带 `?t=<token>` |
+
+---
+
+## 详细功能清单
 - 设备:点开设备列表里的一台,看这台设备的详情(趋势、直连/代理占比、访问目标、用到的节点、策略组、规则);在概览筛选某台设备时自动隐藏与它无关的全局内容;顶部统计栏滚动时固定;同一台设备的 IPv4 / 多个 IPv6 按 MAC 合并;可改名,可粘贴 `uci show dhcp` 批量导入名字;顶部可多选筛选设备
 - 实时:每 2 秒刷新,直连 / 代理速度分开统计,另有连接数;左侧栏常驻四张实时小卡(总速度、直连、代理、连接数);概览里「实时速度 / 直连速度 / 代理速度 / 最活跃设备 / 最活跃节点」都是独立卡片
 - 概览卡片可自由排列:「设置 → 外观 → 概览卡片」里每张卡片单独设宽度(1/4 ~ 整行)、图表高度、显示/隐藏、顺序,同一行放得下的卡片自动并排
@@ -29,20 +148,6 @@ FLUX —— 给 nikki(mihomo)用的流量面板:按 **设备 / 机场 / 节点 /
 - Prometheus:`/metrics` 文本指标;环境变量 `METRICS_TOKEN` 可让 Prometheus 用口令抓取(`Authorization: Bearer` 或 `?t=`)
 - 连接设置:在网页里填 nikki API 地址和密码,保存前会先验证
 - 新版本提示:查 GitHub Release,更新只需一条命令
-
-## 部署(路由器上)
-```sh
-mkdir -p /mnt/data/docker/flux && cd /mnt/data/docker/flux
-# 放入 docker-compose.yml和 .env(可选)
-docker compose up -d
-```
-打开 `http://路由器IP:8099/`,右上角「连接设置」填 nikki API(同机一般是 `http://127.0.0.1:9090`)和密码。
-
-## 更新
-```sh
-cd /mnt/data/docker/flux && docker compose pull && docker compose up -d
-```
-数据在 `./data`,更新不丢。旧版 v1 的数据库会自动升级。
 
 ## 发布新版本(开发者)
 推一个 `v*` 标签,GitHub Actions 会构建 amd64 + arm64 镜像并推到 `ghcr.io/<owner>/flux`,同时创建 Release。
