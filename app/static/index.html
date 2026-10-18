@@ -285,10 +285,103 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
  input,select,textarea{font-size:16px!important}
  .nav.hid{transform:translate(-50%,calc(100% + 1.5cm + env(safe-area-inset-bottom)));opacity:0;pointer-events:none}
 }
+/* ================= v0.23.0 Apple 外观(设置 → 外观 → 配色 → Apple 开启;<html data-ui="apple">) =================
+   颜色令牌全部集中在这里:浅色 / 深色 / 随系统由 data-mode 决定(JS 根据 prefers-color-scheme 计算);
+   没有 JS 时也有 prefers-color-scheme 兜底(见下方最后一段)。 */
+html[data-ui=apple]{
+  --bg:#f5f5f7;--surface:#ffffff;--ink:#1d1d1f;--ink2:#515154;--muted:#8e8e93;--line:rgba(60,60,67,.14);--hover:rgba(120,120,128,.10);
+  --good:#34C759;--warn:#D97800;--bad:#FF3B30;
+  --ap-fill:rgba(120,120,128,.12);--ap-border:rgba(0,0,0,.05);--ap-shadow:0 4px 20px rgba(0,0,0,.04);--ap-thumb:#fff;--ap-glass:rgba(245,245,247,.72);
+  --ap-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;
+}
+html[data-ui=apple][data-mode=dark]{
+  --bg:#1e1e1e;--surface:#2c2c2e;--ink:#f5f5f7;--ink2:#aeaeb2;--muted:#8e8e93;--line:rgba(255,255,255,.10);--hover:rgba(255,255,255,.06);
+  --good:#30D158;--warn:#FF9F0A;--bad:#FF453A;
+  --ap-fill:rgba(120,120,128,.24);--ap-border:rgba(255,255,255,.08);--ap-shadow:inset 0 1px 0 rgba(255,255,255,.04);--ap-thumb:#636366;--ap-glass:rgba(30,30,30,.66);
+}
+@media(max-width:820px){
+  html[data-ui=apple]{--bg:#f2f2f7;--ap-glass:rgba(242,242,247,.78)}
+  html[data-ui=apple][data-mode=dark]{--bg:#000;--surface:#1c1c1e;--ap-glass:rgba(0,0,0,.72)}
+}
+html[data-ui=apple] body{font-family:var(--ap-font);-webkit-font-smoothing:antialiased;letter-spacing:-.003em;
+  background:radial-gradient(900px 520px at 6% -8%,rgba(10,132,255,.10),transparent 62%),radial-gradient(720px 520px at 100% 0,rgba(191,90,242,.07),transparent 60%),var(--bg);background-attachment:fixed}
+html[data-ui=apple][data-mode=dark] body{background:radial-gradient(900px 520px at 6% -8%,rgba(10,132,255,.14),transparent 62%),radial-gradient(720px 520px at 100% 0,rgba(191,90,242,.10),transparent 60%),var(--bg);background-attachment:fixed}
+@media(max-width:820px){html[data-ui=apple] body,html[data-ui=apple][data-mode=dark] body{background:var(--bg)}}
+html[data-ui=apple] :where(button,.navi,.card,.tile,input,select,textarea,.seg button){transition:background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease,transform .12s ease,opacity .18s ease}
+/* 卡片:细边 + 柔和弥散阴影(深色:半透明白边 + 微弱内高光) */
+html[data-ui=apple] :where(.card,.tile,.scard,.stile,#filters){border:1px solid var(--ap-border);border-radius:16px;box-shadow:var(--ap-shadow)}
+html[data-ui=apple] .card h2{font-size:15px;font-weight:600;letter-spacing:-.01em}
+html[data-ui=apple] .modal .box{border:1px solid var(--ap-border);border-radius:20px;box-shadow:0 24px 80px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8)}
+html[data-ui=apple] .modal{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+/* 大数字 + 小单位 */
+html[data-ui=apple] .tile .v{font-size:26px;font-weight:700;letter-spacing:-.025em;line-height:1.2;font-variant-numeric:tabular-nums}
+html[data-ui=apple] .tile .l{font-weight:500}
+.u{font-size:.52em;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:1px}
+/* 按钮 / 输入框:iOS 灰色填充风格 */
+html[data-ui=apple] button{background:var(--ap-fill);border-color:transparent;border-radius:9px;padding:6px 13px;font-weight:500}
+html[data-ui=apple] button:hover{background:color-mix(in srgb,var(--ap-fill) 100%,var(--muted) 14%)}
+html[data-ui=apple] button:active{transform:scale(.97);opacity:.85}
+html[data-ui=apple] button.pri{background:var(--accent);color:var(--on-accent)}
+html[data-ui=apple] button.pri:hover{background:var(--accent);filter:brightness(1.08)}
+html[data-ui=apple] :where(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){background:var(--ap-fill);border:1px solid transparent;border-radius:9px;padding:6px 10px}
+html[data-ui=apple] :where(input,select,textarea):focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3.5px color-mix(in srgb,var(--accent) 28%,transparent)}
+html[data-ui=apple] :where(button,.tab):focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 40%,transparent);outline-offset:1px}
+/* 分段控制器 UISegmentedControl */
+html[data-ui=apple] .seg{background:var(--ap-fill);border:0;border-radius:9px;padding:2px;gap:2px;overflow:visible}
+html[data-ui=apple] .seg button{border-radius:7px;background:transparent;padding:4px 12px;font-weight:500;color:var(--ink2)}
+html[data-ui=apple] .seg button:hover{background:transparent;color:var(--ink)}
+html[data-ui=apple] .seg button[aria-pressed=true]{background:var(--ap-thumb);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.04)}
+/* UISwitch:所有勾选框变成开关(设备下拉里的多选保持原样) */
+html[data-ui=apple] input[type=checkbox]{-webkit-appearance:none;appearance:none;width:44px;height:26px;border-radius:13px;background:rgba(120,120,128,.32);border:0;padding:0;margin:0;position:relative;flex:none;cursor:pointer;vertical-align:middle;transition:background-color .25s ease}
+html[data-ui=apple] input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .25s cubic-bezier(.3,.7,.2,1)}
+html[data-ui=apple] input[type=checkbox]:checked{background:var(--good)}
+html[data-ui=apple] input[type=checkbox]:checked::after{transform:translateX(18px)}
+html[data-ui=apple] input[type=checkbox]:disabled{opacity:.45;cursor:default}
+html[data-ui=apple] .ddp input[type=checkbox],html[data-ui=apple] td input[type=checkbox]{-webkit-appearance:auto;appearance:auto;width:auto;height:auto;border-radius:0;background:none;position:static}
+html[data-ui=apple] .ddp input[type=checkbox]::after,html[data-ui=apple] td input[type=checkbox]::after{display:none}
+/* 表格:iOS 列表感(细分隔线,最后一行不画线) */
+html[data-ui=apple] th{font-weight:500;letter-spacing:.01em}
+html[data-ui=apple] tbody tr:last-child td{border-bottom:0}
+html[data-ui=apple] tbody tr{transition:background-color .15s}
+html[data-ui=apple] tbody tr:hover{background:var(--hover)}
+html[data-ui=apple] .badge,html[data-ui=apple] .chip,html[data-ui=apple] .tag{border-color:transparent;background:var(--ap-fill)}
+html[data-ui=apple] .badge.new{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+/* 桌面:macOS 半透明侧栏 */
+html[data-ui=apple] .side{background:var(--ap-glass);-webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8);border-right:1px solid var(--line)}
+html[data-ui=apple] .navi{border-radius:8px;font-weight:500;color:var(--ink)}
+html[data-ui=apple] .navi{background:none}
+html[data-ui=apple] .subnav button,html[data-ui=apple] .tab{background:none}
+html[data-ui=apple] .subnav button{border-radius:8px;text-align:left;color:var(--ink)}
+html[data-ui=apple] .subnav button:hover{background:var(--hover)}
+html[data-ui=apple] .subnav button[aria-selected=true]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
+html[data-ui=apple] .navi:hover{background:var(--hover)}
+html[data-ui=apple] .navi[aria-selected=true]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
+html[data-ui=apple] .brand h1{letter-spacing:-.02em}
+html[data-ui=apple] #dataTop{background:var(--ap-glass);-webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8)}
+/* 手机:iOS 大标题 + 毛玻璃顶栏 + 贴底 Tab Bar + 分组圆角卡片 */
+@media(max-width:820px){
+  html[data-ui=apple] .side{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:.5px solid var(--line);isolation:isolate}
+  html[data-ui=apple] .side::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--ap-glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8)}
+  html[data-ui=apple] .brand h1{font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
+  html[data-ui=apple] .brand img.logo{width:30px;height:30px;border-radius:7px}
+  html[data-ui=apple] .nav{left:0;right:0;bottom:0;transform:none;width:auto;max-width:none;border:0;border-top:.5px solid var(--line);border-radius:0;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:var(--ap-glass);-webkit-backdrop-filter:blur(24px) saturate(1.8);backdrop-filter:blur(24px) saturate(1.8);box-shadow:none}
+  html[data-ui=apple] .nav.hid{transform:translateY(110%)}
+  html[data-ui=apple] .navi{border-radius:0;font-weight:500;color:var(--muted);background:none;gap:3px}
+  html[data-ui=apple] .navi[aria-selected=true]{background:none;color:var(--accent);font-weight:600}
+  html[data-ui=apple] .main{padding:12px 16px calc(80px + env(safe-area-inset-bottom))}
+  html[data-ui=apple] :where(.card,.tile,.scard,.stile){border-radius:14px}
+  html[data-ui=apple] .card{padding:14px}
+  html[data-ui=apple] td,html[data-ui=apple] th{padding-top:11px;padding-bottom:11px;border-bottom-width:.5px}
+  html[data-ui=apple] button:active{transform:scale(.96)}
+}
+/* 没有 JS 时的兜底(正常情况下由 data-mode 覆盖) */
+@media(prefers-color-scheme:dark){html[data-ui=apple]:not([data-mode]){--bg:#1e1e1e;--surface:#2c2c2e;--ink:#f5f5f7;--line:rgba(255,255,255,.10)}}
+@media(prefers-reduced-motion:reduce){html[data-ui=apple] *{transition:none!important}}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
-document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(prefers-color-scheme:dark)").matches)?"dark":"light"}catch(e){}
+document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(prefers-color-scheme:dark)").matches)?"dark":"light";if(t.preset==="apple")document.documentElement.dataset.ui="apple"}catch(e){}
 </script>
 </head>
 <body>
@@ -781,7 +874,8 @@ $("#devClear").onclick=()=>{S.devs.clear();renderDevList();renderChrome();refres
 async function loadDevices(){try{S.devices=(await get("/api/devices")).devices;renderDevList()}catch(e){}}
 
 /* ---------- 顶部统计 ---------- */
-function tile(l,v,s){return `<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s||"&nbsp;"}</div></div>`}
+const uv=v=>/^[\d.,]+\s?(?:[KMGT]?B(?:\/s)?|%|ms|s|分钟|小时|天)$/.test(String(v))?String(v).replace(/^([\d.,]+)(\s?)(.+)$/,'$1$2<span class="u">$3</span>'):v;
+function tile(l,v,s){return `<div class="tile"><div class="l">${l}</div><div class="v">${uv(v)}</div><div class="s">${s||"&nbsp;"}</div></div>`}
 function loadTiles(){
   load("modes","/api/modes",base(),m=>{
     const M=m.modes,tot=k=>M[k].up+M[k].down,all=tot("proxy")+tot("direct")+tot("reject");
@@ -1295,6 +1389,9 @@ const PRESETS={
  rose:{n:"玫瑰",
   light:{up:"#c8326a",down:"#2a6fdb",accent:"#c8326a",bg:"#f9f4f5",surface:"#fdfbfb",line:"#ecdfe2",hover:"#f4eaed"},
   dark:{up:"#d8588a",down:"#4d8be8",accent:"#e87aa3",bg:"#151012",surface:"#1c1618",line:"#33272c",hover:"#261d21"}},
+ apple:{n:"Apple",
+  light:{up:"#007AFF",down:"#FF9500",accent:"#007AFF"},
+  dark:{up:"#0A84FF",down:"#FF9F0A",accent:"#0A84FF"}},
  forest:{n:"森林",
   light:{up:"#1a8a4a",down:"#6a55d0",accent:"#1a8a4a",bg:"#f3f6f2",surface:"#fbfdfb",line:"#dce5da",hover:"#eaf0e8"},
   dark:{up:"#3aa862",down:"#8a78e0",accent:"#52c47c",bg:"#111512",surface:"#151a18",line:"#26312b",hover:"#1d2420"}}};
@@ -1314,7 +1411,7 @@ const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDir
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"default",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
@@ -1359,7 +1456,7 @@ function tokens(mode){const t={...PRESETS[TH.preset][mode]},c=TH.custom;
   for(const k of ["accent","up","down"])if(hexOk(c[k]))t[k]=c[k];return t}
 const MODE_LBL={auto:"◐ 跟随系统",light:"☀ 浅色",dark:"☾ 深色"};
 function applyTheme(){
-  const R=document.documentElement,mode=effMode(),t=tokens(mode);R.dataset.mode=mode;
+  const R=document.documentElement,mode=effMode(),t=tokens(mode);R.dataset.mode=mode;if(TH.preset==="apple")R.dataset.ui="apple";else delete R.dataset.ui;
   for(const k of ["bg","surface","line","hover","up","down","accent","on-accent"])R.style.removeProperty("--"+k);
   for(const k in t)R.style.setProperty("--"+k,t[k]);
   const acc=getComputedStyle(R).getPropertyValue("--accent").trim();
@@ -1394,7 +1491,7 @@ const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1
 function applyView(k){stashLayout();TH.view=k;{const L=TH.vl[k];if(L){TH.order=normOrder(L.order);TH.cards=normCards(L.cards)}}TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
-  sg("#lkMode",[["auto","跟随系统"],["light","浅色"],["dark","深色"]],TH.mode,k=>{TH.mode=k;themeChanged()});
+  sg("#lkMode",[["light","浅色"],["dark","深色"],["auto","随系统"]],TH.mode,k=>{TH.mode=k;themeChanged()});
   $("#lkPreset").innerHTML=Object.entries(PRESETS).map(([k,v])=>{const t=v[mode],css=getComputedStyle(document.documentElement);
     const up=t.up||(mode==="dark"?"#4d8be8":"#2a6fdb"),dn=t.down||(mode==="dark"?"#d37a30":"#d9730d");
     return `<button data-k="${k}" aria-pressed="${k===TH.preset}"><i style="background:${up}"></i><i style="background:${dn}"></i>${v.n}</button>`}).join("");
@@ -1754,7 +1851,7 @@ function loadAgh(){load("agh","/api/agh",{},j=>{
   if(!j.configured){$("#aghNote").textContent="";el.innerHTML='<div class="empty">还没接入 AdGuard Home。<a href="#" id="aghSet">去设置</a>(在面板里填账号密码,不要发到聊天里)</div>';const a=$("#aghSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("dns")};return}
   if(!j.ok){$("#aghNote").textContent=j.url;el.innerHTML=`<div class="msg err">${esc(j.error||"读取失败")}</div>`;return}
   $("#aghNote").textContent=j.url+" · 近 "+(j.unit==="days"?"天":"24 小时");
-  const t=(l,v,s)=>`<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s||"&nbsp;"}</div></div>`;
+  const t=(l,v,s)=>`<div class="tile"><div class="l">${l}</div><div class="v">${uv(v)}</div><div class="s">${s||"&nbsp;"}</div></div>`;
   el.innerHTML=`<div class="tiles" style="position:static;margin-bottom:10px">${t("DNS 查询",j.total.toLocaleString(),"平均 "+j.avg_ms+" ms")}${t("已拦截",j.blocked.toLocaleString(),"拦截率 "+j.rate+"%")}${t("安全浏览 / 家长控制",(j.safebrowsing+j.parental).toLocaleString(),"")}</div>
   <div class="g2"><div><div class="h3" style="margin-top:0">被拦截最多的域名</div>${miniTbl(["域名","次数"],j.top_blocked.map(r=>`<tr><td class="k pv">${esc(r.d)}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div>
   <div><div class="h3" style="margin-top:0">查询最多的设备</div>${miniTbl(["设备","查询"],j.top_clients.map(r=>`<tr><td class="k">${esc(r.name||r.ip)}${r.name&&r.name!==r.ip?` <span class="sub">${esc(r.ip)}</span>`:""}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div></div>
