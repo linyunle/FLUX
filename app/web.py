@@ -792,6 +792,7 @@ def q_status(p):
         "auth": {"enabled": auth.enabled(), "env": auth.is_env()}, "alerts_unread": _wcon_ro(alerts.unread),
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
         "docker": bool(_wcon_ro(lambda con: dockerapi.load_cfg(con)["on"])),
+        "ups": {"info": ups.STATE["info"]} if ups.STATE["ok"] else None,
     }
 
 
