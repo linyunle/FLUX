@@ -429,7 +429,7 @@ class Collector:
             self.con.execute("DELETE FROM ipmap WHERE seen < ?", (int(time.time()) - 30 * 86400,))
             self.con.execute("DELETE FROM dns WHERE last < ?", (int(time.time()) - 30 * 86400,))
             try:  # 每个域名只留最近 6 条解析记录
-                self.con.execute("DELETE FROM dns WHERE rowid IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER "
+                self.con.execute("DELETE FROM dns WHERE (host, ip) IN (SELECT host, ip FROM (SELECT host, ip, ROW_NUMBER() OVER "
                                  "(PARTITION BY host ORDER BY last DESC) rn FROM dns) WHERE rn > 6)")
             except Exception:
                 pass

@@ -363,6 +363,40 @@ try:
     try: c404 = urllib.request.urlopen(B + "/wallpaper").status
     except urllib.error.HTTPError as e: c404 = e.code
     ok(c404 == 404, "壁纸:移除后 404")
+    # ---- v0.25.0 DNS:自定义服务器 / dnsmasq 日志统计 / 诊断
+    import threading as _th
+    _ds = _so.socket(_so.AF_INET, _so.SOCK_DGRAM); _ds.bind(("127.0.0.1", 0)); dp = _ds.getsockname()[1]
+    def _fake_dns():
+        while True:
+            try: d, a_ = _ds.recvfrom(512)
+            except OSError: return
+            _ds.sendto(d[:2] + b"\x81\x80" + d[4:], a_)
+    _th.Thread(target=_fake_dns, daemon=True).start()
+    ok(post("/api/dns/cfg", {"servers": [{"name": "x", "host": "bad host!", "port": 53}]})[0] == 400, "DNS:地址格式不对被拒")
+    ok(post("/api/dns/cfg", {"servers": [{"name": "x", "host": "1.1.1.1", "port": 0}]})[0] == 400, "DNS:端口 0 被拒")
+    c, r = post("/api/dns/test", {"host": "127.0.0.1", "port": dp}); ok(c == 200 and r["ok"] and r["ms"] is not None, f"DNS:测试一个服务器 {r}")
+    c, r = post("/api/dns/cfg", {"servers": [{"name": "测试DNS", "host": "127.0.0.1", "port": dp}, {"name": "死的", "host": "127.0.0.1", "port": 9}], "domain": "www.example.com", "every": 30})
+    ok(c == 200 and len(r["servers"]) == 2 and r["servers"][0]["name"] == "测试DNS", "DNS:保存自定义服务器")
+    post("/api/syslog/cfg", {"on": True, "port": sp})
+    time.sleep(2)
+    for ln in ("query[A] www.e2e-a.com from 192.168.100.5", "query[AAAA] www.e2e-a.com from 192.168.100.5", "forwarded www.e2e-a.com to 223.5.5.5",
+               "reply www.e2e-a.com is 1.2.3.4", "cached www.e2e-a.com is 1.2.3.4", "query[A] nope.e2e-b.com from 192.168.100.6", "reply nope.e2e-b.com is NXDOMAIN"):
+        _c.sendto(f"<30>Oct 19 10:00:00 OpenWrt dnsmasq[12]: {ln}".encode(), ("127.0.0.1", sp))
+    _c.sendto("<30>Oct 19 10:00:01 OpenWrt dnsmasq-dhcp[12]: DHCPACK(br-lan) 192.168.100.9 e2e-dhcp-marker".encode(), ("127.0.0.1", sp))
+    time.sleep(9)
+    dn = get("/api/dns"); dm_ = dn["dnsmasq"]
+    ok(dm_["enabled"] and dm_["q24"] == 3 and dm_["nx24"] == 1 and dm_["cached24"] == 1 and dm_["fwd24"] == 1, f"dnsmasq:汇总计数 {dm_['q24']},{dm_['nx24']},{dm_['cached24']},{dm_['fwd24']}")
+    ok(any(x["d"] == "www.e2e-a.com" and x["n"] == 2 for x in dm_["top_domains"]) and any(x["d"] == "nope.e2e-b.com" for x in dm_["top_nx"]) and dm_["upstreams"][0]["s"] == "223.5.5.5", "dnsmasq:域名 / NXDOMAIN / 上游")
+    ok(dm_["top_clients"][0]["ip"] == "192.168.100.5" and dm_["top_clients"][0]["n"] == 2, "dnsmasq:设备排行")
+    txt_ = json.dumps(get("/api/syslog?level=7&n=500")["rows_data"], ensure_ascii=False)
+    ok("e2e-dhcp-marker" in txt_ and "www.e2e-a.com" not in txt_, "dnsmasq:查询类日志不进日志表,DHCP 照常保存")
+    sv_ = {x["name"]: x for x in dn["servers"]}
+    ok(sv_["测试DNS"]["ms"] is not None and sv_["测试DNS"]["loss_pct"] == 0 and sv_["死的"]["ms"] is None and sv_["死的"]["n24"] >= 1, f"DNS:定时探测 {sv_['测试DNS']['ms']},{sv_['死的']['note']}")
+    dg = get("/api/diag"); dd = dg["ext"]["dns"]
+    ok(dd["dnsmasq"]["q24"] == 3 and any("e2e-dhcp-marker" in l for l in dd["dnsmasq"]["recent_lines"]) and len(dd["custom_servers"]["servers"]) == 2 and "adguard" in dd, "诊断包:DNS(dnsmasq / 自定义服务器 / AdGuard)")
+    ok(any("没有响应" in f["title"] and "死的" in f["title"] for f in dg["selfcheck"]), "诊断自检:自定义 DNS 服务器没响应")
+    ok(get("/api/backup")["dns"]["servers"][0]["name"] == "测试DNS" if "dns" in get("/api/backup") else False, "备份:包含 DNS 服务器")
+    post("/api/dns/cfg", {"servers": []}); post("/api/syslog/cfg", {"on": False, "port": sp})
     # ---- v0.22.1 清理已不存在的节点
     cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10); hr = time.strftime("%Y-%m-%d %H")
     cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,?)", (int(time.time()),))

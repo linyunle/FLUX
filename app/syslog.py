@@ -14,7 +14,7 @@ import socket
 import threading
 import time
 
-from . import db
+from . import db, dnsx
 from .util import log, stop
 
 DEFAULT = {"on": False, "port": 5514, "days": 7, "max_rows": 100000, "ignore": []}
@@ -163,7 +163,7 @@ def _bind(port):
 def run():
     con = db.open_db()
     sock, port, cfg, last_cfg, last_flush = None, 0, dict(DEFAULT), 0.0, time.time()
-    buf, sec, cnt, retry = [], 0, 0, 0.0
+    buf, sec, cnt, retry, dns_flush = [], 0, 0, 0.0, 0.0
     while not stop.is_set():
         now = time.time()
         if now - last_cfg > 5:
@@ -209,7 +209,10 @@ def run():
                 _state["drop"] += 1
             else:
                 h, sv, tg, msg = parse(data, addr[0])
-                if msg and ignored(cfg, tg, msg):
+                if msg and dnsx.feed(tg, msg, now):
+                    _state["rx"] += 1
+                    _state["last_rx"] = int(now)
+                elif msg and ignored(cfg, tg, msg):
                     _state["ignored"] += 1
                 elif msg:
                     buf.append((int(now), h, sv, tg, msg))
@@ -221,6 +224,12 @@ def run():
             except Exception as e:
                 log("系统日志写库出错", e)
             buf, last_flush = [], now
+        if now - dns_flush >= 3:
+            dns_flush = now
+            try:
+                dnsx.flush(con, now)
+            except Exception as e:
+                log("dnsmasq 统计写库出错", e)
         if now - _state["last_prune"] > 3600:
             try:
                 prune(con, cfg, now)

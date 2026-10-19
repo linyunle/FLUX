@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -901,6 +901,12 @@ def _q(fn):
     return h
 
 
+def q_dns(con, p):
+    names = agh._ip_names(con)
+    sv = dnsx.servers_status(con)
+    return {"dnsmasq": dnsx.dnsmasq_stats(con, names), **sv, "syslog_on": syslog.load_cfg(con)["on"]}
+
+
 q_agh = _q(lambda con, p: agh.fetch(con, force=one(p, "force") == "1"))
 q_agh_cfg = _q(lambda con, p: agh.public_cfg(con))
 q_rulehealth = _q(lambda con, p: insight.rule_health(con, _days_p(p, 30)))
@@ -1118,7 +1124,7 @@ def p_docker_act(body):
     return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
 
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/wallpaper": lambda p=None: (200, wallpaper.status()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/dns": _q(q_dns), "/api/dns/cfg": _q(lambda con, p: dnsx.load_cfg(con)), "/api/wallpaper": lambda p=None: (200, wallpaper.status()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 def p_wallpaper(body):
     if body.get("remove"):
         wallpaper.remove()
@@ -1130,6 +1136,8 @@ def p_wallpaper(body):
 
 
 POST_ROUTES.update({
+    "/api/dns/cfg": lambda body: _wcon(lambda con: dnsx.save_cfg(con, body)),
+    "/api/dns/test": lambda body: dnsx.test(body),
     "/api/wallpaper": p_wallpaper,
     "/api/wallpaper/cfg": lambda body: (wallpaper.save_cfg(body), {"ok": True, **wallpaper.status()})[1],
     "/api/wallpaper/refresh": lambda body: {"ok": True, **wallpaper.refresh()},
@@ -1146,7 +1154,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()

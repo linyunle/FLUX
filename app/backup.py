@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
+from . import agh, dnsx, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
 
 MAX_THEME = 64 * 1024
 
@@ -57,6 +57,7 @@ def export(con, secrets=False):
     out["alerts"] = {"rules": ac["rules"], "quiet": ac["quiet"], "channels": chans}
     a = agh.load_cfg(con)
     out["agh"] = {"url": a["url"], "user": a["user"], "on": a["on"], **({"pass": a["pass"]} if secrets else {})}
+    out["dns"] = dnsx.load_cfg(con)
     out["quota"] = insight.quota_cfg(con)
     out["report"] = insight.report_cfg(con)
     out["airport_rules"] = airports.rules_text()
@@ -105,6 +106,8 @@ def restore(con, d):
         step("告警规则与渠道", f)
     if isinstance(d.get("agh"), dict):
         step("AdGuard", lambda: agh.save_cfg(con, d["agh"]))
+    if isinstance(d.get("dns"), dict):
+        step("DNS 服务器", lambda: dnsx.save_cfg(con, d["dns"]))
     if isinstance(d.get("quota"), dict):
         step("机场套餐", lambda: insight.save_quota(con, {"quota": d["quota"]}))
     if isinstance(d.get("report"), dict):

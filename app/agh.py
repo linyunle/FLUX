@@ -175,3 +175,37 @@ def test(con, body):
         return {"ok": True, "version": str(s.get("version", "")), "running": bool(s.get("running", True)), "error": ""}
     except Exception as e:
         return {"ok": False, "error": _err(e)}
+
+
+def diag_info(con, n=100):
+    """诊断包用:AdGuard 的运行状态 + 最近 n 条查询日志(任何结果)的汇总和明细。不含账号密码、上游地址。"""
+    cfg = load_cfg(con)
+    if not cfg["url"]:
+        return {"configured": False}
+    out = {"configured": True, "on": cfg["on"], "url": cfg["url"]}
+    if not cfg["on"]:
+        return out
+    try:
+        st = _req(cfg, "/control/status")
+        out["status"] = {"version": st.get("version"), "running": st.get("running"), "protection_enabled": st.get("protection_enabled"),
+                         "dns_port": st.get("dns_port"), "http_port": st.get("http_port"), "dhcp_available": st.get("dhcp_available")}
+    except Exception as e:
+        out["error"] = _err(e)
+        return out
+    try:
+        ql = _req(cfg, f"/control/querylog?limit={int(n)}")
+        rows, by_reason, slow, fails = [], {}, 0, 0
+        for it in (ql.get("data") or [])[:n]:
+            q = it.get("question") or {}
+            ans = it.get("status") or ""
+            reason = str(it.get("reason") or "")
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+            el = float(it.get("elapsedMs") or 0)
+            slow += el > 500
+            fails += ans not in ("NOERROR", "NXDOMAIN", "")
+            rows.append({"t": str(it.get("time") or "")[:19].replace("T", " "), "client": str(it.get("client") or ""), "d": str(q.get("name") or "")[:100],
+                         "type": str(q.get("type") or ""), "status": ans, "reason": reason, "ms": round(el, 1), "cached": bool(it.get("cached"))})
+        out["querylog"] = {"n": len(rows), "by_reason": by_reason, "slow_over_500ms": slow, "bad_status": fails, "recent": rows}
+    except Exception as e:
+        out["querylog_error"] = _err(e)
+    return out

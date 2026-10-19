@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from . import agh, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
+from . import agh, dnsx, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -172,6 +172,23 @@ def selfcheck(con, now=None):
                 out.append(_f("warn", f"最近 24 小时路由器有 {n} 条 error 及以上的日志", f"最多的来源是「{top[0]}」({top[1]} 条)。到「路由器日志」页看内容;诊断包里附了最近的明细。"))
     except Exception:
         pass
+    try:
+        ac = agh.load_cfg(con)
+        d = agh._cache.get("data") or {}
+        if ac["url"] and ac["on"] and d.get("configured") and d.get("ok") is False:
+            out.append(_f("warn", "读不到 AdGuard Home", f"{d.get('error') or '连接失败'}。「设置 → DNS」里检查地址和账号。"))
+        for s in dnsx.servers_status(con, now)["servers"]:
+            if s["at"] and s["ms"] is None:
+                out.append(_f("warn", f"DNS 服务器「{s['name']}」没有响应", f"{s['note']}(近 24 小时丢包 {s['loss_pct']}%)。看「安全」页的 DNS 卡片。"))
+            elif s["n24"] >= 20 and s["loss_pct"] >= 20:
+                out.append(_f("warn", f"DNS 服务器「{s['name']}」丢包 {s['loss_pct']}%", "近 24 小时有不少探测没得到回应。"))
+        dm = dnsx.dnsmasq_stats(con, {}, now)
+        if dm["q24"] >= 200 and dm["nx_rate"] >= 30:
+            out.append(_f("info", f"dnsmasq 的 NXDOMAIN 比例偏高({dm['nx_rate']}%)", "说明很多查询的域名不存在;看「安全」页 DNS 卡片里「查不到的域名」,常见原因是 IPv6 / 搜索域 / 某个设备在乱查。"))
+        if syslog.load_cfg(con)["on"] and not dm["enabled"] and not (ac["url"] and ac["on"]):
+            out.append(_f("info", "没有 DNS 查询统计", "没接 AdGuard Home,也没收到 dnsmasq 的查询日志。在「设置 → DNS」里看开启办法(路由器开 dnsmasq 查询日志,面板只读)。"))
+    except Exception:
+        pass
     lv = {"bad": 0, "warn": 1, "info": 2}
     out.sort(key=lambda f: lv.get(f["level"], 3))
     if not out:
@@ -215,6 +232,22 @@ def _ext(con, m, full, now, logs=False):
                                                   for r in syslog.query(con, level=7, n=300)]
     except Exception as e:
         out["syslog"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- DNS:AdGuard 日志 / dnsmasq 日志与统计 / 自定义 DNS 服务器
+    try:
+        ag = agh.diag_info(con)
+        if ag.get("querylog"):
+            ag["querylog"]["recent"] = [dict(r, client=m(r["client"]), d=m(r["d"])) for r in ag["querylog"]["recent"]]
+        ag["url"] = m(ag.get("url", ""))
+        dm = dnsx.dnsmasq_stats(con, {}, now)
+        for k in ("top_clients",):
+            dm[k] = [{"ip": m(r["ip"]), "n": r["n"]} for r in dm[k]]
+        dm["top_domains"], dm["top_nx"] = [{"d": m(r["d"]), "n": r["n"]} for r in dm["top_domains"][:10]], [{"d": m(r["d"]), "n": r["n"]} for r in dm["top_nx"][:10]]
+        dm["recent_lines"] = [f"{time.strftime('%m-%d %H:%M:%S', time.localtime(r['ts']))} [{syslog.SEV[r['sev']]}] {r['tag']}: {m(r['msg'])[:220]}" for r in dnsx.dnsmasq_lines(con, 60 if logs else 30)]
+        sv = dnsx.servers_status(con, now)
+        out["dns"] = {"adguard": ag, "dnsmasq": dm, "custom_servers": {"domain": sv["domain"], "every_sec": sv["every"],
+                      "servers": [{"name": s["name"], "addr": m(f"{s['host']}:{s['port']}"), "ms": s["ms"], "note": s["note"], "loss_pct_24h": s["loss_pct"], "avg_ms_24h": s["avg_ms"], "samples_24h": s["n24"]} for s in sv["servers"]]}}
+    except Exception as e:
+        out["dns"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- UPS
     try:
         uc = ups.load_cfg(con)
