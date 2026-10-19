@@ -1118,9 +1118,21 @@ def p_docker_act(body):
     return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
 
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/wallpaper": lambda p=None: (200, wallpaper.info()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/wallpaper": lambda p=None: (200, wallpaper.status()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+def p_wallpaper(body):
+    if body.get("remove"):
+        wallpaper.remove()
+        wallpaper.save_cfg({"source": "upload"})
+    else:
+        wallpaper.save(body.get("data"))
+        wallpaper.save_cfg({"source": "upload"})      # 手动上传 = 不再自动更换
+    return {"ok": True, **wallpaper.status()}
+
+
 POST_ROUTES.update({
-    "/api/wallpaper": lambda body: {"ok": True, **(wallpaper.remove() if body.get("remove") else wallpaper.save(body.get("data")))},
+    "/api/wallpaper": p_wallpaper,
+    "/api/wallpaper/cfg": lambda body: (wallpaper.save_cfg(body), {"ok": True, **wallpaper.status()})[1],
+    "/api/wallpaper/refresh": lambda body: {"ok": True, **wallpaper.refresh()},
     "/api/sys/temp": lambda body: _wcon(lambda con: {"ok": True, "src": sysinfo.save_temp_src(con, body.get("src"))}),
     "/api/nodes/purge": lambda body: _wcon(lambda con: _purge_nodes(con, body)),
     "/api/listen": p_listen, "/api/listen/confirm": p_listen_confirm,
@@ -1134,7 +1146,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/wallpaper": "修改登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()

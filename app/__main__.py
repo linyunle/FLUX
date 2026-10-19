@@ -1,7 +1,7 @@
 import signal
 import threading
 
-from . import airports, alerts, appsig, auth, collector, config, db, geo, realtime, syslog, wan, web
+from . import airports, alerts, appsig, auth, collector, config, db, geo, realtime, syslog, wallpaper, wan, web
 from .util import log, stop
 
 
@@ -20,6 +20,7 @@ def main():
     threading.Thread(target=alerts.run, name="alerts", daemon=True).start()
     threading.Thread(target=wan.run, name="wanq", daemon=True).start()
     threading.Thread(target=syslog.run, name="syslog", daemon=True).start()
+    threading.Thread(target=wallpaper.run, name="wallpaper", daemon=True).start()
     cf = config.get()
     log(f"采集开始 {config.VERSION}  API={cf['api']}({cf['source']})  页面 :{config.LISTEN_PORT}"
         f"{'  (需要 ?t=token)' if config.PAGE_TOKEN else ''}")

@@ -349,14 +349,16 @@ try:
     png_ = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 64).decode()
     ok(post("/api/wallpaper", {"data": "data:image/png;base64," + base64.b64encode(b"<html>x").decode()})[0] == 400, "壁纸:非图片被拒")
     c, r = post("/api/wallpaper", {"data": "data:image/png;base64," + png_}); ok(c == 200 and r["has"] and r["type"] == "image/png", "壁纸:上传 PNG")
-    ok(post("/api/wallpaper", {"data": "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 950000).decode()})[0] in (400, 413), "壁纸:太大被拒")
+    ok(post("/api/wallpaper", {"data": "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 740000).decode()})[0] in (400, 413), "壁纸:太大被拒")
     post("/api/auth/set", {"new": "secret123"})
     wr = urllib.request.build_opener().open(urllib.request.Request(B + "/wallpaper"))
     ok(wr.status == 200 and wr.headers["Content-Type"] == "image/png", "壁纸:未登录也能取图")
     ok(b"/wallpaper?v=" in urllib.request.build_opener().open(urllib.request.Request(B + "/")).read(), "壁纸:登录页带壁纸背景")
     cj.clear(); rq("/api/login", {"password": "secret123"})
     ok(rq("/api/auth/set", {"old": "secret123", "new": ""})[0] == 200, "壁纸:关闭密码")
-    post("/api/wallpaper", {"remove": True})
+    c, r = post("/api/wallpaper/cfg", {"source": "bing", "mode": "random", "every": 6}); ok(c == 200 and r["cfg"]["source"] == "bing" and r["cfg"]["every"] == 6, "壁纸:自动更换设置")
+    c, r = post("/api/wallpaper/refresh", {}); ok(c == 200 and ("err" in r["bing"]), "壁纸:立即更换(无网络时只报错不崩)")
+    post("/api/wallpaper", {"remove": True}); ok(get("/api/wallpaper")["cfg"]["source"] == "upload", "壁纸:移除后回到手动")
     try: c404 = urllib.request.urlopen(B + "/wallpaper").status
     except urllib.error.HTTPError as e: c404 = e.code
     ok(c404 == 404, "壁纸:移除后 404")

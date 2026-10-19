@@ -714,8 +714,11 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <div style="font-weight:600;margin-bottom:6px">登录页壁纸</div>
-  <div class="sub" style="margin-bottom:8px">设置了访问密码后,登录页可以像路由器 Argon 主题那样显示一张壁纸(登录框为毛玻璃)。图片会在浏览器里自动压缩后存到面板的数据目录;登录前任何人都能看到这张图,所以别用私人照片。壁纸不包含在备份里。</div>
+  <div class="sub" style="margin-bottom:8px">设置了访问密码后,登录页可以像路由器 Argon 主题那样显示一张壁纸(登录框为毛玻璃)。图片会在浏览器里自动压缩后存到面板的数据目录;登录前任何人都能看到这张图,所以别用私人照片。也可以选「必应每日图片」定时自动更换(需要面板能访问 bing.com;走的是 GeoIP 下载那个代理设置)。壁纸不包含在备份里。</div>
   <div id="wpPrev" style="display:none;height:120px;border-radius:10px;background:#888 center/cover;margin-bottom:8px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><label class="sub">来源 <select id="wpSrc"><option value="upload">手动上传</option><option value="bing">必应每日图片(自动更换)</option></select></label>
+    <span id="wpBing" style="display:none;gap:8px;flex-wrap:wrap;align-items:center"><select id="wpMode"><option value="daily">每天的新图</option><option value="random">最近 8 张里随机</option></select><label class="sub">每 <input id="wpEvery" type="number" min="1" max="168" style="width:60px"> 小时</label><select id="wpMkt"><option value="zh-CN">中国</option><option value="en-US">美国</option><option value="en-GB">英国</option><option value="ja-JP">日本</option><option value="de-DE">德国</option><option value="fr-FR">法国</option></select><button id="wpNow">立即更换</button></span></div>
+  <div class="sub" id="wpInfo" style="margin-bottom:8px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="file" id="wpFile" accept="image/jpeg,image/png,image/webp"><button id="wpDel" style="display:none">移除壁纸</button><span class="msg" id="wpMsg"></span></div></div>
       <div class="card sec" id="sec-probe"><h2>节点测速(可选)</h2>
   <div class="sub" style="margin-bottom:10px">nikki 只给策略组里的节点做延迟测试,其它节点没有测速数据,「节点评分」和「网络质量」就看不到它们。开启后,面板会定时让 nikki 给<b>最近 24 小时真正用过的节点</b>测一次延迟(只发测速请求,不改 nikki 的任何配置),结果进 nikki 的测速记录,再被面板读回去算评分。只测在用的节点,请求量很小。</div>
@@ -1554,9 +1557,14 @@ function renderLook(){
   $("#lkTiles").checked=TH.tiles;
   seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
 }
-function paintWp(j){const on=!!(j&&j.has);$("#wpPrev").style.display=on?"":"none";$("#wpDel").style.display=on?"":"none";if(on)$("#wpPrev").style.backgroundImage="url(/wallpaper?v="+j.v+(TOKEN?"&t="+encodeURIComponent(TOKEN):"")+")"}
+function paintWp(j){const c=(j&&j.cfg)||{},b=c.source==="bing";$("#wpSrc").value=c.source||"upload";$("#wpBing").style.display=b?"flex":"none";$("#wpFile").style.display=b?"none":"";if(c.mode){$("#wpMode").value=c.mode;$("#wpEvery").value=c.every;$("#wpMkt").value=c.mkt}
+  const bg=(j&&j.bing)||{};$("#wpInfo").textContent=b?(bg.err?"上次更换失败:"+bg.err+"(用的是 设置→数据 里 GeoIP 下载的那个代理,国内直连必应一般可以)":bg.at?"上次更换:"+new Date(bg.at*1000).toLocaleString()+(bg.title?" · "+bg.title:""):"启用后约半分钟内会自动换第一张"):"";
+  const on=!!(j&&j.has);$("#wpPrev").style.display=on?"":"none";$("#wpDel").style.display=on?"":"none";if(on)$("#wpPrev").style.backgroundImage="url(/wallpaper?v="+j.v+(TOKEN?"&t="+encodeURIComponent(TOKEN):"")+")"}
 function wpShrink(file){return new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(file);im.onload=()=>{URL.revokeObjectURL(u);let w=im.naturalWidth,h=im.naturalHeight;const m=Math.max(w,h),sc=m>1920?1920/m:1;w=Math.round(w*sc);h=Math.round(h*sc);const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);let q=.85,d=c.toDataURL("image/jpeg",q);while(d.length>930000&&q>.3){q-=.1;d=c.toDataURL("image/jpeg",q)}d.length>930000?no(new Error("图片太大,换一张")):ok(d)};im.onerror=()=>no(new Error("读不出这张图片"));im.src=u})}
 $("#wpFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;const m=$("#wpMsg");m.className="msg";m.textContent="处理中…";try{const d=await wpShrink(f);const j=await post("/api/wallpaper",{data:d});paintWp(j);m.className="msg ok";m.textContent="已设置,退出登录后可看到效果"}catch(x){m.className="msg warn";m.textContent=x.message}e.target.value=""};
+const wpSave=async()=>{try{paintWp(await post("/api/wallpaper/cfg",{source:$("#wpSrc").value,mode:$("#wpMode").value,every:+$("#wpEvery").value||24,mkt:$("#wpMkt").value}));if($("#wpSrc").value==="bing"&&!$("#wpPrev").style.backgroundImage.length)$("#wpNow").click()}catch(x){$("#wpMsg").className="msg warn";$("#wpMsg").textContent=x.message}};
+["#wpSrc","#wpMode","#wpEvery","#wpMkt"].forEach(i=>$(i).onchange=wpSave);
+$("#wpNow").onclick=async()=>{const m=$("#wpMsg");m.className="msg";m.textContent="下载中…";try{const j=await post("/api/wallpaper/refresh",{});paintWp(j);m.className="msg "+(j.bing.err?"warn":"ok");m.textContent=j.bing.err?"失败":"已更换"}catch(x){m.className="msg warn";m.textContent=x.message}};
 $("#wpDel").onclick=async()=>{try{paintWp(await post("/api/wallpaper",{remove:true}));$("#wpMsg").className="msg ok";$("#wpMsg").textContent="已移除"}catch(x){$("#wpMsg").textContent=x.message}};
 $("#lkPriv").onchange=e=>{TH.priv=e.target.checked;saveTheme();applyTheme();renderChrome()};
 $("#btnPriv").onclick=()=>{TH.priv=!TH.priv;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()};
