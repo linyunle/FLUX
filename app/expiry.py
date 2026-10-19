@@ -114,6 +114,18 @@ def check_cert(target, timeout=6.0, now=None):
                 r["not_after"] = na
         except Exception:
             pass
+    except ConnectionRefusedError:
+        r["err"] = f"连不上:{host}:{port} 没有程序在监听(端口没开,或防火墙拒绝)"
+    except socket.timeout:
+        r["err"] = f"连接超时:{host}:{port} 没有响应"
+    except socket.gaierror:
+        r["err"] = f"域名解析不了:{host}"
+    except ssl.SSLError as e:
+        t = str(e)
+        if "EOF" in t or "UNEXPECTED_EOF" in t or "WRONG_VERSION" in t or "UNKNOWN_PROTOCOL" in t:
+            r["err"] = f"{host}:{port} 连上了,但对方不是 HTTPS / 没做 TLS 握手就断开(这个端口没有证书,或被代理 / 防火墙挡了)"
+        else:
+            r["err"] = t[:120]
     except Exception as e:
         r["err"] = (str(e) or e.__class__.__name__)[:120]
     if r["not_after"]:
@@ -134,7 +146,9 @@ def check_domain(domain, timeout=10.0, now=None):
             r["not_after"] = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp())
             r["days"] = _days(r["not_after"], now)
     except urllib.error.HTTPError as e:
-        r["err"] = "查不到(这个后缀可能不支持 RDAP)" if e.code in (404, 400) else f"RDAP 服务返回 {e.code}"
+        sub = domain.count(".") >= 2
+        r["err"] = (("查不到:这看起来是子域名(如 xxx.dpdns.org),RDAP 只查注册域名,子域名没有独立的到期日;免费二级域名的到期要去发放它的平台看" if sub
+                     else "查不到(这个后缀可能不支持 RDAP)") if e.code in (404, 400) else f"RDAP 服务返回 {e.code}")
     except Exception as e:
         r["err"] = ("查询失败:" + (str(e) or e.__class__.__name__))[:120]
     return r
