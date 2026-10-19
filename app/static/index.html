@@ -231,6 +231,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .stleg{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:var(--ink2)}.stleg .it{white-space:nowrap}.stleg b{color:var(--ink);font-weight:600}
 .stbox svg text{fill:var(--muted);font-size:11px}
 .qstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:2px 0 10px}.qstat>div{background:var(--hover);border-radius:var(--rs);padding:8px 10px}
+.qstat>div.upc{display:grid;overflow:hidden;cursor:pointer;padding:0}.upc .upp{grid-area:1/1;padding:8px 10px;opacity:0;transform:translateY(100%);transition:transform .55s cubic-bezier(.4,0,.2,1),opacity .55s}.upc .upp.on{opacity:1;transform:none}.upc .upp.out{transform:translateY(-100%)}
 .qstat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}.qstat .l{font-size:12px;color:var(--muted)}.qstat .v.good{color:var(--good)}.qstat .v.warn{color:var(--warn)}.qstat .v.bad{color:var(--bad)}.qstat .sb{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .good{color:var(--good)}.bad{color:var(--bad)}
 .qsec{font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:600}
@@ -456,7 +457,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="chartbox" id="memChart"></div>
   </div>
   <div class="card gcard" id="sysCard">
-    <h2>路由器状态<span class="sub" id="sysUps" style="font-size:12px;font-weight:400;opacity:.75"></span><span class="sp"></span><span class="sub" id="sysNote"></span></h2>
+    <h2>路由器状态<span class="sp"></span><span class="sub" id="sysNote"></span></h2>
     <div class="qstat" id="sysTiles"></div>
     <div class="chartbox" id="sysChart"></div>
     <div id="sysIf"></div>
@@ -585,7 +586,6 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
   <div class="row2"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div><div class="sub" id="lkCardMsg" style="margin:6px 0"></div>
-    <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkUps"> <span>在「路由器状态」标题旁显示 UPS 状态(接入 UPS 后才有)</span></label>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
@@ -1383,8 +1383,21 @@ function wanTile(w,st){if(!w||!w.at)return st("–","宽带","探测中");
 function diskTile(ds,dk,st){const a=ds&&ds.length?ds:dk?[dk]:[];if(!a.length)return st("–","磁盘","");
   const w=a.reduce((m,x)=>x.pct>m.pct?x:m,a[0]);
   return st(w.pct+"%",a.length>1?`磁盘(最满的,共 ${a.length} 个)`:"磁盘",`${w.name?esc(String(w.name).slice(0,14))+" · ":""}剩余 ${fmt(w.free)}`,sysCls(w.pct,85,95))}
-function upsTile(u,st){if(!u||!u.info)return "";const i=u.info,ob=(i.status||[]).includes("OB"),lb=(i.status||[]).includes("LB");
-  return st(i.charge==null?"–":Math.round(i.charge)+"%","UPS",ob?`断电中 · 约 ${i.runtime?Math.round(i.runtime/60):"?"} 分钟`:`市电正常${i.load!=null?" · 负载 "+Math.round(i.load)+"%":""}`,lb?"bad":ob?"warn":"")}
+function upsPages(i){const ob=(i.status||[]).includes("OB"),lb=(i.status||[]).includes("LB"),cls=lb?"bad":ob?"warn":"",P=[];
+  const r=Math.round;
+  P.push([i.charge==null?"–":r(i.charge)+"%","UPS 电量",i.status_text||"",cls]);
+  if(i.load!=null)P.push([r(i.load)+"%","UPS 负载",i.watts!=null?"约 "+r(i.watts)+" W":"",i.load>=80?"warn":""]);
+  if(i.runtime!=null)P.push([r(i.runtime/60)+" 分钟","预计续航",ob?"正在用电池供电":"满载 / 断电时的估算",ob&&i.runtime<600?"bad":ob?"warn":""]);
+  if(i.input_v!=null)P.push([r(i.input_v)+" V","输入电压","市电",""]);
+  if(i.battery_v!=null)P.push([i.battery_v.toFixed(1)+" V","电池电压","",""]);
+  if(i.model||i.mfr)P.push([esc(String(i.model||i.mfr).slice(0,14)),"UPS 型号",esc(i.model?i.mfr||"":""),""]);
+  return P}
+function upsTile(u,st){if(!u||!u.info)return "";const P=upsPages(u.info);
+  return `<div class="upc" id="upsC" title="点一下翻页">${P.map(p=>`<div class="upp"><div class="v ${p[3]||""}">${p[0]}</div><div class="l">${p[1]}</div><div class="sb">${p[2]||"&nbsp;"}</div></div>`).join("")}</div>`}
+function upsShow(){const c=document.getElementById("upsC");if(!c)return;const pg=c.children,n=pg.length;if(!n)return;const k=((S.upsPg||0)%n+n)%n,pv=(k+n-1)%n;
+  [...pg].forEach((el,i)=>{el.classList.toggle("on",i===k);el.classList.toggle("out",n>1&&i===pv)})}
+setInterval(()=>{if(document.hidden)return;S.upsPg=(S.upsPg||0)+1;upsShow()},4000);
+document.addEventListener("click",e=>{if(e.target.closest&&e.target.closest("#upsC")){S.upsPg=(S.upsPg||0)+1;upsShow()}});
 function paintSys(j){
   const el=$("#sysCard");if(!el||el.offsetParent===null)return;
   const m=j.mem,mp=m&&m.total?Math.round(m.used*100/m.total):null,ct=j.ct,dk=j.disk,ld=j.load;
@@ -1397,10 +1410,7 @@ function paintSys(j){
     +diskTile(j.disks,dk,st)
     +upsTile(j.ups,st)
     +wanTile(j.wan,st)
-    +st(dur(j.uptime||0),"已运行","&nbsp;"));
-  {const i=j.ups&&j.ups.info,u=$("#sysUps");if(i&&TH.upsNote!==false){const ob=(i.status||[]).includes("OB"),lb=(i.status||[]).includes("LB");
-    u.textContent="UPS "+(ob?"断电中":"市电正常")+(i.charge!=null?" · 电量 "+Math.round(i.charge)+"%":"")+(i.load!=null?" · 负载 "+Math.round(i.load)+"%":"")+(i.runtime?" · 续航约 "+Math.round(i.runtime/60)+" 分钟":"");
-    u.style.color=lb?"var(--bad)":ob?"var(--warn)":""}else u.textContent=""}
+    +st(dur(j.uptime||0),"已运行","&nbsp;"));upsShow();
   $("#sysNote").textContent=j.cpu==null?"刚启动,等几秒":"";
   drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),fitH($("#sysChart"),Math.max(70,(HGT.rt[TH.cards.sys.h]||150)-60)),{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
   const rows=(j.ifaces||[]).slice(0,4);let h=rows.map(r=>`<tr><td class="k">${esc(r.name)}</td><td class="n">↓ ${rate(r.down)}</td><td class="n hide-s">↑ ${rate(r.up)}</td><td class="n hide-s ${r.drops||r.errs?"warn":"sub"}">${r.drops||r.errs?`丢包 ${r.drops} · 错误 ${r.errs}`:"无丢包"}</td></tr>`).join("");
@@ -1474,7 +1484,7 @@ function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}ca
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.upsNote=r.upsNote!==false;
+  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1573,7 +1583,7 @@ function renderLook(){
   {const c=trCols(),css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cTrDown","down","--down"],["#cTrUp","up","--up"]]){const col=hexOk(TH.trend[k])?TH.trend[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
-  $("#lkTiles").checked=TH.tiles;$("#lkUps").checked=TH.upsNote!==false;
+  $("#lkTiles").checked=TH.tiles;
   seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
 }
 function paintWp(j){const c=(j&&j.cfg)||{},b=c.source==="bing";$("#wpSrc").value=c.source||"upload";$("#wpBing").style.display=b?"flex":"none";$("#wpFile").style.display=b?"none":"";if(c.mode){$("#wpMode").value=c.mode;$("#wpEvery").value=c.every;$("#wpMkt").value=c.mkt}
@@ -1594,7 +1604,6 @@ $("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const 
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
   TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);if(VIEWS[TH.view])TH.vh[TH.view]=[...TH.hide];else TH.view="custom";themeChanged(true);renderChrome()};
-$("#lkUps").onchange=e=>{TH.upsNote=e.target.checked;themeChanged(true)};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
 function syncSl(el){const mn=+el.min,mx=+el.max;el.style.setProperty("--p",((+el.value-mn)/(mx-mn)*100)+"%")}
