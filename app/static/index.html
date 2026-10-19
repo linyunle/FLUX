@@ -417,8 +417,6 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="mrow"><span class="sub">下行</span><b id="spDown">–</b></div><div class="mrow"><span class="sub">上行</span><b id="spUp">–</b></div></div>
     <div class="scard" id="scConns"><div class="mh">连接数</div><div id="scChart" class="mc"></div>
       <div class="mrow"><span class="sub">总计</span><b id="scTotal">–</b></div><div class="mrow"><span class="sub">直连 / 代理</span><b id="scSplit">–</b></div></div>
-    <div class="scard gone" id="scUps"><div class="mh">UPS <span id="suSt" class="sub"></span></div><div id="suChg" style="font-size:20px;font-weight:650;line-height:1.2">–</div>
-      <div class="mrow"><span class="sub">负载</span><b id="suLoad">–</b></div><div class="mrow"><span class="sub" id="suRtL">预计续航</span><b id="suRt">–</b></div></div>
   </div>
   <div class="sfoot">
     <div class="scard" id="scStatus"><span id="conn" class="sub"></span></div>
@@ -458,7 +456,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="chartbox" id="memChart"></div>
   </div>
   <div class="card gcard" id="sysCard">
-    <h2>路由器状态<span class="sp"></span><span class="sub" id="sysNote"></span></h2>
+    <h2>路由器状态<span class="sub" id="sysUps" style="font-size:12px;font-weight:400;opacity:.75"></span><span class="sp"></span><span class="sub" id="sysNote"></span></h2>
     <div class="qstat" id="sysTiles"></div>
     <div class="chartbox" id="sysChart"></div>
     <div id="sysIf"></div>
@@ -587,6 +585,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
   <div class="row2"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div><div class="sub" id="lkCardMsg" style="margin:6px 0"></div>
+    <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkUps"> <span>在「路由器状态」标题旁显示 UPS 状态(接入 UPS 后才有)</span></label>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">侧栏内容</span><div id="lkSideItems" style="display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:200px"></div></div>
@@ -1399,6 +1398,9 @@ function paintSys(j){
     +upsTile(j.ups,st)
     +wanTile(j.wan,st)
     +st(dur(j.uptime||0),"已运行","&nbsp;"));
+  {const i=j.ups&&j.ups.info,u=$("#sysUps");if(i&&TH.upsNote!==false){const ob=(i.status||[]).includes("OB"),lb=(i.status||[]).includes("LB");
+    u.textContent="UPS "+(ob?"断电中":"市电正常")+(i.charge!=null?" · 电量 "+Math.round(i.charge)+"%":"")+(i.load!=null?" · 负载 "+Math.round(i.load)+"%":"")+(i.runtime?" · 续航约 "+Math.round(i.runtime/60)+" 分钟":"");
+    u.style.color=lb?"var(--bad)":ob?"var(--warn)":""}else u.textContent=""}
   $("#sysNote").textContent=j.cpu==null?"刚启动,等几秒":"";
   drawRt($("#sysChart"),(j.series||[]).map(r=>[r[0],0,r[1]]),fitH($("#sysChart"),Math.max(70,(HGT.rt[TH.cards.sys.h]||150)-60)),{fmtY:v=>Math.round(v)+"%",max:100,tip:b=>`<b>${new Date(b[0]*1000).toLocaleTimeString()}</b><br>CPU ${b[2]}%`});
   const rows=(j.ifaces||[]).slice(0,4);let h=rows.map(r=>`<tr><td class="k">${esc(r.name)}</td><td class="n">↓ ${rate(r.down)}</td><td class="n hide-s">↑ ${rate(r.up)}</td><td class="n hide-s ${r.drops||r.errs?"warn":"sub"}">${r.drops||r.errs?`丢包 ${r.drops} · 错误 ${r.errs}`:"无丢包"}</td></tr>`).join("");
@@ -1454,12 +1456,12 @@ const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
 const DEF_CARDS={sys:{w:12,h:"s"},mem:{w:6,h:"s"},rt:{w:6,h:"s"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"s",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"s",rows:30},qoe:{w:12,h:"s",rows:50}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
-const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["ups","UPS 状态","#scUps"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
+const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
-  order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,ups:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
+  order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["排障",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
 const normOrder=o=>{const ord=(Array.isArray(o)?o:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",alertc:"trend"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}return ord};
@@ -1472,7 +1474,7 @@ function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}ca
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
+  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.upsNote=r.upsNote!==false;
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1519,11 +1521,10 @@ function applyTheme(){
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
    R.style.setProperty("--bf",TH.op<100?"blur(8px)":"none")}
   for(const [k,,sel] of SIDE_ITEMS)document.querySelectorAll(sel).forEach(el=>el.classList.toggle("gone",!TH.sideShow[k]));
-  paintSideUps(S.upsInfo?{info:S.upsInfo}:null);
-  (TH.sideOrder||[]).forEach((k,i)=>{const el=$({speed:"#scSpeed",direct:"#scDirect",proxy:"#scProxy",conns:"#scConns",ups:"#scUps"}[k]);if(el)el.style.order=i+1});
+  (TH.sideOrder||[]).forEach((k,i)=>{const el=$({speed:"#scSpeed",direct:"#scDirect",proxy:"#scProxy",conns:"#scConns"}[k]);if(el)el.style.order=i+1});
   R.style.setProperty("--navop",TH.navOp+"%");
   for(const [k,v] of [["a","--vzd"],["b","--vzu"]]){if(hexOk(TH.viz[k]))R.style.setProperty(v,TH.viz[k]);else R.style.removeProperty(v)}
-  $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns","ups"].some(k=>TH.sideShow[k]));
+  $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
   $(".footrow").classList.toggle("gone",!TH.sideShow.dev&&!TH.sideShow.theme);
   {const bg=getComputedStyle(R).getPropertyValue("--bg").trim();if(hexOk(bg))$("#tc").content=bg}
   document.body.classList.toggle("priv",!!TH.priv);$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
@@ -1572,7 +1573,7 @@ function renderLook(){
   {const c=trCols(),css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cTrDown","down","--down"],["#cTrUp","up","--up"]]){const col=hexOk(TH.trend[k])?TH.trend[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
-  $("#lkTiles").checked=TH.tiles;
+  $("#lkTiles").checked=TH.tiles;$("#lkUps").checked=TH.upsNote!==false;
   seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
 }
 function paintWp(j){const c=(j&&j.cfg)||{},b=c.source==="bing";$("#wpSrc").value=c.source||"upload";$("#wpBing").style.display=b?"flex":"none";$("#wpFile").style.display=b?"none":"";if(c.mode){$("#wpMode").value=c.mode;$("#wpEvery").value=c.every;$("#wpMkt").value=c.mkt}
@@ -1593,6 +1594,7 @@ $("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const 
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
   TH.hide=TH.hide.filter(x=>x!==k);if(!c.checked)TH.hide.push(k);if(VIEWS[TH.view])TH.vh[TH.view]=[...TH.hide];else TH.view="custom";themeChanged(true);renderChrome()};
+$("#lkUps").onchange=e=>{TH.upsNote=e.target.checked;themeChanged(true)};
 $("#lkTiles").onchange=e=>{TH.tiles=e.target.checked;themeChanged()};
 $("#lkSideItems").onchange=e=>{const k=e.target.dataset.s;if(!k)return;TH.sideShow[k]=e.target.checked;themeChanged()};
 function syncSl(el){const mn=+el.min,mx=+el.max;el.style.setProperty("--p",((+el.value-mn)/(mx-mn)*100)+"%")}
@@ -1662,7 +1664,7 @@ function paintNs(){const rows=S.nsRows,view=sortRows(rows,S.nsSort,NS_GET),per=N
   const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
   setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th>${thS(S.nsSort,"score","评分","n")}${thS(S.nsSort,"delta","变化","n hide-s")}${thS(S.nsSort,"avg","延迟","n")}${thS(S.nsSort,"fail","超时率","n hide-s")}<th class="hide-s">建议</th></tr></thead><tbody>${view.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
 /* ---------- 拖动整理卡片(电脑端):概览卡片 + 左侧四张实时小卡 ---------- */
-const SIDE_CARDS=[["speed","#scSpeed"],["direct","#scDirect"],["proxy","#scProxy"],["conns","#scConns"],["ups","#scUps"]];
+const SIDE_CARDS=[["speed","#scSpeed"],["direct","#scDirect"],["proxy","#scProxy"],["conns","#scConns"]];
 S.arr=false;let DR=null;
 function setArrange(on){S.arr=!!on;document.body.classList.toggle("arrange",S.arr);$("#btnArr").setAttribute("aria-pressed",S.arr);
   for(const k in CARDS){const el=$(CARDS[k][0]);if(el){el.draggable=S.arr;el.dataset.ck=k}}
@@ -2214,12 +2216,7 @@ $("#repCopy").onclick=async e=>{try{await navigator.clipboard.writeText(repText(
 $("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.document.write("<title>FLUX 周报</title><pre style=\"font:14px/1.7 sans-serif;white-space:pre-wrap;padding:24px\">"+esc("FLUX 周报\n\n"+repText(REP))+"</pre>");w.document.close();w.print()};
 
 /* ---------- 状态 ---------- */
-function paintSideUps(u){const el=$("#scUps"),i=u&&u.info;S.upsInfo=i||null;
-  if(!i||!TH.sideShow.ups){el.classList.add("gone");return}
-  el.classList.remove("gone");const ob=(i.status||[]).includes("OB"),lb=(i.status||[]).includes("LB");
-  $("#suSt").textContent=ob?"断电中":"市电正常";$("#suChg").textContent=i.charge==null?"–":Math.round(i.charge)+"%";$("#suChg").style.color=lb?"var(--bad)":ob?"var(--warn)":"";
-  $("#suLoad").textContent=i.load==null?"–":Math.round(i.load)+"%";$("#suRt").textContent=i.runtime?Math.round(i.runtime/60)+" 分钟":"–"}
-async function status(){try{const s=await get("/api/status");paintSideUps(s.ups);
+async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
   const c=s.conn;S.connOk=!!c.ok;{const vd=$("#verDot");vd.className="dot "+(c.ok?"ok":"bad");vd.title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)")}$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=TABS_ALL.filter(t=>dk||t[0]!=="docker");if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}

@@ -446,7 +446,6 @@ try:
     up = get("/api/ups"); ok(up["cfg"]["on"] is False and up["cfg"]["name"] == "CyberPower", "UPS:默认关闭")
     ok(post("/api/ups", {"on": True, "name": "bad name"})[0] == 400, "UPS:名称校验")
     ok(post("/api/ups/test", {"host": "127.0.0.1", "port": 1, "name": "x"})[0] == 400, "UPS:连不上会报错")
-    ok("ups" in get("/api/status"), "状态接口带 UPS 字段(侧栏小卡片用)")
     ex = get("/api/expiry"); ok(ex["cfg"] == {"certs": [], "domains": []}, "到期检查:默认没有名单")
     ok(post("/api/expiry", {"certs": "bad host!"})[0] == 400, "到期检查:地址校验")
     c, r = post("/api/expiry", {"certs": "127.0.0.1:1", "domains": ""}); ok(c == 200 and r["cfg"]["certs"] == ["127.0.0.1:1"], "到期检查:保存名单")
