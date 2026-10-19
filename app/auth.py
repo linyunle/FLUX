@@ -125,7 +125,7 @@ def ok(ip):
 
 
 _LOGIN = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>FLUX 登录</title><!--WP--><link rel="icon" href="/favicon.png">
+<title>FLUX 登录</title><link rel="icon" href="/favicon.png">
 <style>:root{color-scheme:light dark;--bg:#f6f6f4;--s:#fcfcfb;--ink:#1d1d1b;--mut:#8a8a82;--line:#e3e3de;--acc:#2a6fdb}
 @media(prefers-color-scheme:dark){:root{--bg:#121211;--s:#1a1a19;--ink:#ecece8;--mut:#85857e;--line:#2c2c2a;--acc:#6aa5f5}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
@@ -133,7 +133,7 @@ form{width:min(320px,88vw);background:var(--s);border:1px solid var(--line);bord
 h1{font-size:18px;margin:0 0 4px}p{margin:0 0 14px;color:var(--mut);font-size:13px}
 input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font-size:16px}
 button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--acc);color:#fff;font-size:15px;cursor:pointer}
-#m{color:#c23a2e;font-size:13px;min-height:18px;margin-top:8px}</style></head><body>
+#m{color:#c23a2e;font-size:13px;min-height:18px;margin-top:8px}</style><!--WP--></head><body>
 <form id="f"><h1>FLUX</h1><p>请输入访问密码</p><input id="p" type="password" autocomplete="current-password" autofocus><div id="m"></div><button>登录</button></form>
 <script>document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
 try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
