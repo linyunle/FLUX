@@ -1,6 +1,12 @@
 name: release
+# 两种触发方式(任选其一):
+#   1. 改 VERSION 文件(例如 v0.26.0)并 push 到 main:自动构建镜像、自动创建同名标签和 Release。
+#   2. 手动推 v* 标签:和以前一样。
+# 同一个版本号已经有标签时,push 到 main 不会重复构建。
 on:
   push:
+    branches: [main]
+    paths: [VERSION]
     tags: ["v*"]
 permissions:
   contents: write
@@ -10,18 +16,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - id: meta
+        run: |
+          echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            ver="$GITHUB_REF_NAME"
+          else
+            ver="$(tr -d ' \r\n' < VERSION)"
+          fi
+          if ! echo "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "VERSION 格式不对(要形如 v0.26.0):$ver"; exit 1
+          fi
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          skip=false
+          if [ "$GITHUB_REF_TYPE" != "tag" ] && git ls-remote --exit-code --tags origin "refs/tags/$ver" >/dev/null 2>&1; then
+            skip=true
+            echo "标签 $ver 已经存在,跳过构建"
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+      - if: steps.meta.outputs.skip != 'true'
+        uses: docker/setup-qemu-action@v3
+      - if: steps.meta.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.meta.outputs.skip != 'true'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        run: |
-          echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "ver=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - if: steps.meta.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -32,6 +56,9 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo }}:latest
             ghcr.io/${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.ver }}
-      - uses: softprops/action-gh-release@v2
+      - if: steps.meta.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.ver }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true

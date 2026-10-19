@@ -1,6 +1,7 @@
 """自检 + 诊断包。
 自检:对面板自己的运行状态、数据一致性、配置做一遍检查,把「看起来不对劲」的地方列出来(很多 bug 会先在这里露出来)。
 诊断包:版本、配置摘要、节点/订阅状态、最近告警、面板日志、前端报错、自检结果打成一个 JSON;默认把 IP/MAC/设备名打码,不含任何密码或 Token。"""
+import hashlib
 import os
 import platform
 import re
@@ -203,6 +204,22 @@ def _names(con):
         return []
 
 
+def domain_masker():
+    """域名 → 代号(域名#xxxxxx)。每个诊断包用一把随机盐,同一个域名在包里是同一个代号(统计 / 排行仍然成立),
+    但看不出访问了什么,也没法拿常见域名列表去撞。"""
+    salt = os.urandom(8)
+    seen = {}
+
+    def f(d):
+        d = str(d or "").strip().lower().rstrip(".")
+        if not d or d in ("", "-"):
+            return d
+        if d not in seen:
+            seen[d] = "域名#" + hashlib.sha1(salt + d.encode()).hexdigest()[:6]
+        return seen[d]
+    return f
+
+
 def mask_text(t, names=()):
     t = MAC.sub(lambda m: ":".join(m.group(0).replace("-", ":").split(":")[:3]) + ":**:**:**", str(t))
     t = IPV4.sub(lambda m: f"{m.group(1)}.{m.group(2)}.*.*", t)
@@ -212,7 +229,7 @@ def mask_text(t, names=()):
     return t
 
 
-def _ext(con, m, full, now, logs=False):
+def _ext(con, m, full, now, logs=False, dom=False):
     """路由器日志 / UPS / 到期 / 容器 / 监听地址 的详细诊断(默认打码;不含容器日志、环境变量、密码)。"""
     out = {}
     # ---- 路由器日志
@@ -234,17 +251,18 @@ def _ext(con, m, full, now, logs=False):
         out["syslog"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- DNS:AdGuard 日志 / dnsmasq 日志与统计 / 自定义 DNS 服务器
     try:
+        dmask = domain_masker() if dom else (lambda d: m(d))
         ag = agh.diag_info(con)
         if ag.get("querylog"):
-            ag["querylog"]["recent"] = [dict(r, client=m(r["client"]), d=m(r["d"])) for r in ag["querylog"]["recent"]]
+            ag["querylog"]["recent"] = [dict(r, client=m(r["client"]), d=dmask(r["d"])) for r in ag["querylog"]["recent"]]
         ag["url"] = m(ag.get("url", ""))
         dm = dnsx.dnsmasq_stats(con, {}, now)
         for k in ("top_clients",):
             dm[k] = [{"ip": m(r["ip"]), "n": r["n"]} for r in dm[k]]
-        dm["top_domains"], dm["top_nx"] = [{"d": m(r["d"]), "n": r["n"]} for r in dm["top_domains"][:10]], [{"d": m(r["d"]), "n": r["n"]} for r in dm["top_nx"][:10]]
+        dm["top_domains"], dm["top_nx"] = [{"d": dmask(r["d"]), "n": r["n"]} for r in dm["top_domains"][:10]], [{"d": dmask(r["d"]), "n": r["n"]} for r in dm["top_nx"][:10]]
         dm["recent_lines"] = [f"{time.strftime('%m-%d %H:%M:%S', time.localtime(r['ts']))} [{syslog.SEV[r['sev']]}] {r['tag']}: {m(r['msg'])[:220]}" for r in dnsx.dnsmasq_lines(con, 60 if logs else 30)]
         sv = dnsx.servers_status(con, now)
-        out["dns"] = {"adguard": ag, "dnsmasq": dm, "custom_servers": {"domain": sv["domain"], "every_sec": sv["every"],
+        out["dns"] = {"domains_masked": bool(dom), "adguard": ag, "dnsmasq": dm, "custom_servers": {"domain": sv["domain"], "every_sec": sv["every"],
                       "servers": [{"name": s["name"], "addr": m(f"{s['host']}:{s['port']}"), "ms": s["ms"], "note": s["note"], "loss_pct_24h": s["loss_pct"], "avg_ms_24h": s["avg_ms"], "samples_24h": s["n24"]} for s in sv["servers"]]}}
     except Exception as e:
         out["dns"] = {"error": f"{type(e).__name__}: {e}"}
@@ -307,7 +325,7 @@ def _ext(con, m, full, now, logs=False):
     return out
 
 
-def bundle(con, full=False, now=None, logs=False):
+def bundle(con, full=False, now=None, logs=False, dom=False):
     now = now or time.time()
     w = _web()
     names = [] if full else _names(con)
@@ -353,7 +371,7 @@ def bundle(con, full=False, now=None, logs=False):
         "nodes": [{"name": n, "type": v.get("type"), "delay": v.get("delay"), "fails": v.get("fails")} for n, v in (c.nodes.items() if c else [])][:400],
         "sys": {k: v for k, v in sysinfo.snapshot(60).items() if k != "series"},
         "wan": wan.snapshot(),
-        "ext": _ext(con, m, full, now, logs),
+        "ext": _ext(con, m, full, now, logs, dom),
         "features": {"syslog": syslog.load_cfg(con)["on"], "ups": ups.load_cfg(con)["on"], "docker": dockerapi.load_cfg(con)["on"],
                      "expiry": bool(expiry.load_cfg(con)["certs"] or expiry.load_cfg(con)["domains"])},
         "db": {"size_bytes": dbsize, "rows": counts},

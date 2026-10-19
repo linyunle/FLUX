@@ -9,6 +9,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import gzip
+import hashlib
 import hmac
 
 from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx
@@ -916,7 +918,7 @@ q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.t
 q_probe = _q(lambda con, p: probe.status(con))
 q_presence = _q(lambda con, p: presence.status(con))
 q_selfcheck = _q(lambda con, p: {"findings": diag.selfcheck(con)})
-q_diag = _q(lambda con, p: diag.bundle(con, full=one(p, "full") == "1", logs=one(p, "logs") == "1"))
+q_diag = _q(lambda con, p: diag.bundle(con, full=one(p, "full") == "1", logs=one(p, "logs") == "1", dom=one(p, "dom") == "1"))
 q_providers = _q(lambda con, p: providers.status(con))
 q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.quota_cfg(con), "airports": airport_names()})
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
@@ -1161,22 +1163,58 @@ _ctx = threading.local()
 
 
 # ---------------------------------------------------------------- HTTP
+_GZ = {}
+
+
+def _gzip(body, key=None):
+    """gzip 压缩;带 etag 的(首页)按 etag 缓存压缩结果,不用每次重压 270KB。"""
+    if key and key in _GZ:
+        return _GZ[key]
+    z = gzip.compress(body, 6, mtime=0)
+    if key:
+        _GZ.clear()
+        _GZ[key] = z
+    return z
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "flux"
 
     def log_message(self, *a):
         pass
 
-    def _send(self, code, body, ctype="application/json; charset=utf-8", extra=None):
+    def _gz_ok(self):
+        return "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+
+    def _send(self, code, body, ctype="application/json; charset=utf-8", extra=None, etag=None):
+        """文本类响应(JSON / HTML / 文本)超过 1KB 且浏览器接受 gzip 时压缩;etag 给了就支持 If-None-Match → 304。"""
         if not isinstance(body, bytes):
             body = json.dumps(body, ensure_ascii=False).encode()
+        extra = dict(extra or {})
+        if etag and code == 200:
+            inm = self.headers.get("If-None-Match") or ""
+            if etag in [x.strip() for x in inm.split(",")]:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "private, no-cache")
+                self.end_headers()
+                return
+            extra["ETag"] = etag
+            extra.setdefault("Cache-Control", "private, no-cache")     # 每次都向服务器确认(要登录),没变就 304
+        zipped = False
+        if len(body) > 1024 and self._gz_ok() and (ctype.startswith("text/") or "json" in ctype):
+            body = _gzip(body, etag)
+            zipped = True
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        if "Cache-Control" not in (extra or {}):
+        if zipped:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding, Cookie")
+        if "Cache-Control" not in extra:
             self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in (extra or {}).items():
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -1235,7 +1273,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path in ("/", "/index.html"):
             self._seen("page")
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
-                return self._send(200, f.read(), "text/html; charset=utf-8")
+                html = f.read()
+            return self._send(200, html, "text/html; charset=utf-8", etag='"' + hashlib.sha1(html).hexdigest()[:20] + '"')
         if u.path == "/api/syslog/export":
             return self._syslog_export(params)
         fn = GET_ROUTES.get(u.path)

@@ -394,9 +394,24 @@ try:
     ok(sv_["测试DNS"]["ms"] is not None and sv_["测试DNS"]["loss_pct"] == 0 and sv_["死的"]["ms"] is None and sv_["死的"]["n24"] >= 1, f"DNS:定时探测 {sv_['测试DNS']['ms']},{sv_['死的']['note']}")
     dg = get("/api/diag"); dd = dg["ext"]["dns"]
     ok(dd["dnsmasq"]["q24"] == 3 and any("e2e-dhcp-marker" in l for l in dd["dnsmasq"]["recent_lines"]) and len(dd["custom_servers"]["servers"]) == 2 and "adguard" in dd, "诊断包:DNS(dnsmasq / 自定义服务器 / AdGuard)")
+    dd2 = get("/api/diag?dom=1")["ext"]["dns"]
+    ok(dd2["domains_masked"] and dd2["dnsmasq"]["top_domains"][0]["d"].startswith("域名#") and "e2e-a.com" not in json.dumps(dd2, ensure_ascii=False), "诊断包:域名也打码(代号)")
+    ok(dd["domains_masked"] is False and any(x["d"] == "www.e2e-a.com" for x in dd["dnsmasq"]["top_domains"]), "诊断包:默认不打码域名时保留原样")
+    ok(get("/api/diag?dom=1")["ext"]["dns"]["dnsmasq"]["top_domains"][0]["d"] != dd2["dnsmasq"]["top_domains"][0]["d"], "诊断包:每个包的代号用不同的盐")
     ok(any("没有响应" in f["title"] and "死的" in f["title"] for f in dg["selfcheck"]), "诊断自检:自定义 DNS 服务器没响应")
     ok(get("/api/backup")["dns"]["servers"][0]["name"] == "测试DNS" if "dns" in get("/api/backup") else False, "备份:包含 DNS 服务器")
     post("/api/dns/cfg", {"servers": []}); post("/api/syslog/cfg", {"on": False, "port": sp})
+    # ---- v0.26.0 gzip / ETag
+    rq_ = urllib.request.Request(B + "/", headers={"Accept-Encoding": "gzip"}); r_ = urllib.request.urlopen(rq_, timeout=5)
+    import gzip as _gz
+    raw_ = r_.read(); ok(r_.headers.get("Content-Encoding") == "gzip" and b"<title>" in _gz.decompress(raw_) and len(raw_) < 120000, f"首页:gzip 压缩 {len(raw_)} 字节")
+    et_ = r_.headers.get("ETag"); ok(bool(et_) and "no-cache" in r_.headers.get("Cache-Control", ""), "首页:带 ETag,每次向服务器确认")
+    try: c304 = urllib.request.urlopen(urllib.request.Request(B + "/", headers={"If-None-Match": et_, "Accept-Encoding": "gzip"}), timeout=5).status
+    except urllib.error.HTTPError as e: c304 = e.code
+    ok(c304 == 304, "首页:没变化返回 304")
+    r2_ = urllib.request.urlopen(urllib.request.Request(B + "/api/diag", headers={"Accept-Encoding": "gzip"}), timeout=10)
+    ok(r2_.headers.get("Content-Encoding") == "gzip" and json.loads(_gz.decompress(r2_.read()))["flux_diag"] == 1, "接口:大的 JSON 也压缩")
+    ok(urllib.request.urlopen(B + "/").headers.get("Content-Encoding") is None, "不接受 gzip 的客户端拿到原文")
     # ---- v0.22.1 清理已不存在的节点
     cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10); hr = time.strftime("%Y-%m-%d %H")
     cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,?)", (int(time.time()),))
