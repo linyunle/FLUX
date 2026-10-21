@@ -23,7 +23,7 @@ con.execute("INSERT INTO ipmap VALUES('192.168.1.10','aa:bb:cc:dd:ee:01',?)", (i
 con.commit(); con.close()
 
 env = dict(os.environ, DATA_DIR=data, NIKKI_API=f"http://127.0.0.1:{API_P}", NIKKI_SECRET="wrong", INTERVAL_SEC="2", FLUSH_SEC="2", PROXY_SEC="2", ALERT_EVAL_SEC="2", ALERT_LEARN_SEC="6",
-           LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, APP_VERSION="v0.2.0", GITHUB_REPO="")
+           LISTEN_HOST="127.0.0.1", LISTEN_PORT=str(WEB_P), NEIGH_FILE=neigh, APP_VERSION="v0.2.0", GITHUB_REPO="", NIKKI_LOG_DIR=os.path.join(data, "nikkilog"))
 proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 B = f"http://127.0.0.1:{WEB_P}"
 
@@ -412,6 +412,40 @@ try:
     r2_ = urllib.request.urlopen(urllib.request.Request(B + "/api/diag", headers={"Accept-Encoding": "gzip"}), timeout=10)
     ok(r2_.headers.get("Content-Encoding") == "gzip" and json.loads(_gz.decompress(r2_.read()))["flux_diag"] == 1, "接口:大的 JSON 也压缩")
     ok(urllib.request.urlopen(B + "/").headers.get("Content-Encoding") is None, "不接受 gzip 的客户端拿到原文")
+    # ---- v0.27.0 nikki 日志(接口 / 文件 / 导出 / 诊断)
+    for _ in range(30):
+        nk = get("/api/nklog?n=50")
+        if any("mock-warn-line" in r["msg"] for r in nk["rows_data"]): break
+        time.sleep(1)
+    msgs_ = [r["msg"] for r in nk["rows_data"]]
+    ok(nk["mode"]["core"] == "api" and any("mock-warn-line" in x for x in msgs_) and any("mock-error-line" in x for x in msgs_) and not any("mock-info-line" in x for x in msgs_), f"nikki 日志:没挂目录时走接口,info 被默认级别过滤 {nk['mode']}")
+    nkd = os.path.join(data, "nikkilog"); os.makedirs(nkd, exist_ok=True)
+    open(os.path.join(nkd, "core.log"), "w").write('time="2026-10-21T09:00:00.123+08:00" level=warning msg="file-warn dial www.leak-test.com:443 failed"\n'
+        'time="2026-10-21T09:00:01.000+08:00" level=info msg="file-info-line"\ntime="2026-10-21T09:00:02.000+08:00" level=error msg="file-error \\"quoted\\" 192.168.1.77"\n')
+    open(os.path.join(nkd, "app.log"), "w").write("[2026-10-21 09:00:03] Nikki starting\n[2026-10-21 09:00:04] 配置检查失败 e2e-plugin-fail\n")
+    for _ in range(20):
+        nk = get("/api/nklog?n=50")
+        if any("e2e-plugin-fail" in r["msg"] for r in nk["rows_data"]) and any("file-error" in r["msg"] for r in nk["rows_data"]): break
+        time.sleep(1)
+    by_ = {r["msg"][:14]: r for r in nk["rows_data"]}
+    ok(nk["mode"]["core"] == "file" and nk["mode"]["app"] == "file", f"nikki 日志:挂了目录改读文件 {nk['mode']}")
+    ok(any("file-warn" in r["msg"] and r["lv"] == "警告" and r["src"] == "core" for r in nk["rows_data"]) and not any("file-info-line" in r["msg"] for r in nk["rows_data"]), "nikki 日志:内核文件按级别解析和过滤")
+    ok(any('"quoted"' in r["msg"] and r["lv"] == "错误" for r in nk["rows_data"]), "nikki 日志:转义的引号还原")
+    ok(any("e2e-plugin-fail" in r["msg"] and r["src"] == "app" and r["lv"] == "错误" for r in nk["rows_data"]), "nikki 日志:插件日志的时间和级别")
+    ok(all(r["src"] == "app" for r in get("/api/nklog?src=app")["rows_data"]) and get("/api/nklog?q=e2e-plugin-fail")["rows_data"], "nikki 日志:按来源和关键词筛选")
+    open(os.path.join(nkd, "core.log"), "a").write('time="2026-10-21T09:00:09.000+08:00" level=warning msg="appended-line"\n')
+    for _ in range(10):
+        if any("appended-line" in r["msg"] for r in get("/api/nklog?n=50")["rows_data"]): break
+        time.sleep(1)
+    ok(sum(1 for r in get("/api/nklog?n=100")["rows_data"] if "file-warn" in r["msg"]) == 1 and any("appended-line" in r["msg"] for r in get("/api/nklog?n=50")["rows_data"]), "nikki 日志:只读新增的行,不重复入库")
+    ex_ = urllib.request.urlopen(B + "/api/nklog/export?src=core&dl=1&dom=1", timeout=5); tx_ = ex_.read().decode()
+    ok("attachment" in (ex_.headers.get("Content-Disposition") or "") and "www.leak-test.com" not in tx_ and "域名#" in tx_ and "192.168.1.77" not in tx_ and "192.168.*.*" in tx_, "nikki 日志:导出打码 IP 和域名")
+    ok("www.leak-test.com" in urllib.request.urlopen(B + "/api/nklog/export?mask=0", timeout=5).read().decode(), "nikki 日志:可以不打码")
+    dg_ = get("/api/diag?logs=1&dom=1"); nl_ = dg_["ext"]["nikki_log"]
+    ok(nl_["mode"]["core"] == "file" and nl_["top_warn_error_24h"] and nl_["recent_plugin"] and nl_["recent_all_levels"]["app"] and "leak-test" not in json.dumps(nl_, ensure_ascii=False), "诊断包:nikki 内核 / 插件日志(域名打码)")
+    ok(post("/api/nklog/cfg", {"level": "bad"})[0] == 400 and post("/api/nklog/cfg", {"dir": "../etc"})[0] == 400 and post("/api/nklog/cfg", {"days": 99})[0] == 400, "nikki 日志:设置校验")
+    c, r = post("/api/nklog/cfg", {"level": "info", "days": 5, "ignore": "appended"}); ok(c == 200 and r["level"] == "info" and r["ignore"] == ["appended"], "nikki 日志:保存设置")
+    post("/api/nklog/cfg", {"level": "warning", "ignore": ""}); ok(post("/api/nklog/clear", {})[1]["ok"] and get("/api/nklog")["rows"] == 0, "nikki 日志:清空")
     # ---- v0.22.1 清理已不存在的节点
     cx = sqlite3.connect(os.path.join(data, "traffic.db"), timeout=10); hr = time.strftime("%Y-%m-%d %H")
     cx.execute("INSERT OR REPLACE INTO nodeinfo(node,type,remote,geo,geo_at,seen) VALUES('GONE | 旧节点 01','vmess','','',0,?)", (int(time.time()),))

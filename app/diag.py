@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import agh, dnsx, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
+from . import agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -190,6 +190,17 @@ def selfcheck(con, now=None):
             out.append(_f("info", "没有 DNS 查询统计", "没接 AdGuard Home,也没收到 dnsmasq 的查询日志。在「设置 → DNS」里看开启办法(路由器开 dnsmasq 查询日志,面板只读)。"))
     except Exception:
         pass
+    try:
+        nl = nikkilog.status(con)
+        if nl["cfg"]["on"]:
+            e24 = sum(v for k, v in nl["by_24h"].items() if k.endswith(":错误"))
+            if e24 >= 10:
+                tm = nikkilog.top_messages(con, int(now) - 86400, 1)
+                out.append(_f("warn", f"最近 24 小时 nikki 日志有 {e24} 条错误", (f"最多的是:{tm[0]['example'][:90]}(×{tm[0]['n']})。" if tm else "") + "到「设置 → nikki 日志」查看;诊断包里附了汇总和最近的明细。"))
+            if not nl["rows"] and not nl["mode"]["core"] and not nl["mode"]["app"]:
+                out.append(_f("info", "还没有收到 nikki 日志", "启动后需要一会儿;如果一直没有,看「设置 → nikki 日志」里的提示(要在 compose 里只读挂载 /var/log/nikki)。"))
+    except Exception:
+        pass
     lv = {"bad": 0, "warn": 1, "info": 2}
     out.sort(key=lambda f: lv.get(f["level"], 3))
     if not out:
@@ -218,6 +229,18 @@ def domain_masker():
             seen[d] = "域名#" + hashlib.sha1(salt + d.encode()).hexdigest()[:6]
         return seen[d]
     return f
+
+
+DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b", re.I)
+NOT_DOMAIN = {"yaml", "yml", "json", "log", "txt", "conf", "so", "sh", "go", "py", "mmdb", "db", "dat", "js", "html", "css", "png", "ipk", "tgz", "gz", "zip", "lua", "sock", "pid"}
+
+
+def mask_domains(t, mk):
+    """文本里像域名的片段换成代号(mk 是 domain_masker() 返回的函数);config.yaml 这类文件名不动。"""
+    def f(m):
+        s = m.group(0)
+        return s if s.rsplit(".", 1)[-1].lower() in NOT_DOMAIN else mk(s)
+    return DOMAIN_RE.sub(f, str(t))
 
 
 def mask_text(t, names=()):
@@ -266,6 +289,22 @@ def _ext(con, m, full, now, logs=False, dom=False):
                       "servers": [{"name": s["name"], "addr": m(f"{s['host']}:{s['port']}"), "ms": s["ms"], "note": s["note"], "loss_pct_24h": s["loss_pct"], "avg_ms_24h": s["avg_ms"], "samples_24h": s["n24"]} for s in sv["servers"]]}}
     except Exception as e:
         out["dns"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- nikki 内核 / 插件日志
+    try:
+        st = nikkilog.status(con)
+        cfg = st.pop("cfg")
+        dm2 = domain_masker() if dom else None
+        mm = (lambda x: mask_domains(m(x), dm2)) if dom else m
+        since = int(now) - 86400
+        fmt = lambda r: f"{time.strftime('%m-%d %H:%M:%S', time.localtime(r['ts']))} [{r['lv']}] {mm(r['msg'])[:240]}"
+        out["nikki_log"] = dict(st, cfg={k: cfg[k] for k in ("on", "level", "days", "max_rows", "dir_eff")},
+                                top_warn_error_24h=[dict(x, example=mm(x["example"])) for x in nikkilog.top_messages(con, since)],
+                                recent_core_warn_and_above=[fmt(r) for r in nikkilog.query(con, "core", 4, "", 60)],
+                                recent_plugin=[fmt(r) for r in nikkilog.query(con, "app", 7, "", 60)])
+        if logs:
+            out["nikki_log"]["recent_all_levels"] = {s_: [fmt(r) for r in nikkilog.query(con, s_, 7, "", 300)] for s_ in ("core", "app")}
+    except Exception as e:
+        out["nikki_log"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- UPS
     try:
         uc = ups.load_cfg(con)

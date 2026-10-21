@@ -49,6 +49,18 @@ class API(BaseHTTPRequestHandler):
         if not self._auth(): return
         p = unquote(self.path)
         if p == "/version": return self._j(200, {"version": "v1.19.0-mock"})
+        if p.startswith("/logs"):   # 流式日志:第一次连上发 3 行,之后的连接只挂着 2 秒就断开
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+            import time as _t
+            try:
+                if not STATE.get("logs_sent"):
+                    STATE["logs_sent"] = True
+                    for typ, msg in (("warning", "mock-warn-line dial tcp 10.1.2.3:443 timeout"), ("info", "mock-info-line"), ("error", "mock-error-line")):
+                        self.wfile.write((json.dumps({"type": typ, "payload": msg}) + "\n").encode()); self.wfile.flush()
+                _t.sleep(2)
+            except OSError:
+                pass
+            return
         if p == "/traffic":   # 流式:每 0.3 秒一行,发几行就断开(读取方应自动重连)
             self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
             import time as _t

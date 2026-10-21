@@ -756,6 +756,26 @@ uci commit dhcp
   <div class="h3">日志</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="slGo">刷新</button><button id="slClear">清空</button><button id="slCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="slExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="slMask" checked> 打码 IP / MAC</label></div>
   <div class="scroll" id="slRows"></div></div>
+      <div class="card sec" id="sec-nklog"><h2>nikki 日志(内核 + 插件)</h2>
+  <div class="sub" style="margin-bottom:10px;line-height:1.7">把 nikki 的<b>内核(mihomo)日志</b>和<b>插件(luci-app-nikki)日志</b>存进面板的数据库,可以在这里查看、复制、导出,诊断包里也会带上汇总和最近的明细。只读,不改 nikki 的任何设置;按保留天数 / 最大条数自动清理。<br>
+  <b>来源</b>:推荐在 compose 里只读挂载路由器的日志目录(下面有一行),面板读 <code>core.log</code>(内核)和 <code>app.log</code>(插件);没挂的话只能通过 nikki 的接口收内核日志(只有连上之后的,没有历史和插件日志)。<b>级别</b>默认只收「警告及以上」:info 级别每条连接一行,量很大,诊断一般用不上。</div>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="nkOn"> 开启收集</label>
+  <div class="row2" style="margin:8px 0;flex-wrap:wrap"><span class="sub">内核日志级别</span><select id="nkLvl"><option value="error">只要错误</option><option value="warning">警告及以上(默认)</option><option value="info">信息(量很大)</option><option value="debug">调试(量极大)</option></select><span class="sub">保留</span><input id="nkDays" type="number" min="1" max="30" style="width:60px"><span class="sub">天</span><span class="sub">最多</span><input id="nkMax" type="number" min="1000" max="200000" style="width:90px"><span class="sub">条</span></div>
+  <div class="fld"><label>日志目录(容器里的路径,留空用默认 /host/var/log/nikki)</label><input id="nkDir" placeholder="/host/var/log/nikki"></div>
+  <div class="fld"><label>忽略这些日志(每行一个关键词,不分大小写,命中的不入库)</label><textarea id="nkIgn" rows="2"></textarea></div>
+  <div class="msg" id="nkMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button id="nkSave" class="pri">保存</button></div>
+  <div class="sub" id="nkInfo" style="margin-top:10px;line-height:1.7"></div>
+  <div class="h3">要挂载日志目录:在路由器 compose 的 volumes 里加这几行,然后 <code>docker compose up -d</code></div>
+  <pre style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0">      - type: bind
+        source: /var/log/nikki
+        target: /host/var/log/nikki
+        read_only: true
+        bind:
+          create_host_path: false</pre>
+  <div class="h3">日志</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="nkSrc"><option value="">内核 + 插件</option><option value="core">只看内核</option><option value="app">只看插件</option></select><select id="nkLv"><option value="7">全部</option><option value="6">信息及以上</option><option value="4">警告及以上</option><option value="3">只看错误</option></select><input id="nkQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="nkGo">刷新</button><button id="nkClear">清空</button><button id="nkCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="nkExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="nkMask" checked> 打码 IP / MAC</label><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="nkDom" checked> 域名也打码</label></div>
+  <div class="scroll" id="nkRows"></div></div>
       <div class="card sec" id="sec-ext"><h2>UPS、证书/域名到期、磁盘</h2>
   <div class="h3" style="margin-top:0">UPS(NUT)</div>
   <div class="sub" style="margin-bottom:8px;line-height:1.7">只读:连路由器上的 NUT(upsd),读电量、负载、预计续航和市电状态,断电 / 恢复 / 电量低 / 读不到时告警。不需要 NUT 的用户名密码,不发任何控制命令,不影响你已有的关机逻辑。名称是 NUT 的 ups.conf 里方括号里的那个名字。</div>
@@ -1830,7 +1850,7 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["nklog","nikki 日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1848,6 +1868,7 @@ async function loadSettings(){
     else if(S.set==="groups")await loadGroupsSet();
     else if(S.set==="probe")await loadProbeSet();
     else if(S.set==="syslog")await loadSyslogSet();
+    else if(S.set==="nklog")await nkRefresh(true);
     else if(S.set==="ext")await loadExtSet();
     else if(S.set==="docker")await loadDockerSet();
     else if(S.set==="plog")await loadPlog();
@@ -2161,6 +2182,20 @@ $("#slExp").onclick=()=>{const a=document.createElement("a");a.href="/api/syslog
 $("#slGo").onclick=()=>slRefresh(false);$("#slLv").onchange=()=>slRefresh(false);$("#slQ").onkeydown=e=>{if(e.key==="Enter")slRefresh(false)};
 $("#slSave").onclick=async()=>{const m=$("#slMsg");m.className="msg";try{const r=await post("/api/syslog/cfg",{on:$("#slOn").checked,port:+$("#slPort").value,days:+$("#slDays").value,max_rows:+$("#slMax").value,ignore:$("#slIgn").value});m.className="msg ok";m.textContent="已保存(几秒内生效)"+(r.purged?`,已删掉库里 ${r.purged} 条匹配的日志`:"");setTimeout(()=>slRefresh(false),6000);await slRefresh(false)}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#slClear").onclick=async()=>{if(!confirm("清空面板里存的全部路由器系统日志?(路由器自己的日志不受影响)"))return;try{await post("/api/syslog/clear",{});await slRefresh(false)}catch(e){$("#slMsg").className="msg err";$("#slMsg").textContent=e.message}};
+/* 设置:nikki 日志 */
+const NKCLS=l=>l<=3?"bad":l===4?"warn":"";
+async function nkRefresh(fill){const j=await get("/api/nklog",{src:$("#nkSrc").value,level:$("#nkLv").value,q:$("#nkQ").value,n:200}),c=j.cfg;
+  if(fill){$("#nkOn").checked=c.on;$("#nkLvl").value=c.level;$("#nkDays").value=c.days;$("#nkMax").value=c.max_rows;$("#nkDir").value=c.dir||"";$("#nkIgn").value=(c.ignore||[]).join("\n");$("#nkMsg").textContent=""}
+  const md=x=>x==="file"?"日志文件":x==="api"?"nikki 接口(只有内核日志)":"没有可用来源";
+  const errs=[j.err.core,j.err.app].filter(Boolean);
+  $("#nkInfo").innerHTML=(!c.on?"未开启。":`内核:${md(j.mode.core)};插件:${md(j.mode.app)}。`)+(errs.length&&c.on?`<br><span class="warn">${errs.map(esc).join("<br>")}</span>`:"")+`<br>库里 ${j.rows} 条${j.oldest?`,最早 ${fmtTs(j.oldest)}`:""}。本次启动后收到 ${j.rx} 条${j.last_rx?`,最近一条 ${fmtTs(j.last_rx)}`:""}${j.ignored?`,忽略 ${j.ignored} 条`:""}${j.drop?`,限速丢弃 ${j.drop} 条`:""}。`+(c.on&&!j.mode.app?"<br>插件日志要挂载日志目录才有(见下面)。":"");
+  $("#nkRows").innerHTML=j.rows_data.length?`<table><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>内容</th></tr></thead><tbody>${j.rows_data.map(r=>`<tr><td style="white-space:nowrap">${fmtTs(r.ts)}</td><td><span class="lv ${NKCLS(r.lvl)}">${esc(r.lv)}</span></td><td>${esc(r.src_name)}</td><td style="word-break:break-all">${esc(r.msg)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">没有符合条件的日志</div>'}
+const nkQs=(n,dl)=>new URLSearchParams({src:$("#nkSrc").value,level:$("#nkLv").value,q:$("#nkQ").value,n,mask:$("#nkMask").checked?"1":"0",dom:$("#nkDom").checked?"1":"0",...(dl?{dl:1}:{})}).toString()+(TOKEN?"&t="+encodeURIComponent(TOKEN):"");
+$("#nkCopy").onclick=async()=>{const m=$("#nkMsg");m.className="msg";try{const r=await fetch("/api/nklog/export?"+nkQs(1000));if(!r.ok)throw new Error("读取失败 "+r.status);const t=await r.text();await copyText(t);m.className="msg ok";m.textContent=`已复制 ${t.split("\n").length-1} 行(最近的 1000 条以内)`}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#nkExp").onclick=()=>{const a=document.createElement("a");a.href="/api/nklog/export?"+nkQs(5000,true);document.body.appendChild(a);a.click();a.remove()};
+$("#nkGo").onclick=()=>nkRefresh(false);$("#nkSrc").onchange=$("#nkLv").onchange=()=>nkRefresh(false);$("#nkQ").onkeydown=e=>{if(e.key==="Enter")nkRefresh(false)};
+$("#nkSave").onclick=async()=>{const m=$("#nkMsg");m.className="msg";try{await post("/api/nklog/cfg",{on:$("#nkOn").checked,level:$("#nkLvl").value,days:+$("#nkDays").value,max_rows:+$("#nkMax").value,dir:$("#nkDir").value,ignore:$("#nkIgn").value});m.className="msg ok";m.textContent="已保存";await nkRefresh(true)}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#nkClear").onclick=async()=>{if(!confirm("清空面板里存的全部 nikki 日志?(路由器上的日志文件不受影响)"))return;try{await post("/api/nklog/clear",{});await nkRefresh(false)}catch(e){$("#nkMsg").className="msg err";$("#nkMsg").textContent=e.message}};
 /* 设置:UPS / 证书与域名到期 / 磁盘 */
 const upText=i=>i?`${esc(i.status_text)}${i.charge!=null?` · 电量 ${i.charge}%`:""}${i.load!=null?` · 负载 ${i.load}%`:""}${i.runtime?` · 预计续航 ${Math.round(i.runtime/60)} 分钟`:""}${i.input_v?` · 输入 ${i.input_v} V`:""}${i.model?`<br>${esc((i.mfr+" "+i.model).trim())}`:""}`:"";
 function fillTemp(sy){const ts=sy.temps||[],sel=$("#tpSrc");

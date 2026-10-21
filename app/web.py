@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -1126,7 +1126,7 @@ def p_docker_act(body):
     return _wcon(lambda con: dockerapi.act(con, str(body.get("id") or ""), str(body.get("action") or ""), getattr(_ctx, "ip", "")))
 
 q_expiry = _q(lambda con, p: expiry.status(con))
-GET_ROUTES.update({"/api/dns": _q(q_dns), "/api/dns/cfg": _q(lambda con, p: dnsx.load_cfg(con)), "/api/wallpaper": lambda p=None: (200, wallpaper.status()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
+GET_ROUTES.update({"/api/nklog": _q(lambda con, p: dict(nikkilog.status(con), rows_data=nikkilog.query(con, one(p, "src"), int(one(p, "level", "7") or 7), one(p, "q"), int(one(p, "n", "200") or 200), int(one(p, "before", "0") or 0)))), "/api/dns": _q(q_dns), "/api/dns/cfg": _q(lambda con, p: dnsx.load_cfg(con)), "/api/wallpaper": lambda p=None: (200, wallpaper.status()), "/api/nodes/stale": _q(lambda con, p: nodepurge.stale(con, airport_of)), "/api/listen": lambda p=None: (200, listen.status()), "/api/docker": q_docker, "/api/docker/cfg": q_docker_cfg, "/api/docker/logs": q_docker_logs, "/api/syslog": q_syslog, "/api/ups": q_ups, "/api/expiry": q_expiry})
 def p_wallpaper(body):
     if body.get("remove"):
         wallpaper.remove()
@@ -1138,6 +1138,8 @@ def p_wallpaper(body):
 
 
 POST_ROUTES.update({
+    "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),
+    "/api/nklog/clear": lambda body: _wcon(lambda con: nikkilog.clear(con)),
     "/api/dns/cfg": lambda body: _wcon(lambda con: dnsx.save_cfg(con, body)),
     "/api/dns/test": lambda body: dnsx.test(body),
     "/api/wallpaper": p_wallpaper,
@@ -1156,7 +1158,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()
@@ -1277,6 +1279,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, html, "text/html; charset=utf-8", etag='"' + hashlib.sha1(html).hexdigest()[:20] + '"')
         if u.path == "/api/syslog/export":
             return self._syslog_export(params)
+        if u.path == "/api/nklog/export":
+            return self._nklog_export(params)
         fn = GET_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})
@@ -1299,6 +1303,25 @@ class Handler(BaseHTTPRequestHandler):
         lines = [f"{time.strftime('%F %T', time.localtime(r['ts']))} [{r['lv']}] {mk(r['tag'])}: {mk(r['msg'])}" for r in reversed(rows)]
         body = ("\n".join(lines) + "\n").encode("utf-8")
         name = "flux-router-log-" + time.strftime("%Y%m%d-%H%M%S") + ".txt"
+        extra = {"Content-Disposition": f'attachment; filename="{name}"'} if one(params, "dl") == "1" else None
+        return self._send(200, body, "text/plain; charset=utf-8", extra)
+
+    def _nklog_export(self, params):
+        """nikki 内核 / 插件日志导出成纯文本(最多 5000 条);默认打码 IP / MAC / 设备名,dom=1 再把域名换成代号。"""
+        con = ro()
+        try:
+            rows = nikkilog.query(con, one(params, "src"), int(one(params, "level", "7") or 7), one(params, "q"), min(5000, int(one(params, "n", "1000") or 1000)))
+            names = [] if one(params, "mask") == "0" else diag._names(con)
+        finally:
+            con.close()
+        dm = diag.domain_masker() if one(params, "dom") == "1" else None
+        def mk(t):
+            if one(params, "mask") != "0":
+                t = diag.mask_text(t, names)
+            return diag.mask_domains(t, dm) if dm else t
+        lines = [f"{time.strftime('%F %T', time.localtime(r['ts']))} [{r['src_name']}/{r['lv']}] {mk(r['msg'])}" for r in reversed(rows)]
+        body = ("\n".join(lines) + "\n").encode("utf-8")
+        name = "flux-nikki-log-" + time.strftime("%Y%m%d-%H%M%S") + ".txt"
         extra = {"Content-Disposition": f'attachment; filename="{name}"'} if one(params, "dl") == "1" else None
         return self._send(200, body, "text/plain; charset=utf-8", extra)
 
