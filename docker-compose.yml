@@ -16,11 +16,11 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      # 可选:只读挂载 nikki 的日志目录,面板就能收「内核日志 + 插件日志」(设置 → nikki 日志)。目录不存在也不会被 docker 创建
+      # 可选:只读挂载 nikki 的日志目录,面板就能收「内核日志 + 插件日志」(设置 → nikki 日志)。路由器重启时 docker 可能比 nikki 先起来,所以这里允许 docker 先建出空目录,避免容器起不来
       - type: bind
         source: /var/log/nikki
         target: /host/var/log/nikki
         read_only: true
         bind:
-          create_host_path: false
+          create_host_path: true
     mem_limit: 128m

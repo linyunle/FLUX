@@ -569,6 +569,62 @@ def test_listen_fallback():
     assert listen.valid_host("::") == "::" and listen.valid_port("8099") == 8099
 
 
+def test_security():
+    import tempfile, sqlite3
+    from app import auth, config, health, db
+    # 代理头:只有受信代理(默认仅本机)的 X-Forwarded-For 才被采信
+    os.environ.pop("TRUSTED_PROXIES", None)
+    assert auth.client_ip("192.168.1.5", "9.9.9.9", "https") == ("192.168.1.5", False)
+    assert auth.client_ip("127.0.0.1", "9.9.9.9, 10.0.0.1", "https") == ("9.9.9.9", True)
+    assert auth.client_ip("127.0.0.1", "", "") == ("127.0.0.1", False)
+    os.environ["TRUSTED_PROXIES"] = "192.168.1.0/24"
+    assert auth.client_ip("192.168.1.5", "9.9.9.9", "") == ("9.9.9.9", False)
+    assert auth.client_ip("192.168.2.5", "9.9.9.9", "") == ("192.168.2.5", False)
+    os.environ.pop("TRUSTED_PROXIES")
+    # 网段限制
+    os.environ.pop("ALLOW_NETS", None)
+    assert auth.net_allowed("8.8.8.8")
+    os.environ["ALLOW_NETS"] = "192.168.0.0/16, fd00::/8"
+    assert auth.net_allowed("192.168.100.7") and auth.net_allowed("fd00::5") and not auth.net_allowed("8.8.8.8") and not auth.net_allowed("bad")
+    os.environ.pop("ALLOW_NETS")
+    # 两档密码与会话
+    d = tempfile.mkdtemp(); config.DATA_DIR = d
+    for k in ("PANEL_PASSWORD", "PANEL_VIEWER_PASSWORD"):
+        os.environ.pop(k, None)
+    auth.load()
+    try: auth.set_viewer("viewer1"); assert False
+    except ValueError: pass
+    auth.set_password("admin-pw1"); auth.set_viewer("viewer-pw1")
+    assert auth.check_role("admin-pw1") == "a" and auth.check_role("viewer-pw1") == "v" and auth.check_role("x") is None
+    try: auth.set_viewer("admin-pw1"); assert False
+    except ValueError: pass
+    try: auth.set_password("viewer-pw1"); assert False
+    except ValueError: pass
+    ca, cv = auth.make_cookie("a"), auth.make_cookie("v")
+    assert auth.cookie_role(ca) == "a" and auth.cookie_role(cv) == "v" and auth.cookie_role("1.a.bad") is None
+    assert auth.cookie_role(cv.replace(".v.", ".a.")) is None          # 不能把只读 Cookie 改成管理员
+    auth.set_viewer("viewer-pw2")
+    assert auth.cookie_role(cv) is None and auth.cookie_role(ca) == "a"  # 换只读密码只踢掉只读会话
+    auth.revoke_all()
+    assert auth.cookie_role(ca) is None
+    auth.load(); assert auth.has_viewer() and auth.check_role("viewer-pw2") == "v"   # 重启后还在
+    assert "Secure" in auth.cookie_header("x", secure=True) and "Secure" not in auth.cookie_header("x")
+    # 升级前自动备份:版本变了才备份,只留 3 份,文件权限 600
+    d2 = tempfile.mkdtemp(); config.DATA_DIR = d2; config.DB_PATH = os.path.join(d2, "t.db")
+    con = db.init_db()
+    with con: con.execute("INSERT INTO kv(k,v) VALUES('x','1')")
+    config.VERSION = "v9.0.0"
+    n1 = health.auto_backup(con)
+    assert n1 and oct(os.stat(os.path.join(d2, "backups", n1)).st_mode & 0o777) == "0o600"
+    assert health.auto_backup(con) is None                              # 同版本不重复备份
+    for i in range(4):
+        config.VERSION = f"v9.0.{i + 1}"; time.sleep(1.1); health.auto_backup(con)
+    assert len(health.listing()) == 3
+    try: health.read_backup("../../etc/passwd"); assert False
+    except ValueError: pass
+    config.VERSION = "dev"
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

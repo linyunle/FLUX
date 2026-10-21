@@ -1,7 +1,7 @@
 import signal
 import threading
 
-from . import airports, alerts, appsig, auth, collector, config, db, geo, dnsx, nikkilog, realtime, syslog, wallpaper, wan, web
+from . import airports, alerts, appsig, auth, collector, config, db, geo, health, dnsx, nikkilog, realtime, syslog, wallpaper, wan, web
 from .util import log, stop
 
 
@@ -9,6 +9,12 @@ def main():
     config.load()
     auth.load()
     con = db.init_db()
+    try:
+        bk = health.auto_backup(con)
+        if bk:
+            log(f"升级前已自动备份配置:data/backups/{bk}")
+    except Exception as e:
+        log("升级前自动备份失败(不影响运行)", e)
     airports.load(con)
     appsig.load(con)
     geo.load()

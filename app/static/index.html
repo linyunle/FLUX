@@ -404,7 +404,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <body>
 <div class="app">
 <aside class="side">
-  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
+  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><span class="badge" id="roleBadge" style="display:none" title="只读账号:可以查看,不能修改任何设置">只读</span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
   <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span><span class="badge new" id="noauth" style="display:none" role="button" tabindex="0" title="面板里能看到每台设备访问的域名,建议设置访问密码">未设密码</span>
   <div id="sideMini" class="sidemini" aria-hidden="true"><div id="smD">–</div><div id="smU">–</div><div id="smC" class="sub">–</div></div>
   <nav class="nav" id="nav" role="tablist" aria-label="页面"></nav>
@@ -706,7 +706,7 @@ uci commit dhcp
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="quotaAdd">+ 添加机场</button><button id="quotaSave" class="pri">保存</button></div></div>
       <div class="card sec" id="sec-backup"><h2>备份与恢复</h2>
   <div class="sub" style="margin-bottom:10px;line-height:1.7">外观(卡片显示 / 顺序 / 主题)会自动同步一份到服务器,换浏览器或清缓存后会自动取回。下面可以把全部设置导出成一个文件存着,设置丢了就导入它。备份包含:外观、告警规则与推送渠道、AdGuard、机场套餐、周报、机场归类规则、应用识别规则、设备名。流量统计数据不在其中(它们存在 data 目录里,更新容器不会丢)。</div>
-  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="bkSec"> 包含密钥(推送地址 / Token、AdGuard 密码)——备份文件会含明文密钥,请自己妥善保管</label>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="bkSec"> 包含密钥(推送地址 / Token、AdGuard 密码)——备份文件会含明文密钥,请自己妥善保管。每次升级后面板还会自动在服务器的 data/backups/ 里留一份(含密钥,权限 600,只留最近 3 份),在「健康与数据」里下载</label>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button id="bkDl" class="pri">下载备份文件</button><button id="bkUp">从文件恢复…</button><input type="file" id="bkFile" accept=".json,application/json" style="display:none"></div>
   <div class="msg" id="bkMsg"></div>
   <div class="sub" id="bkInfo"></div>
@@ -724,7 +724,15 @@ uci commit dhcp
   <div class="fld" id="authOldRow"><label>当前密码</label><input id="authOld" type="password" autocomplete="current-password"></div>
   <div class="fld"><label>新密码(至少 6 位;留空保存 = 关闭密码)</label><input id="authNew" type="password" autocomplete="new-password"></div>
   <div class="msg" id="authMsg"></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authSave" class="pri">保存</button></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authRevoke" title="换掉登录签名密钥:包括这台在内的所有已登录设备都要重新登录(这台会自动保持登录)">退出所有设备</button><button id="authSave" class="pri">保存</button></div>
+  <div id="vwBox" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="font-weight:600;margin-bottom:4px">只读账号</div>
+    <div class="sub" style="margin-bottom:8px;line-height:1.7">再设一个只读密码,给家人 / 朋友 / 公共屏幕用:登录后只能看流量、设备、日志,不能改任何设置,也不能导出备份和诊断包、看容器日志。登录页还是一个密码框,输哪个密码就以哪种身份进入。不能和管理员密码相同;留空保存 = 关闭只读账号。</div>
+    <div class="fld"><label>管理员密码(确认是你本人)</label><input id="vwOld" type="password" autocomplete="current-password"></div>
+    <div class="fld"><label>只读密码(至少 6 位)</label><input id="vwNew" type="password" autocomplete="new-password"></div>
+    <div class="msg" id="vwMsg"></div>
+    <div style="display:flex;justify-content:flex-end"><button id="vwSave" class="pri">保存只读密码</button></div>
+  </div>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkPriv"> <span>隐私模式:模糊显示域名 / 目标 IP(鼠标悬停或点按才显示),只保存在这个浏览器里</span></label>
   <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
@@ -756,6 +764,17 @@ uci commit dhcp
   <div class="h3">日志</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="slGo">刷新</button><button id="slClear">清空</button><button id="slCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="slExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="slMask" checked> 打码 IP / MAC</label></div>
   <div class="scroll" id="slRows"></div></div>
+      <div class="card sec" id="sec-health"><h2>健康与数据</h2>
+  <div class="sub" style="margin-bottom:8px">面板自己和它依赖的东西现在是否正常:nikki 接口、磁盘、后台任务、日志挂载、访问密码。出问题时先看这里。</div>
+  <div id="hlList"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin:8px 0"><button id="hlRefresh">重新检查</button></div>
+  <div class="h3">数据占用</div>
+  <div class="sub" id="stSum" style="margin-bottom:6px"></div>
+  <div class="scroll"><table id="stTbl"></table></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0"><button id="stVac" title="整理数据库文件、释放删除后留下的空洞;期间写入会短暂等待,需要约 1.2 倍数据库大小的空闲磁盘">压缩数据库</button><span class="sub" id="stMsg"></span></div>
+  <div class="h3">升级前自动备份</div>
+  <div class="sub" style="margin-bottom:6px">每次升级(版本号变化)后第一次启动,面板会把全部设置存一份到 data/backups/(含密钥,权限 600),只留最近 3 份。恢复用「备份与恢复」里的「从文件恢复」。</div>
+  <div id="hlBk"></div></div>
       <div class="card sec" id="sec-nklog"><h2>nikki 日志(内核 + 插件)</h2>
   <div class="sub" style="margin-bottom:10px;line-height:1.7">把 nikki 的<b>内核(mihomo)日志</b>和<b>插件(luci-app-nikki)日志</b>存进面板的数据库,可以在这里查看、复制、导出,诊断包里也会带上汇总和最近的明细。只读,不改 nikki 的任何设置;按保留天数 / 最大条数自动清理。<br>
   <b>来源</b>:推荐在 compose 里只读挂载路由器的日志目录(下面有一行),面板读 <code>core.log</code>(内核)和 <code>app.log</code>(插件);没挂的话只能通过 nikki 的接口收内核日志(只有连上之后的,没有历史和插件日志)。<b>级别</b>默认只收「警告及以上」:info 级别每条连接一行,量很大,诊断一般用不上。</div>
@@ -772,7 +791,7 @@ uci commit dhcp
         target: /host/var/log/nikki
         read_only: true
         bind:
-          create_host_path: false</pre>
+          create_host_path: true</pre>
   <div class="h3">日志</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="nkSrc"><option value="">内核 + 插件</option><option value="core">只看内核</option><option value="app">只看插件</option></select><select id="nkLv"><option value="7">全部</option><option value="6">信息及以上</option><option value="4">警告及以上</option><option value="3">只看错误</option></select><input id="nkQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="nkGo">刷新</button><button id="nkClear">清空</button><button id="nkCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="nkExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="nkMask" checked> 打码 IP / MAC</label><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="nkDom" checked> 域名也打码</label></div>
   <div class="scroll" id="nkRows"></div></div>
@@ -867,6 +886,7 @@ const MODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒
 const GRAINS=[["h24","24 小时"],["h48","48 小时"],["h168","7 天(时)"],["d14","14 天"],["d30","30 天"]];
 const TABS_ALL=[["overview","概览"],["nodes","机场节点"],["devices","设备"],["domains","域名"],["rules","规则策略"],["docker","容器"],["security","安全"],["alerts","告警"],["settings","设置"]];
 let TABS=TABS_ALL.filter(t=>t[0]!=="docker");
+const tabsFor=()=>TABS_ALL.filter(t=>(S.dockerOn||t[0]!=="docker")&&!(S.role==="v"&&t[0]==="settings"));
 const ICON={
  overview:'<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
  airports:'<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>',
@@ -1850,7 +1870,15 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
-const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["nklog","nikki 日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
+const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["health","健康与数据"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["nklog","nikki 日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
+const hb=n=>n==null?"-":n>=1<<30?(n/(1<<30)).toFixed(2)+" GB":n>=1<<20?(n/(1<<20)).toFixed(1)+" MB":Math.round(n/1024)+" KB";
+async function loadHealth(){
+  const [h,st]=await Promise.all([get("/api/health"),get("/api/storage")]);
+  const ic={ok:"●",warn:"▲",bad:"■",info:"○"},co={ok:"var(--ok,#2e9e5b)",warn:"#d98e04",bad:"#c23a2e",info:"var(--mut)"};
+  $("#hlList").innerHTML=h.checks.map(c=>`<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="color:${co[c.level]||"inherit"};flex:none">${ic[c.level]||"●"}</span><div style="min-width:0"><b>${esc(c.name)}</b> <span class="sub">${esc(c.detail)}</span>${c.hint?`<div class="sub" style="color:${co[c.level]}">${esc(c.hint)}</div>`:""}</div></div>`).join("");
+  $("#stSum").textContent=`数据库 ${hb(st.db)}`+(st.disk&&st.disk.total?`;磁盘剩余 ${hb(st.disk.free)} / ${hb(st.disk.total)}`:"")+`;明细保留 ${st.keep_days} 天、小时数据 ${st.hour_keep_days} 天(环境变量 KEEP_DAYS / HOUR_KEEP_DAYS)`;
+  $("#stTbl").innerHTML="<tr><th>表</th><th>行数</th><th>占用</th><th></th></tr>"+st.tables.slice(0,14).map(t=>`<tr><td>${esc(t.name)}</td><td>${t.rows==null?"-":t.rows.toLocaleString()}</td><td>${hb(t.bytes)}</td><td>${t.trim?`<button class="stTrim" data-t="${esc(t.name)}">清理 7 天前</button>`:""}</td></tr>`).join("");
+  $("#hlBk").innerHTML=h.backups.length?h.backups.map(b=>`<div class="sub" style="padding:3px 0"><a href="/api/autobackup/get?name=${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${hb(b.size)} · ${new Date(b.at*1000).toLocaleString()}</div>`).join(""):'<div class="sub">还没有(升级到新版本后第一次启动会生成)</div>'}
 function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
@@ -1869,6 +1897,7 @@ async function loadSettings(){
     else if(S.set==="probe")await loadProbeSet();
     else if(S.set==="syslog")await loadSyslogSet();
     else if(S.set==="nklog")await nkRefresh(true);
+    else if(S.set==="health")await loadHealth();
     else if(S.set==="ext")await loadExtSet();
     else if(S.set==="docker")await loadDockerSet();
     else if(S.set==="plog")await loadPlog();
@@ -1876,6 +1905,9 @@ async function loadSettings(){
     else if(S.set==="security"){const st=await get("/api/status"),a=st.auth||{};try{localStorage.setItem("nt.noauth.seen","1")}catch(e){}
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
       $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
+      $("#authRevoke").style.display=a.enabled?"":"none";$("#vwBox").style.display=a.enabled?"":"none";$("#vwOld").value=$("#vwNew").value="";
+      $("#vwNew").disabled=$("#vwSave").disabled=!!a.viewer_env;$("#vwMsg").className="msg"+(a.viewer?" ok":"");
+      $("#vwMsg").textContent=a.viewer_env?"只读密码由环境变量 PANEL_VIEWER_PASSWORD 指定,要在 compose 里修改":a.viewer?"只读账号已启用":"还没有设置只读账号";
       $("#authMsg").className="msg"+(a.enabled?" ok":" warn");$("#authMsg").textContent=a.env?"访问密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里修改":a.enabled?"已启用访问密码":"目前没有设置访问密码:局域网里任何人打开这个页面都能看到所有设备的访问记录";$("#lkPriv").checked=!!TH.priv;paintWp(await get("/api/wallpaper"))}
     else if(S.set==="apps"){const j=await get("/api/apprules");$("#appTxt").value=j.rules||"";$("#appCats").textContent="可用类别:"+j.cats.join("、");$("#appMsg").textContent=""}
     else if(S.set==="airport"){const j=await get("/api/airports",{from:ymd(new Date())});S.apRules=j.rules;$("#apTxt").value=j.rules||"";$("#apMsg").textContent=""}
@@ -1945,6 +1977,12 @@ function renderUpd(u){
 $("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authSave").onclick=async()=>{const m=$("#authMsg");m.className="msg";try{const j=await post("/api/auth/set",{old:$("#authOld").value,new:$("#authNew").value});
   m.className="msg ok";m.textContent=j.enabled?"访问密码已保存(其他已登录的设备需要重新登录)":"访问密码已关闭";status();loadSettings()}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#hlRefresh").onclick=()=>loadHealth().catch(()=>{});
+$("#stTbl").onclick=async e=>{const b=e.target.closest(".stTrim");if(!b)return;if(!confirm("删除 "+b.dataset.t+" 里 7 天前的记录?"))return;const m=$("#stMsg");try{const j=await post("/api/storage/clean",{action:"trim",table:b.dataset.t,days:7});m.textContent="已删除 "+j.deleted+" 条";loadHealth()}catch(x){m.textContent=x.message}};
+$("#stVac").onclick=async()=>{const m=$("#stMsg"),b=$("#stVac");b.disabled=true;m.textContent="压缩中…";try{const j=await post("/api/storage/clean",{action:"vacuum"});m.textContent=`完成:${hb(j.before)} → ${hb(j.after)}`;loadHealth()}catch(x){m.textContent=x.message}b.disabled=false};
+$("#vwSave").onclick=async()=>{const m=$("#vwMsg");m.className="msg";try{const j=await post("/api/auth/viewer",{old:$("#vwOld").value,new:$("#vwNew").value});
+  m.className="msg ok";m.textContent=j.viewer?"只读密码已保存":"只读账号已关闭";$("#vwOld").value=$("#vwNew").value="";status()}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#authRevoke").onclick=async()=>{if(!confirm("让所有设备(包括手机、平板、其他浏览器)都退出登录?这台会保持登录。"))return;const m=$("#authMsg");try{await post("/api/auth/revoke",{});m.className="msg ok";m.textContent="已让所有其他设备退出登录"}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authLogout").onclick=async()=>{try{await post("/api/logout",{})}catch(e){}location.reload()};
 $("#noauth").onclick=()=>openSettings("security");
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
@@ -2249,8 +2287,9 @@ $("#repPrint").onclick=()=>{const w=window.open("","_blank");if(!w)return;w.docu
 async function status(){try{const s=await get("/api/status");
   $("#ver").textContent=$("#ver2").textContent=s.version;apNames=s.airports||[];syncAp();
   const c=s.conn;S.connOk=!!c.ok;{const vd=$("#verDot");vd.className="dot "+(c.ok?"ok":"bad");vd.title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)")}$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
-  {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=TABS_ALL.filter(t=>dk||t[0]!=="docker");if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
+  {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=tabsFor();if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
+  {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}$("#roleBadge").style.display=r==="v"?"":"none"}
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}

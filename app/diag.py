@@ -201,6 +201,17 @@ def selfcheck(con, now=None):
                 out.append(_f("info", "还没有收到 nikki 日志", "启动后需要一会儿;如果一直没有,看「设置 → nikki 日志」里的提示(要在 compose 里只读挂载 /var/log/nikki)。"))
     except Exception:
         pass
+    try:
+        from . import auth, health
+        if not auth.enabled():
+            out.append(_f("warn", "面板没有设置访问密码", "同一局域网的任何人都能打开面板、看到每台设备访问的域名并修改设置。到「设置 → 安全与隐私」设置访问密码。"))
+        for c_ in health.checks(con):
+            if c_["level"] == "bad" and c_["name"] in ("数据目录可写", "数据目录磁盘", "后台任务"):
+                out.append(_f("bad", c_["name"] + "异常", c_["detail"] + (";" + c_["hint"] if c_["hint"] else "")))
+            elif c_["level"] == "warn" and c_["name"] in ("数据目录磁盘", "数据库大小", "系统时间"):
+                out.append(_f("warn", c_["name"] + "需要注意", c_["detail"] + (";" + c_["hint"] if c_["hint"] else "")))
+    except Exception:
+        pass
     lv = {"bad": 0, "warn": 1, "info": 2}
     out.sort(key=lambda f: lv.get(f["level"], 3))
     if not out:
@@ -305,6 +316,15 @@ def _ext(con, m, full, now, logs=False, dom=False):
             out["nikki_log"]["recent_all_levels"] = {s_: [fmt(r) for r in nikkilog.query(con, s_, 7, "", 300)] for s_ in ("core", "app")}
     except Exception as e:
         out["nikki_log"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 健康检查与访问安全(只有开关状态,没有任何密码 / 令牌)
+    try:
+        from . import auth, health
+        out["health"] = [{"name": c["name"], "level": c["level"], "detail": m(c["detail"])} for c in health.checks(con)]
+        out["access"] = {"password_set": auth.enabled(), "viewer_account": auth.has_viewer(), "allow_nets_set": bool(os.environ.get("ALLOW_NETS")),
+                         "trusted_proxies_extra": bool(os.environ.get("TRUSTED_PROXIES")), "page_token": bool(config.PAGE_TOKEN)}
+        out["auto_backups"] = [{"name": b["name"], "size": b["size"]} for b in health.listing()]
+    except Exception as e:
+        out["health"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- UPS
     try:
         uc = ups.load_cfg(con)

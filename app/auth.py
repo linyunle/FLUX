@@ -2,6 +2,7 @@
 密码只存加盐哈希(pbkdf2),放在 data/auth.json;也可以用环境变量 PANEL_PASSWORD 指定(页面里就不能改)。"""
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
@@ -13,7 +14,7 @@ from . import config
 COOKIE = "flux_sid"
 TTL = 30 * 86400
 _lock = threading.Lock()
-_st = {"salt": "", "hash": "", "key": "", "env": False}
+_st = {"salt": "", "hash": "", "key": "", "env": False, "vsalt": "", "vhash": "", "venv": False}
 _fails = {}  # ip -> [次数, 锁定到]
 
 
@@ -30,7 +31,10 @@ def _save():
     tmp = _path() + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump({"salt": _st["salt"], "hash": _st["hash"], "key": _st["key"]}, f)
+        d = {"salt": _st["salt"], "hash": _st["hash"], "key": _st["key"]}
+        if not _st["venv"]:
+            d.update(vsalt=_st["vsalt"], vhash=_st["vhash"])
+        json.dump(d, f)
     os.replace(tmp, _path())
 
 
@@ -39,13 +43,18 @@ def load():
         try:
             with open(_path(), encoding="utf-8") as f:
                 d = json.load(f)
-            _st.update(salt=d.get("salt", ""), hash=d.get("hash", ""), key=d.get("key", ""), env=False)
+            _st.update(salt=d.get("salt", ""), hash=d.get("hash", ""), key=d.get("key", ""), env=False,
+                       vsalt=d.get("vsalt", ""), vhash=d.get("vhash", ""), venv=False)
         except (OSError, ValueError):
-            _st.update(salt="", hash="", key="", env=False)
+            _st.update(salt="", hash="", key="", env=False, vsalt="", vhash="", venv=False)
         envpw = os.environ.get("PANEL_PASSWORD", "")
         if envpw:
             salt = secrets.token_hex(16)
             _st.update(salt=salt, hash=_hash(envpw, salt), key=_st["key"] or secrets.token_hex(32), env=True)
+        venv = os.environ.get("PANEL_VIEWER_PASSWORD", "")
+        if venv and _st["hash"]:
+            salt = secrets.token_hex(16)
+            _st.update(vsalt=salt, vhash=_hash(venv, salt), venv=True)
 
 
 def enabled():
@@ -56,15 +65,35 @@ def is_env():
     return _st["env"]
 
 
+def has_viewer():
+    return bool(_st["hash"] and _st["vhash"])
+
+
+def viewer_is_env():
+    return _st["venv"]
+
+
 def check(pw):
+    """只验管理员密码(改密码、设置只读密码前用)。"""
     with _lock:
         if not _st["hash"]:
             return True
         return hmac.compare_digest(_hash(pw or "", _st["salt"]), _st["hash"])
 
 
+def check_role(pw):
+    """登录:返回 'a'(管理员) / 'v'(只读) / None(密码不对)。没设密码 = 管理员。两个哈希都算一遍,耗时不泄露是哪种。"""
+    with _lock:
+        if not _st["hash"]:
+            return "a"
+        pw = pw or ""
+        ra = hmac.compare_digest(_hash(pw, _st["salt"]), _st["hash"])
+        rv = bool(_st["vhash"]) and hmac.compare_digest(_hash(pw, _st["vsalt"]), _st["vhash"])
+        return "a" if ra else "v" if rv else None
+
+
 def set_password(new):
-    """new 为空 = 关闭密码。换密码会让所有旧会话失效。"""
+    """new 为空 = 关闭密码(同时清掉只读密码)。换密码会让所有旧会话失效。"""
     if _st["env"]:
         raise ValueError("密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里改")
     new = new or ""
@@ -73,37 +102,85 @@ def set_password(new):
     if len(new) > 128:
         raise ValueError("密码太长")
     with _lock:
+        if new and _st["vhash"] and hmac.compare_digest(_hash(new, _st["vsalt"]), _st["vhash"]):
+            raise ValueError("管理员密码不能和只读密码相同")
         _st["key"] = secrets.token_hex(32)
         if new:
             _st["salt"] = secrets.token_hex(16)
             _st["hash"] = _hash(new, _st["salt"])
         else:
-            _st["salt"] = _st["hash"] = ""
+            _st["salt"] = _st["hash"] = _st["vsalt"] = _st["vhash"] = ""
         _save()
 
 
-def make_cookie():
+def set_viewer(new):
+    """只读密码:必须先有管理员密码;留空 = 关闭只读登录。只读会话随之失效。"""
+    if _st["venv"]:
+        raise ValueError("只读密码由环境变量 PANEL_VIEWER_PASSWORD 指定,要在 compose 里改")
+    if not _st["hash"]:
+        raise ValueError("请先设置管理员访问密码")
+    new = new or ""
+    if new and len(new) < 6:
+        raise ValueError("密码至少 6 位")
+    if len(new) > 128:
+        raise ValueError("密码太长")
+    with _lock:
+        if new and hmac.compare_digest(_hash(new, _st["salt"]), _st["hash"]):
+            raise ValueError("只读密码不能和管理员密码相同")
+        if new:
+            _st["vsalt"] = secrets.token_hex(16)
+            _st["vhash"] = _hash(new, _st["vsalt"])
+        else:
+            _st["vsalt"] = _st["vhash"] = ""
+        _save()
+
+
+def revoke_all():
+    """退出所有设备:换签名密钥,所有已发出的会话(含当前)立刻失效;调用方给当前浏览器重新发一个。"""
+    if not _st["hash"]:
+        raise ValueError("还没有设置访问密码")
+    with _lock:
+        _st["key"] = secrets.token_hex(32)
+        _save()
+
+
+def _sig(exp, role):
+    k = _st["key"] + (_st["vhash"] if role == "v" else "")
+    return hmac.new(k.encode(), f"{exp}.{role}".encode(), hashlib.sha256).hexdigest()
+
+
+def make_cookie(role="a"):
     exp = str(int(time.time()) + TTL)
-    sig = hmac.new(_st["key"].encode(), exp.encode(), hashlib.sha256).hexdigest()
-    return f"{exp}.{sig}"
+    return f"{exp}.{role}.{_sig(exp, role)}"
+
+
+def cookie_role(val):
+    """Cookie 有效就返回角色 'a' / 'v',否则 None。没设密码 = 'a'。旧版 'exp.sig' 格式按管理员处理(升级不掉线)。"""
+    if not _st["hash"]:
+        return "a"
+    try:
+        parts = (val or "").split(".")
+        if len(parts) == 2:
+            exp, sig = parts
+            if int(exp) < time.time():
+                return None
+            good = hmac.new(_st["key"].encode(), exp.encode(), hashlib.sha256).hexdigest()
+            return "a" if hmac.compare_digest(sig, good) else None
+        exp, role, sig = parts
+        if role not in ("a", "v") or int(exp) < time.time() or (role == "v" and not _st["vhash"]):
+            return None
+        return role if hmac.compare_digest(sig, _sig(exp, role)) else None
+    except (ValueError, AttributeError):
+        return None
 
 
 def valid_cookie(val):
-    if not _st["hash"]:
-        return True
-    try:
-        exp, sig = (val or "").split(".", 1)
-        if int(exp) < time.time():
-            return False
-        good = hmac.new(_st["key"].encode(), exp.encode(), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(sig, good)
-    except (ValueError, AttributeError):
-        return False
+    return cookie_role(val) is not None
 
 
-def cookie_header(val, clear=False):
+def cookie_header(val, clear=False, secure=False):
     age = 0 if clear else TTL
-    return f"{COOKIE}={'' if clear else val}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax"
+    return f"{COOKIE}={'' if clear else val}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
 
 
 def locked(ip):
@@ -122,6 +199,42 @@ def fail(ip):
 
 def ok(ip):
     _fails.pop(ip, None)
+
+
+def _nets(env, default=""):
+    out = []
+    for x in (os.environ.get(env, default) or "").replace(";", ",").split(","):
+        x = x.strip()
+        if x:
+            try:
+                out.append(ipaddress.ip_network(x, strict=False))
+            except ValueError:
+                pass
+    return out
+
+
+def _in(ip, nets):
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    a = a.ipv4_mapped if getattr(a, "ipv4_mapped", None) else a
+    return any(a in n for n in nets if n.version == a.version)
+
+
+def client_ip(peer, xff="", proto=""):
+    """真实来源 IP:只有直连方是受信代理(默认只有本机,可用 TRUSTED_PROXIES 追加)时才采信 X-Forwarded-For,
+    否则局域网里谁都能伪造这个头来躲开登录锁定。返回 (ip, 是否 https)。"""
+    if _in(peer, _nets("TRUSTED_PROXIES", "127.0.0.1,::1")):
+        hop = [h.strip() for h in (xff or "").split(",") if h.strip()]
+        return (hop[0] if hop else peer), (proto or "").lower() == "https"
+    return peer, False
+
+
+def net_allowed(ip):
+    """ALLOW_NETS(逗号分隔的网段,如 192.168.0.0/16)非空时,只允许这些网段访问面板。"""
+    nets = _nets("ALLOW_NETS")
+    return True if not nets else _in(ip, nets)
 
 
 _LOGIN = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">

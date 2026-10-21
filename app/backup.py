@@ -6,7 +6,7 @@
 import json
 import time
 
-from . import agh, dnsx, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
+from . import agh, dnsx, nikkilog, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
 
 MAX_THEME = 64 * 1024
 
@@ -71,6 +71,7 @@ def export(con, secrets=False):
     out["ups"] = ups.load_cfg(con)
     out["expiry"] = expiry.load_cfg(con)
     out["docker"] = dockerapi.load_cfg(con)
+    out["nklog"] = nikkilog.load_cfg(con)
     return out
 
 
@@ -147,4 +148,6 @@ def restore(con, d):
         step("到期检查名单", lambda: expiry.save_cfg(con, d["expiry"]))
     if isinstance(d.get("docker"), dict):
         step("容器管理设置", lambda: dockerapi.save_cfg(con, d["docker"]))
+    if isinstance(d.get("nklog"), dict):
+        step("nikki 日志设置", lambda: nikkilog.save_cfg(con, d["nklog"]))
     return {"ok": True, "done": done, "skipped": skipped}

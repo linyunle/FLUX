@@ -555,6 +555,64 @@ try:
     ok(urllib.request.urlopen(B + "/").read().startswith(b"<!doctype html>"), "首页可访问")
     ok(urllib.request.urlopen(B + "/health").read() == b"ok", "/health")
     lg = urllib.request.urlopen(B + "/logo.png"); ok(lg.read(8)[:4] == b"\x89PNG" and lg.headers["Content-Type"] == "image/png", "/logo.png 公开可拉取")
+    # ---- v0.28.0 安全:响应头 / 两档角色 / 代理 IP / 退出所有设备 / 健康与数据
+    import http.cookiejar
+    def sess():
+        cj_ = http.cookiejar.CookieJar(); return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj_))
+    def rq2(op, path, body=None, hdr=None):
+        h = {"Content-Type": "application/json"}; h.update(hdr or {})
+        req = urllib.request.Request(B + path, json.dumps(body).encode() if body is not None else None, h)
+        try:
+            r = op.open(req, timeout=20); raw = r.read()
+            try: return r.status, json.loads(raw or b"{}"), r.headers
+            except ValueError: return r.status, {}, r.headers
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            try: return e.code, json.loads(raw or b"{}"), e.headers
+            except ValueError: return e.code, {}, e.headers
+    pg_ = urllib.request.urlopen(B + "/")
+    ok(pg_.headers["X-Frame-Options"] == "DENY" and "frame-ancestors 'none'" in pg_.headers["Content-Security-Policy"] and pg_.headers["Referrer-Policy"] == "no-referrer" and "geolocation=()" in pg_.headers["Permissions-Policy"], "安全头:X-Frame-Options / CSP / Referrer-Policy")
+    ok("Content-Security-Policy" not in get_h_("/api/status") if (get_h_ := (lambda p: urllib.request.urlopen(B + p).headers)) else False, "安全头:JSON 接口不带 CSP")
+    adm = sess()
+    ok(rq2(adm, "/api/auth/viewer", {"old": "", "new": "viewerpw1"})[0] == 400, "只读账号:没设管理员密码时不能设")
+    ok(rq2(adm, "/api/auth/set", {"new": "adminpw1"})[0] == 200, "管理员密码设置")
+    ok(rq2(adm, "/api/auth/viewer", {"old": "wrong", "new": "viewerpw1"})[0] == 401, "只读账号:要验证管理员密码")
+    ok(rq2(adm, "/api/auth/viewer", {"old": "adminpw1", "new": "adminpw1"})[0] == 400, "只读密码不能和管理员相同")
+    ok(rq2(adm, "/api/auth/viewer", {"old": "adminpw1", "new": "viewerpw1"})[0] == 200 and rq2(adm, "/api/status")[1]["auth"]["viewer"] is True, "只读账号:设置成功")
+    vw = sess()
+    c_, j_, h_ = rq2(vw, "/api/login", {"password": "viewerpw1"})
+    ok(c_ == 200 and j_["role"] == "v" and "Secure" not in (h_["Set-Cookie"] or ""), "只读账号:登录得到 v 角色(http 下 Cookie 不带 Secure)")
+    ok(rq2(vw, "/api/status")[1]["auth"]["role"] == "v" and rq2(vw, "/api/devices")[0] == 200, "只读账号:能看数据")
+    ok(rq2(vw, "/api/backup")[0] == 403 and rq2(vw, "/api/diag")[0] == 403 and rq2(vw, "/api/syslog/export")[0] == 403 and rq2(vw, "/api/health")[0] == 403, "只读账号:不能导出备份 / 诊断 / 日志 / 健康详情")
+    ok(rq2(vw, "/api/config", {"api": "http://x:1"})[0] == 403 and rq2(vw, "/api/storage/clean", {"action": "vacuum"})[0] == 403 and rq2(vw, "/api/auth/set", {"old": "viewerpw1", "new": ""})[0] == 403 and rq2(vw, "/api/auth/revoke", {})[0] == 403, "只读账号:不能改设置 / 改密码 / 清理 / 踢人")
+    ui0 = rq2(adm, "/api/ui")[1]
+    c_, j_, _ = rq2(vw, "/api/ui", {"theme": {"mode": "dark-viewer-test"}})
+    ok(c_ == 200 and j_.get("readonly") and rq2(adm, "/api/ui")[1] == ui0, "只读账号:改外观不会写到服务器")
+    ok(rq2(adm, "/api/backup")[0] == 200 and rq2(adm, "/api/health")[0] == 200, "管理员:能导出备份 / 看健康")
+    # 登录失败锁定按 X-Forwarded-For(本机是受信代理)分别计数
+    for _ in range(5): rq2(sess(), "/api/login", {"password": "nope"}, {"X-Forwarded-For": "9.9.9.9"})
+    ok(rq2(sess(), "/api/login", {"password": "adminpw1"}, {"X-Forwarded-For": "9.9.9.9"})[0] == 429, "锁定:同一个来源 IP 被锁")
+    c_, j_, h_ = rq2(sess(), "/api/login", {"password": "adminpw1"}, {"X-Forwarded-For": "8.8.8.8", "X-Forwarded-Proto": "https"})
+    ok(c_ == 200 and j_["role"] == "a" and "Secure" in h_["Set-Cookie"], "锁定:另一个来源不受影响;经 https 反代时 Cookie 带 Secure")
+    # 退出所有设备
+    ok(rq2(adm, "/api/auth/revoke", {})[0] == 200 and rq2(adm, "/api/status")[0] == 200, "退出所有设备:当前管理员会话保持")
+    ok(rq2(vw, "/api/status")[0] == 401, "退出所有设备:其他会话(只读)失效")
+    # 健康与数据
+    h_ = rq2(adm, "/api/health")[1]; nm_ = {c["name"]: c for c in h_["checks"]}
+    ok({"面板", "nikki 接口", "数据目录磁盘", "数据目录可写", "后台任务", "nikki 日志目录", "访问密码"} <= set(nm_) and nm_["数据目录可写"]["level"] == "ok" and nm_["后台任务"]["level"] == "ok" and nm_["访问密码"]["level"] == "ok", f"健康检查:各项 {[c['level'] for c in h_['checks']]}")
+    ok(os.path.exists(os.path.join(data, ".last_version")), "升级前自动备份:记录了当前版本")
+    st_ = rq2(adm, "/api/storage")[1]
+    ok(st_["db"] > 0 and any(t["name"] == "kv" for t in st_["tables"]) and any(t["trim"] for t in st_["tables"]), "数据占用:表和大小")
+    ok(rq2(adm, "/api/storage/clean", {"action": "trim", "table": "kv", "days": 1})[0] == 400 and rq2(adm, "/api/storage/clean", {"action": "trim", "table": "nklog", "days": -1})[0] == 400, "清理:只允许日志类表,天数校验")
+    c_, j_, _ = rq2(adm, "/api/storage/clean", {"action": "trim", "table": "syslog", "days": 3650})
+    ok(c_ == 200 and j_["ok"], "清理:按天数清理日志")
+    c_, j_, _ = rq2(adm, "/api/storage/clean", {"action": "vacuum"})
+    ok(c_ == 200 and j_["after"] > 0 and rq2(adm, "/api/status")[0] == 200, "清理:压缩数据库后面板正常")
+    dg_ = rq2(adm, "/api/diag")[1]["ext"]
+    ok(dg_["health"] and dg_["access"]["password_set"] is True and dg_["access"]["viewer_account"] is True and "adminpw1" not in json.dumps(dg_) and "viewerpw1" not in json.dumps(dg_), "诊断包:含健康与访问状态,不含密码")
+    bk_ = rq2(adm, "/api/backup")[1]
+    ok("nklog" in bk_ and "adminpw1" not in json.dumps(bk_) and "viewerpw1" not in json.dumps(bk_), "备份:含 nikki 日志设置,不含面板密码")
+    ok(rq2(adm, "/api/auth/set", {"old": "adminpw1", "new": ""})[0] == 200 and get("/api/status")["auth"]["enabled"] is False and get("/api/status")["auth"]["viewer"] is False, "关闭密码同时关闭只读账号")
 finally:
     proc.terminate()
     try: out = proc.communicate(timeout=5)[0]

@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -791,7 +791,7 @@ def q_status(p):
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
         "now": int(time.time()), "live_at": live()["at"],
-        "auth": {"enabled": auth.enabled(), "env": auth.is_env()}, "alerts_unread": _wcon_ro(alerts.unread),
+        "auth": {"enabled": auth.enabled(), "env": auth.is_env(), "role": getattr(_ctx, "role", "a"), "viewer": auth.has_viewer(), "viewer_env": auth.viewer_is_env(), "allow_nets": bool(os.environ.get("ALLOW_NETS"))}, "alerts_unread": _wcon_ro(alerts.unread),
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
         "docker": bool(_wcon_ro(lambda con: dockerapi.load_cfg(con)["on"])),
     }
@@ -1137,7 +1137,9 @@ def p_wallpaper(body):
     return {"ok": True, **wallpaper.status()}
 
 
+GET_ROUTES.update({"/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
 POST_ROUTES.update({
+    "/api/storage/clean": lambda body: health.clean(body),
     "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),
     "/api/nklog/clear": lambda body: _wcon(lambda con: nikkilog.clear(con)),
     "/api/dns/cfg": lambda body: _wcon(lambda con: dnsx.save_cfg(con, body)),
@@ -1158,7 +1160,7 @@ POST_ROUTES.update({
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()
@@ -1166,6 +1168,14 @@ _ctx = threading.local()
 
 # ---------------------------------------------------------------- HTTP
 _GZ = {}
+# 只允许本站的脚本/样式/图片/请求;页面用了内联脚本和样式所以保留 unsafe-inline,但禁止被别的网页嵌入、禁止提交到外站、禁用 object
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+       "font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+# 只读账号不能读的接口(含敏感配置 / 可能带内网细节的原始数据),以及唯一允许"假装成功"的写接口
+VIEWER_DENY_GET = {"/api/backup", "/api/diag", "/api/syslog/export", "/api/nklog/export", "/api/docker/logs", "/api/docker/cfg", "/api/agh/config",
+                   "/api/alerts/config", "/api/report/config", "/api/dns/cfg", "/api/listen", "/api/storage", "/api/health", "/api/autobackup/get"}
+VIEWER_POST_OK = {"/api/logout", "/api/clienterr"}
+VIEWER_POST_NOOP = {"/api/ui", "/api/alerts/seen"}     # 外观 / 已读标记:只读账号改了也不写到服务器(否则会覆盖管理员的布局),但不报错
 
 
 def _gzip(body, key=None):
@@ -1216,6 +1226,12 @@ class Handler(BaseHTTPRequestHandler):
         if "Cache-Control" not in extra:
             self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        if ctype.startswith("text/html"):
+            self.send_header("Content-Security-Policy", CSP)
         for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
@@ -1229,13 +1245,31 @@ class Handler(BaseHTTPRequestHandler):
                 return v
         return ""
 
-    def _authed(self, params):
+    def _who(self):
+        """(真实来源 IP, 是否经 https 反代)。只信受信代理给的 X-Forwarded-For。"""
+        return auth.client_ip(self.client_address[0], self.headers.get("X-Forwarded-For", ""), self.headers.get("X-Forwarded-Proto", ""))
+
+    def _ip(self):
+        return self._who()[0]
+
+    def _ck(self, val, clear=False):
+        return {"Set-Cookie": auth.cookie_header(val, clear=clear, secure=self._who()[1])}
+
+    def _net_ok(self):
+        peer = self.client_address[0]
+        return auth.net_allowed(self._ip()) or peer in ("127.0.0.1", "::1")
+
+    def _role(self, params):
+        """'a' 管理员 / 'v' 只读 / None 没登录。"""
         tok = config.PAGE_TOKEN
         if not tok and not auth.enabled():
-            return True
+            return "a"
         if tok and (one(params, "t") == tok or self.headers.get("X-Token", "") == tok):
-            return True
-        return auth.enabled() and auth.valid_cookie(self._cookie())
+            return "a"
+        return auth.cookie_role(self._cookie()) if auth.enabled() else None
+
+    def _authed(self, params):
+        return self._role(params) is not None
 
     def _deny(self, page=False):
         if auth.enabled() and page:
@@ -1249,6 +1283,8 @@ class Handler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(u.query)
         if u.path == "/health":
             return self._send(200, b"ok", "text/plain")
+        if not self._net_ok():
+            return self._send(403, {"error": "这个地址不在允许访问的网段内"})
         if u.path in ("/logo.png", "/favicon.png", "/favicon.ico", "/apple-touch-icon.png"):
             # logo 不需要口令,方便 sun-panel 等导航页直接拉取
             name = "favicon.png" if u.path in ("/favicon.png", "/favicon.ico") else "logo.png"
@@ -1263,15 +1299,20 @@ class Handler(BaseHTTPRequestHandler):
             tok = config.METRICS_TOKEN
             given = self.headers.get("Authorization", "")
             given = given[7:] if given.startswith("Bearer ") else one(params, "t")
-            if not ((tok and given and hmac.compare_digest(given, tok)) or self._authed(params)):
+            if not ((tok and given and hmac.compare_digest(given, tok)) or self._role(params) == "a"):
                 return self._deny()
             con = ro()
             try:
                 return self._send(200, insight.metrics_text(con).encode(), "text/plain; version=0.0.4; charset=utf-8")
             finally:
                 con.close()
-        if not self._authed(params):
+        role = self._role(params)
+        if role is None:
             return self._deny(page=u.path in ("/", "/index.html"))
+        _ctx.role = role
+        _ctx.ip = self._ip()
+        if role == "v" and u.path in VIEWER_DENY_GET:
+            return self._send(403, {"error": "只读账号不能查看这个内容"})
         if u.path in ("/", "/index.html"):
             self._seen("page")
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
@@ -1281,6 +1322,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._syslog_export(params)
         if u.path == "/api/nklog/export":
             return self._nklog_export(params)
+        if u.path == "/api/autobackup/get":
+            try:
+                body = health.read_backup(one(params, "name"))
+            except (OSError, ValueError):
+                return self._send(404, {"error": "没有这个备份"})
+            return self._send(200, body, "application/json; charset=utf-8", {"Content-Disposition": f'attachment; filename="{one(params, "name")}"'})
         fn = GET_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})
@@ -1328,7 +1375,7 @@ class Handler(BaseHTTPRequestHandler):
     def _seen(self, kind):
         """记录是谁(哪个 IP、什么浏览器)打开/登录了面板;出错不影响正常访问。"""
         try:
-            ip = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip() or self.client_address[0]
+            ip = self._ip()
             _wcon(lambda con: panellog.record(con, ip, self.headers.get("User-Agent", ""), kind))
         except Exception as e:
             log("记录面板访问出错", e)
@@ -1343,18 +1390,21 @@ class Handler(BaseHTTPRequestHandler):
         return d
 
     def _login(self):
-        ip = self.client_address[0]
+        ip = self._ip()
         if auth.locked(ip):
             return self._send(429, {"error": "尝试次数太多,请 1 分钟后再试"})
         try:
             pw = str(self._json_body().get("password") or "")
         except ValueError as e:
             return self._send(400, {"error": str(e)})
-        if not auth.enabled() or auth.check(pw):
+        role = auth.check_role(pw)
+        if role:
             auth.ok(ip)
             if auth.enabled():
                 self._seen("login_ok")
-            return self._send(200, {"ok": True}, extra={"Set-Cookie": auth.cookie_header(auth.make_cookie())} if auth.enabled() else None)
+                if role == "v":
+                    log("只读账号登录", ip)
+            return self._send(200, {"ok": True, "role": role}, extra=self._ck(auth.make_cookie(role)) if auth.enabled() else None)
         auth.fail(ip)
         log("登录失败", ip)
         self._seen("login_fail")
@@ -1364,33 +1414,65 @@ class Handler(BaseHTTPRequestHandler):
         try:
             d = self._json_body()
             if auth.enabled() and not auth.check(str(d.get("old") or "")):
-                auth.fail(self.client_address[0])
+                auth.fail(self._ip())
                 return self._send(401, {"error": "当前密码不对"})
             auth.set_password(str(d.get("new") or ""))
         except ValueError as e:
             return self._send(400, {"error": str(e)})
         log("访问密码已" + ("设置" if auth.enabled() else "关闭"))
-        extra = {"Set-Cookie": auth.cookie_header(auth.make_cookie())} if auth.enabled() else {"Set-Cookie": auth.cookie_header("", clear=True)}
+        extra = self._ck(auth.make_cookie("a")) if auth.enabled() else self._ck("", clear=True)
         return self._send(200, {"ok": True, "enabled": auth.enabled()}, extra=extra)
+
+    def _auth_viewer(self):
+        try:
+            d = self._json_body()
+            if not auth.check(str(d.get("old") or "")):
+                auth.fail(self._ip())
+                return self._send(401, {"error": "管理员密码不对"})
+            auth.set_viewer(str(d.get("new") or ""))
+        except ValueError as e:
+            return self._send(400, {"error": str(e)})
+        log("只读密码已" + ("设置" if auth.has_viewer() else "关闭"), self._ip())
+        return self._send(200, {"ok": True, "viewer": auth.has_viewer()})
+
+    def _auth_revoke(self):
+        try:
+            auth.revoke_all()
+        except ValueError as e:
+            return self._send(400, {"error": str(e)})
+        log("已让所有设备退出登录", self._ip())
+        return self._send(200, {"ok": True}, extra=self._ck(auth.make_cookie("a")))
 
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(u.query)
+        if not self._net_ok():
+            return self._send(403, {"error": "这个地址不在允许访问的网段内"})
         origin = self.headers.get("Origin")
-        if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host", ""):
+        if (origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host", "")) or (not origin and self.headers.get("Sec-Fetch-Site") == "cross-site"):
             return self._send(403, {"error": "跨站请求被拒绝"})
         if u.path == "/api/login":
             return self._login()
-        if not self._authed(params):
+        role = self._role(params)
+        if role is None:
             return self._deny()
         if u.path == "/api/logout":
-            return self._send(200, {"ok": True}, extra={"Set-Cookie": auth.cookie_header("", clear=True)})
+            return self._send(200, {"ok": True}, extra=self._ck("", clear=True))
+        if role == "v" and u.path not in VIEWER_POST_OK:
+            if u.path in VIEWER_POST_NOOP:
+                return self._send(200, {"ok": True, "readonly": True})
+            return self._send(403, {"error": "只读账号不能修改设置"})
         if u.path == "/api/auth/set":
             return self._auth_set()
+        if u.path == "/api/auth/viewer":
+            return self._auth_viewer()
+        if u.path == "/api/auth/revoke":
+            return self._auth_revoke()
         fn = POST_ROUTES.get(u.path)
         if not fn:
             return self._send(404, {"error": "not found"})
-        _ctx.ip = self.client_address[0]
+        _ctx.role = role
+        _ctx.ip = self._ip()
         _ctx.server = self.server
         try:
             n = int(self.headers.get("Content-Length") or 0)
