@@ -202,7 +202,7 @@ html{background:var(--bg)}
  .brand{flex:1 0 100%}
  .sfoot,.footrow,.verrow{display:contents}
  #ver{display:inline-block!important;margin-left:auto}.brand .sp{display:none}
- .side #hostQ{order:3;flex:1 1 0;min-width:0;width:auto!important;padding:2px 8px}
+ .side #hostQ{order:3;flex:1 1 0;min-width:0;width:auto!important;padding:2px 8px;text-align:center;text-overflow:ellipsis}.side #hostQ::placeholder{text-align:center;text-overflow:ellipsis;font-size:14px}
  #newver{order:1}
  .ddside{order:2;flex:1 1 0!important;min-width:0}
  #scStatus{order:4;font-size:0;padding:0 2px!important}#scStatus #conn{font-size:0}#scStatus .dot{width:10px;height:10px;margin:0}
@@ -1664,7 +1664,7 @@ document.addEventListener("touchmove",e=>{if(e.touches&&e.touches.length>1)e.pre
 {let ly=scrollY;addEventListener("scroll",()=>{const y=scrollY,nav=$("#nav"),dy=y-ly;
   if(y<40||innerHeight+y>=document.documentElement.scrollHeight-6||dy<-6)nav.classList.remove("hid");else if(dy>6)nav.classList.add("hid");
   if(Math.abs(dy)>6)ly=y},{passive:true})}
-{const mqm=matchMedia("(max-width:820px)"),place=()=>{const q=$("#hostQ");if(mqm.matches){$(".side").appendChild(q);q.placeholder="全局搜索"}else{$("#filters").appendChild(q);q.placeholder="全局搜索:设备 / 域名 / 节点 / 规则"}};
+{const mqm=matchMedia("(max-width:820px)"),place=()=>{const q=$("#hostQ");if(mqm.matches){$(".side").appendChild(q);q.placeholder="全局搜索:设备 / 域名 / 节点 / 规则"}else{$("#filters").appendChild(q);q.placeholder="全局搜索:设备 / 域名 / 节点 / 规则"}};
  place();mqm.addEventListener&&mqm.addEventListener("change",place)}
 
 /* ---------- 机场 / 节点 ---------- */
