@@ -16,6 +16,10 @@ TTL = 30 * 86400
 _lock = threading.Lock()
 _st = {"salt": "", "hash": "", "key": "", "env": False, "vsalt": "", "vhash": "", "venv": False}
 _fails = {}  # ip -> [次数, 锁定到]
+_sess = {}     # sid -> {role, ip, ua, created, last, exp}  已登录设备(单个踢下线用)
+_revoked = {}  # sid -> 过期时间  被踢下线的会话(没过期前一直拒绝)
+_sdirty = [0.0]
+MAX_SESS = 200
 
 
 def _path():
@@ -38,7 +42,41 @@ def _save():
     os.replace(tmp, _path())
 
 
+def _spath():
+    return os.path.join(config.DATA_DIR, "sessions.json")
+
+
+def _sload():
+    try:
+        with open(_spath(), encoding="utf-8") as f:
+            d = json.load(f)
+        _sess.clear(); _sess.update({k: v for k, v in (d.get("sessions") or {}).items() if isinstance(v, dict)})
+        _revoked.clear(); _revoked.update({k: int(v) for k, v in (d.get("revoked") or {}).items()})
+    except (OSError, ValueError, AttributeError):
+        _sess.clear(); _revoked.clear()
+
+
+def _ssave():
+    """调用方已持有 _lock。"""
+    now = time.time()
+    for k in [k for k, v in _sess.items() if v.get("exp", 0) < now]:
+        del _sess[k]
+    for k in [k for k, v in _revoked.items() if v < now]:
+        del _revoked[k]
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        tmp = _spath() + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"sessions": _sess, "revoked": _revoked}, f)
+        os.replace(tmp, _spath())
+        _sdirty[0] = 0.0
+    except OSError:
+        pass
+
+
 def load():
+    _sload()
     with _lock:
         try:
             with open(_path(), encoding="utf-8") as f:
@@ -111,6 +149,7 @@ def set_password(new):
         else:
             _st["salt"] = _st["hash"] = _st["vsalt"] = _st["vhash"] = ""
         _save()
+        _sess.clear(); _revoked.clear(); _ssave()
 
 
 def set_viewer(new):
@@ -133,6 +172,9 @@ def set_viewer(new):
         else:
             _st["vsalt"] = _st["vhash"] = ""
         _save()
+        for k in [k for k, v in _sess.items() if v.get("role") == "v"]:
+            del _sess[k]
+        _ssave()
 
 
 def revoke_all():
@@ -142,36 +184,100 @@ def revoke_all():
     with _lock:
         _st["key"] = secrets.token_hex(32)
         _save()
+        _sess.clear(); _revoked.clear(); _ssave()
 
 
-def _sig(exp, role):
+def _sig(exp, role, sid=""):
     k = _st["key"] + (_st["vhash"] if role == "v" else "")
-    return hmac.new(k.encode(), f"{exp}.{role}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(k.encode(), (f"{exp}.{role}.{sid}" if sid else f"{exp}.{role}").encode(), hashlib.sha256).hexdigest()
 
 
-def make_cookie(role="a"):
-    exp = str(int(time.time()) + TTL)
-    return f"{exp}.{role}.{_sig(exp, role)}"
+def make_cookie(role="a", ip="", ua=""):
+    """新会话:Cookie = 过期时间.角色.会话号.签名;同时记下来源 IP / 浏览器,方便在「已登录设备」里看和踢下线。"""
+    exp = int(time.time()) + TTL
+    sid = secrets.token_hex(6)
+    now = int(time.time())
+    with _lock:
+        _sess[sid] = {"role": role, "ip": ip, "ua": (ua or "")[:200], "created": now, "last": now, "exp": exp}
+        if len(_sess) > MAX_SESS:
+            for k in sorted(_sess, key=lambda k: _sess[k]["last"])[:len(_sess) - MAX_SESS]:
+                del _sess[k]
+        _ssave()
+    return f"{exp}.{role}.{sid}.{_sig(str(exp), role, sid)}"
+
+
+def _parse(val):
+    """返回 (角色, 会话号, 是否有效)。支持三种格式:新(4 段)、v0.28.0 的(3 段,无会话号)、旧版(2 段,管理员)。"""
+    parts = (val or "").split(".")
+    if len(parts) == 2:
+        exp, sig = parts
+        good = hmac.new(_st["key"].encode(), exp.encode(), hashlib.sha256).hexdigest()
+        return "a", "", int(exp) >= time.time() and hmac.compare_digest(sig, good)
+    if len(parts) == 3:
+        exp, role, sig = parts
+        sid = ""
+    else:
+        exp, role, sid, sig = parts
+    if role not in ("a", "v") or (role == "v" and not _st["vhash"]):
+        return None, "", False
+    return role, sid, int(exp) >= time.time() and hmac.compare_digest(sig, _sig(exp, role, sid))
 
 
 def cookie_role(val):
-    """Cookie 有效就返回角色 'a' / 'v',否则 None。没设密码 = 'a'。旧版 'exp.sig' 格式按管理员处理(升级不掉线)。"""
+    """Cookie 有效就返回角色 'a' / 'v',否则 None。没设密码 = 'a'。被踢下线的会话号一律无效。"""
     if not _st["hash"]:
         return "a"
     try:
-        parts = (val or "").split(".")
-        if len(parts) == 2:
-            exp, sig = parts
-            if int(exp) < time.time():
-                return None
-            good = hmac.new(_st["key"].encode(), exp.encode(), hashlib.sha256).hexdigest()
-            return "a" if hmac.compare_digest(sig, good) else None
-        exp, role, sig = parts
-        if role not in ("a", "v") or int(exp) < time.time() or (role == "v" and not _st["vhash"]):
-            return None
-        return role if hmac.compare_digest(sig, _sig(exp, role)) else None
+        role, sid, good = _parse(val)
     except (ValueError, AttributeError):
         return None
+    if not good or (sid and sid in _revoked):
+        return None
+    return role
+
+
+def cookie_sid(val):
+    try:
+        return _parse(val)[1]
+    except (ValueError, AttributeError):
+        return ""
+
+
+def touch(sid, ip="", ua=""):
+    """记录这台设备最近一次访问(超过 60 秒才更新一次,最多每 60 秒写一次文件)。"""
+    s_ = _sess.get(sid)
+    if not s_:
+        return
+    now = int(time.time())
+    if now - s_.get("last", 0) < 60 and s_.get("ip") == ip:
+        return
+    with _lock:
+        s_["last"] = now
+        if ip:
+            s_["ip"] = ip
+        if ua:
+            s_["ua"] = ua[:200]
+        if time.time() - _sdirty[0] > 60:
+            _sdirty[0] = time.time()
+            _ssave()
+
+
+def list_sessions(current=""):
+    now = time.time()
+    with _lock:
+        out = [dict(v, id=k, current=(k == current)) for k, v in _sess.items()
+               if v.get("exp", 0) > now and k not in _revoked and not (v.get("role") == "v" and not _st["vhash"])]
+    return sorted(out, key=lambda x: -x["last"])
+
+
+def revoke_sid(sid):
+    """把某一台设备踢下线(它的 Cookie 立刻失效)。"""
+    with _lock:
+        s_ = _sess.pop(sid, None)
+        if not s_:
+            raise ValueError("没有这个会话(可能已经过期或被踢下线)")
+        _revoked[sid] = int(s_.get("exp", time.time() + TTL))
+        _ssave()
 
 
 def valid_cookie(val):
@@ -274,7 +380,9 @@ B.className="busy";B.textContent="登录中";
 try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
 const j=await r.json();if(r.ok){B.className="ok";B.textContent="成功";location.reload()}else{B.className="bad";B.textContent="登录";m.textContent=j.error||"登录失败";setTimeout(()=>B.className="",900)}}catch(x){B.className="bad";B.textContent="登录";m.textContent="连接失败";setTimeout(()=>B.className="",900)}}</script></body></html>"""
 
-_WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}</style>"""
+_WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}
+@media(max-width:720px){aside{background:linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,0) 34%%,rgba(0,0,0,0) 62%%,rgba(0,0,0,.5));-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;border:0;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.55)}
+.fld{border-color:rgba(255,255,255,.75)}.fld:focus-within{border-color:#fff}input{color:#fff;text-shadow:none}input::placeholder{color:rgba(255,255,255,.85)}footer{color:rgba(255,255,255,.92)}#m{color:#ff8a80}}</style>"""
 
 
 def login_html():

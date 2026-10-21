@@ -594,6 +594,17 @@ try:
     ok(rq2(sess(), "/api/login", {"password": "adminpw1"}, {"X-Forwarded-For": "9.9.9.9"})[0] == 429, "锁定:同一个来源 IP 被锁")
     c_, j_, h_ = rq2(sess(), "/api/login", {"password": "adminpw1"}, {"X-Forwarded-For": "8.8.8.8", "X-Forwarded-Proto": "https"})
     ok(c_ == 200 and j_["role"] == "a" and "Secure" in h_["Set-Cookie"], "锁定:另一个来源不受影响;经 https 反代时 Cookie 带 Secure")
+    # 已登录设备列表 / 单个踢下线
+    ss_ = rq2(adm, "/api/auth/sessions")[1]["rows"]
+    cur_ = [r for r in ss_ if r["current"]]; vrow_ = [r for r in ss_ if r["role"] == "v"]
+    ok(len(cur_) == 1 and cur_[0]["role"] == "a" and cur_[0]["ip"] and vrow_ and vrow_[0]["ua"], f"已登录设备:列出当前设备和只读设备 {[ (r['role'], r['current']) for r in ss_]}")
+    ok(rq2(vw, "/api/auth/sessions")[0] == 403 and rq2(vw, "/api/auth/session/revoke", {"id": vrow_[0]["id"]})[0] == 403, "已登录设备:只读账号不能看也不能踢")
+    other = sess(); rq2(other, "/api/login", {"password": "adminpw1"}, {"X-Forwarded-For": "7.7.7.7"})
+    ok(len(rq2(adm, "/api/auth/sessions")[1]["rows"]) == len(ss_) + 1, "已登录设备:新登录的设备出现在列表里")
+    ok(rq2(adm, "/api/auth/session/revoke", {"id": vrow_[0]["id"]})[0] == 200 and rq2(vw, "/api/status")[0] == 401, "已登录设备:单个踢下线,对方立刻失效")
+    ok(rq2(adm, "/api/status")[0] == 200 and rq2(other, "/api/status")[0] == 200 and all(r["id"] != vrow_[0]["id"] for r in rq2(adm, "/api/auth/sessions")[1]["rows"]), "已登录设备:其他设备不受影响,被踢的从列表消失")
+    ok(rq2(adm, "/api/auth/session/revoke", {"id": "nope"})[0] == 400, "已登录设备:不存在的会话号被拒")
+    vw = sess(); ok(rq2(vw, "/api/login", {"password": "viewerpw1"})[0] == 200, "已登录设备:被踢的账号可以重新登录")
     # 退出所有设备
     ok(rq2(adm, "/api/auth/revoke", {})[0] == 200 and rq2(adm, "/api/status")[0] == 200, "退出所有设备:当前管理员会话保持")
     ok(rq2(vw, "/api/status")[0] == 401, "退出所有设备:其他会话(只读)失效")
@@ -613,8 +624,36 @@ try:
     bk_ = rq2(adm, "/api/backup")[1]
     ok("nklog" in bk_ and "adminpw1" not in json.dumps(bk_) and "viewerpw1" not in json.dumps(bk_), "备份:含 nikki 日志设置,不含面板密码")
     ok(rq2(adm, "/api/auth/set", {"old": "adminpw1", "new": ""})[0] == 200 and get("/api/status")["auth"]["enabled"] is False and get("/api/status")["auth"]["viewer"] is False, "关闭密码同时关闭只读账号")
+    # ---- 密钥泄露检查:把特征字符串塞进每一种"密钥",所有读取接口 / 备份 / 诊断 / 导出里都不能出现
+    sys.path.insert(0, ROOT)
+    import app.web as W
+    LEAK = {"agh": "AGHPASS-LEAK-1", "tg": "TGTOKEN-LEAK-2", "bark": "BARKKEY-LEAK-3", "geo": "GEOPW-LEAK-4", "nikki": "s3cret"}
+    ok(post("/api/agh/config", {"url": "http://127.0.0.1:19444", "user": "admin", "pass": LEAK["agh"], "on": True})[0] == 200, "泄露检查:AdGuard 密码已保存")
+    c_, r_ = post("/api/alerts/config", {"channels": [{"type": "telegram", "name": "tg", "token": LEAK["tg"], "chat": "123456"}, {"type": "bark", "name": "bk", "url": "http://127.0.0.1:1/" + LEAK["bark"]}]})
+    ok(c_ == 200, f"泄露检查:推送渠道已保存 {c_} {r_ if c_ != 200 else ''}")
+    post("/api/geo/proxy", {"proxy": "http://nikki:" + LEAK["geo"] + "@127.0.0.1:7890"})
+    post("/api/alerts/test", {"id": next((c["id"] for c in get("/api/alerts/config")["channels"] if c["type"] == "bark"), "")})   # 发送失败的报错里也不能带出地址
+    time.sleep(1)
+    paths = sorted(set(W.GET_ROUTES) - {"/api/backup"}) + ["/api/backup", "/api/diag?logs=1&dom=0", "/api/syslog/export?mask=0", "/api/nklog/export?mask=0", "/metrics", "/api/nklog", "/api/syslog", "/api/panel", "/api/alerts?n=200"]
+    bad = []
+    for pth in paths:
+        try:
+            r = urllib.request.urlopen(B + pth, timeout=20); txt = r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            txt = e.read().decode("utf-8", "replace")
+        except Exception:
+            continue
+        for k, v in LEAK.items():
+            if v in txt:
+                bad.append((pth, k))
+    ok(not bad, f"泄露检查:{len(paths)} 个读取接口 / 备份 / 诊断 / 导出里都搜不到密钥 {bad}")
+    full = json.dumps(get("/api/backup?secrets=1"))
+    ok(LEAK["agh"] in full and LEAK["tg"] in full and LEAK["bark"] in full, "泄露检查:勾选「包含密钥」的备份才带密钥(用于恢复)")
+    ok(not any(LEAK[k] in json.dumps(get("/api/backup")) for k in ("agh", "tg", "bark")), "泄露检查:默认备份不含密钥")
 finally:
     proc.terminate()
     try: out = proc.communicate(timeout=5)[0]
     except Exception: out = ""
     print("---- 服务日志 ----\n" + out[-1500:])
+    _leak = [v for v in ("AGHPASS-LEAK-1", "TGTOKEN-LEAK-2", "BARKKEY-LEAK-3", "GEOPW-LEAK-4", "adminpw1", "viewerpw1") if v in out]
+    print(("FAIL " if _leak else "PASS ") + "泄露检查:服务日志里没有密钥" + (str(_leak) if _leak else ""))

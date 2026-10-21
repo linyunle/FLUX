@@ -67,7 +67,7 @@ input,select,textarea{background:var(--surface);border:1px solid var(--line);bor
 .sidemini{display:none}
 .side{scrollbar-width:none}.side::-webkit-scrollbar{display:none}
 .footrow{display:flex;gap:6px;align-items:center}.footrow .ddside{flex:1;min-width:0}.footrow .ddside .dd>button{padding:3px 8px;font-size:12px;white-space:nowrap}
-.footrow .verrow{flex:none}.footrow #btnMode{padding:3px 8px;white-space:nowrap}
+.footrow .scard{flex:1;min-width:0;padding:5px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ddside{display:none!important}.footrow .verrow{flex:none}.footrow #btnMode{padding:3px 8px;white-space:nowrap}
 .side{gap:8px}.navi{padding:7px 12px}
 @media(max-height:900px){.scard .mc{display:none}}
 .side{transition:none}
@@ -404,7 +404,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <body>
 <div class="app">
 <aside class="side">
-  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><button class="badge" id="roleBadge" style="display:none;cursor:pointer;border:0" title="只读账号:可以查看,不能修改任何设置。点一下退出登录">只读 · 退出</button><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
+  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
   <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span><span class="badge new" id="noauth" style="display:none" role="button" tabindex="0" title="面板里能看到每台设备访问的域名,建议设置访问密码">未设密码</span>
   <div id="sideMini" class="sidemini" aria-hidden="true"><div id="smD">–</div><div id="smU">–</div><div id="smC" class="sub">–</div></div>
   <nav class="nav" id="nav" role="tablist" aria-label="页面"></nav>
@@ -419,8 +419,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="mrow"><span class="sub">总计</span><b id="scTotal">–</b></div><div class="mrow"><span class="sub">直连 / 代理</span><b id="scSplit">–</b></div></div>
   </div>
   <div class="sfoot">
-    <div class="scard" id="scStatus"><span id="conn" class="sub"></span></div>
-    <div class="footrow"><span class="badge" id="ver2"></span><div class="ddside"><div class="dd">
+    <div class="footrow"><span class="badge" id="ver2"></span><div class="scard" id="scStatus"><span id="conn" class="sub"></span></div><div class="ddside" hidden><div class="dd">
     <button id="devBtn" aria-haspopup="true">设备:全部 ▾</button>
     <div class="ddp" id="devPanel">
       <input id="devQ" placeholder="搜索设备名 / IP / MAC" style="width:100%;margin-bottom:6px">
@@ -433,6 +432,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   </div>
 </aside>
 <main class="main"><div class="inner">
+<div id="acctBar" style="display:none;justify-content:flex-end;margin-bottom:8px"></div>
+<button id="acctBtn" style="display:none;margin-left:auto" title=""></button>
 
 <div id="dataTop">
 <div class="bar" id="filters">
@@ -725,6 +726,11 @@ uci commit dhcp
   <div class="fld"><label>新密码(至少 6 位;留空保存 = 关闭密码)</label><input id="authNew" type="password" autocomplete="new-password"></div>
   <div class="msg" id="authMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="authLogout">退出登录</button><button id="authRevoke" title="换掉登录签名密钥:包括这台在内的所有已登录设备都要重新登录(这台会自动保持登录)">退出所有设备</button><button id="authSave" class="pri">保存</button></div>
+  <div id="ssBox" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="font-weight:600;margin-bottom:4px">已登录设备</div>
+    <div class="sub" style="margin-bottom:6px" id="ssNote"></div>
+    <div class="scroll"><table id="ssTbl"></table></div>
+  </div>
   <div id="vwBox" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
     <div style="font-weight:600;margin-bottom:4px">只读账号</div>
     <div class="sub" style="margin-bottom:8px;line-height:1.7">再设一个只读密码,给家人 / 朋友 / 公共屏幕用:登录后只能看流量、设备、日志,不能改任何设置,也不能导出备份和诊断包、看容器日志。登录页还是一个密码框,输哪个密码就以哪种身份进入。不能和管理员密码相同;留空保存 = 关闭只读账号。</div>
@@ -935,7 +941,11 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dat
   else if(k==="devs"){S.devs.clear();renderDevList()}
   else{S[k]="";if(k==="q")$("#hostQ").value=""}
   renderChrome();syncAp();refresh()};
-function showTab(){for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";renderChrome()}
+function showTab(){for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";placeAcct();renderChrome()}
+/* 右上角账号按钮:有搜索栏的页面放在搜索栏最右边,没有搜索栏的页面(设置 / 告警 / 安全 / 容器)放在页面顶部右侧 */
+function placeAcct(){const b=$("#acctBtn"),on=b.dataset.on==="1",bar=$("#dataTop").style.display!=="none";(bar?$("#filters"):$("#acctBar")).appendChild(b);b.style.display=on?"":"none";$("#acctBar").style.display=!bar&&on?"flex":"none"}
+function updAcct(a){a=a||{};const b=$("#acctBtn"),v=a.role==="v";b.dataset.on=(v||a.enabled)?"1":"";b.textContent=v?"只读 · 退出":"退出登录";b.title=v?"只读账号:可以查看,不能修改任何设置。点一下退出登录":"退出登录";placeAcct()}
+$("#acctBtn").onclick=async()=>{if(!confirm("退出登录?"))return;try{await post("/api/logout",{})}catch(e){}location.reload()};
 
 /* ---------- 设备下拉 ---------- */
 function devLabel(d){return d.name||d.ips.find(i=>!i.includes(":"))||d.ips[0]||d.key}
@@ -1871,6 +1881,12 @@ $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
 /* ---------- 设置页 ---------- */
 const SETS=[["look","外观"],["conn","连接"],["airport","机场归类"],["apps","应用识别"],["alerts","告警与推送"],["dns","DNS"],["geo","目的地数据库"],["quota","机场套餐"],["report","周报与监控"],["backup","备份与恢复"],["security","安全与隐私"],["health","健康与数据"],["groups","设备分组"],["devices","设备名"],["probe","节点测速"],["syslog","路由器日志"],["nklog","nikki 日志"],["ext","UPS 与到期"],["docker","容器"],["plog","访问与日志"]];
+async function loadSessions(){
+  const j=await get("/api/auth/sessions");$("#ssNote").textContent=j.note||"";
+  const ago=t=>{const d=Math.max(0,Date.now()/1000-t);return d<90?"刚刚":d<5400?Math.round(d/60)+" 分钟前":d<172800?Math.round(d/3600)+" 小时前":Math.round(d/86400)+" 天前"};
+  $("#ssTbl").innerHTML="<tr><th>设备</th><th>身份</th><th>来源</th><th>最近活动</th><th></th></tr>"+(j.rows.length?j.rows.map(r=>`<tr><td>${esc(r.ua||"未知")}${r.current?' <span class="badge">当前设备</span>':""}</td><td>${r.role==="v"?"只读":"管理员"}</td><td>${esc(r.name?r.name+" · "+r.ip:r.ip)}</td><td>${ago(r.last)}</td><td><button class="ssKick" data-id="${esc(r.id)}" data-cur="${r.current?1:""}">${r.current?"退出":"踢下线"}</button></td></tr>`).join(""):'<tr><td colspan="5" class="sub">还没有记录(重新登录一次就会出现)</td></tr>')}
+$("#ssTbl").onclick=async e=>{const b=e.target.closest(".ssKick");if(!b)return;if(!confirm(b.dataset.cur?"退出当前这台设备?":"让这台设备退出登录?"))return;
+  try{const j=await post("/api/auth/session/revoke",{id:b.dataset.id});if(j.self){location.reload();return}loadSessions()}catch(x){$("#authMsg").className="msg err";$("#authMsg").textContent=x.message}};
 const hb=n=>n==null?"-":n>=1<<30?(n/(1<<30)).toFixed(2)+" GB":n>=1<<20?(n/(1<<20)).toFixed(1)+" MB":Math.round(n/1024)+" KB";
 async function loadHealth(){
   const [h,st]=await Promise.all([get("/api/health"),get("/api/storage")]);
@@ -1906,6 +1922,7 @@ async function loadSettings(){
       $("#authOldRow").style.display=a.enabled?"":"none";$("#authOld").value=$("#authNew").value="";$("#authLogout").style.display=a.enabled?"":"none";
       $("#authNew").disabled=$("#authOld").disabled=$("#authSave").disabled=!!a.env;
       $("#authRevoke").style.display=a.enabled?"":"none";$("#vwBox").style.display=a.enabled?"":"none";$("#vwOld").value=$("#vwNew").value="";
+      $("#ssBox").style.display=a.enabled?"":"none";if(a.enabled)loadSessions();
       $("#vwNew").disabled=$("#vwSave").disabled=!!a.viewer_env;$("#vwMsg").className="msg"+(a.viewer?" ok":"");
       $("#vwMsg").textContent=a.viewer_env?"只读密码由环境变量 PANEL_VIEWER_PASSWORD 指定,要在 compose 里修改":a.viewer?"只读账号已启用":"还没有设置只读账号";
       $("#authMsg").className="msg"+(a.enabled?" ok":" warn");$("#authMsg").textContent=a.env?"访问密码由环境变量 PANEL_PASSWORD 指定,要在 compose 里修改":a.enabled?"已启用访问密码":"目前没有设置访问密码:局域网里任何人打开这个页面都能看到所有设备的访问记录";$("#lkPriv").checked=!!TH.priv;paintWp(await get("/api/wallpaper"))}
@@ -1983,7 +2000,6 @@ $("#stVac").onclick=async()=>{const m=$("#stMsg"),b=$("#stVac");b.disabled=true;
 $("#vwSave").onclick=async()=>{const m=$("#vwMsg");m.className="msg";try{const j=await post("/api/auth/viewer",{old:$("#vwOld").value,new:$("#vwNew").value});
   m.className="msg ok";m.textContent=j.viewer?"只读密码已保存":"只读账号已关闭";$("#vwOld").value=$("#vwNew").value="";status()}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authRevoke").onclick=async()=>{if(!confirm("让所有设备(包括手机、平板、其他浏览器)都退出登录?这台会保持登录。"))return;const m=$("#authMsg");try{await post("/api/auth/revoke",{});m.className="msg ok";m.textContent="已让所有其他设备退出登录"}catch(e){m.className="msg err";m.textContent=e.message}};
-$("#roleBadge").onclick=async()=>{if(!confirm("退出只读账号?"))return;try{await post("/api/logout",{})}catch(e){}location.reload()};
 $("#authLogout").onclick=async()=>{try{await post("/api/logout",{})}catch(e){}location.reload()};
 $("#noauth").onclick=()=>openSettings("security");
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
@@ -2290,7 +2306,7 @@ async function status(){try{const s=await get("/api/status");
   const c=s.conn;S.connOk=!!c.ok;{const vd=$("#verDot");vd.className="dot "+(c.ok?"ok":"bad");vd.title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)")}$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=tabsFor();if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
-  {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}$("#roleBadge").style.display=r==="v"?"":"none"}
+  {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}}updAcct(s.auth);
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}
