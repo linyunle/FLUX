@@ -126,28 +126,45 @@ def ok(ip):
 
 _LOGIN = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>FLUX 登录</title><link rel="icon" href="/favicon.png">
-<style>:root{color-scheme:light dark;--bg:#f6f6f4;--s:#fcfcfb;--ink:#1d1d1b;--mut:#8a8a82;--line:#e3e3de;--acc:#2a6fdb}
-@media(prefers-color-scheme:dark){:root{--bg:#121211;--s:#1a1a19;--ink:#ecece8;--mut:#85857e;--line:#2c2c2a;--acc:#6aa5f5}}
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-form{width:min(320px,88vw);background:var(--s);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
-h1{font-size:18px;margin:0 0 4px}p{margin:0 0 14px;color:var(--mut);font-size:13px}
-input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font-size:16px}
-button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--acc);color:#fff;font-size:15px;cursor:pointer}
-#m{color:#c23a2e;font-size:13px;min-height:18px;margin-top:8px}</style><!--WP--></head><body>
-<form id="f"><h1>FLUX</h1><p>请输入访问密码</p><input id="p" type="password" autocomplete="current-password" autofocus><div id="m"></div><button>登录</button></form>
-<script>document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
+<style>:root{color-scheme:light dark;--bg:#f2f2ef;--s:rgba(255,255,255,.66);--ink:#1d1d1b;--mut:#6f6f68;--line:rgba(0,0,0,.12);--fld:rgba(255,255,255,.72);--brand:#0e0e0e;--brand2:#2c2c2e;--glow:#3b82f6;--glow2:#8b5cf6}
+@media(prefers-color-scheme:dark){:root{--bg:#121211;--s:rgba(24,24,26,.62);--ink:#f1f1ee;--mut:#9a9a93;--line:rgba(255,255,255,.14);--fld:rgba(0,0,0,.32);--brand:#0e0e0e;--brand2:#2c2c2e}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+body{background-image:radial-gradient(1100px 700px at 85% 15%,rgba(99,102,241,.28),transparent 60%),radial-gradient(900px 600px at 70% 95%,rgba(14,165,233,.22),transparent 60%)}
+aside{position:fixed;left:0;top:0;bottom:0;width:min(430px,100%);display:flex;flex-direction:column;padding:34px 40px 26px;background:var(--s);-webkit-backdrop-filter:blur(28px) saturate(1.6);backdrop-filter:blur(28px) saturate(1.6);border-right:1px solid var(--line);box-shadow:8px 0 40px rgba(0,0,0,.18)}
+.brand{display:flex;align-items:center;gap:12px}.brand img{width:38px;height:38px;border-radius:9px;display:block;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.brand b{font-size:21px;letter-spacing:.02em}
+form{margin:auto 0;padding:0 0 8vh}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}p{margin:0 0 22px;color:var(--mut);font-size:14px}
+input{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:var(--fld);color:inherit;font-size:16px;outline:0;transition:border-color .15s,box-shadow .15s}
+input:focus{border-color:var(--brand2);box-shadow:0 0 0 3px rgba(120,120,128,.25)}
+button{position:relative;overflow:hidden;margin-top:14px;width:100%;padding:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:var(--brand);color:#fff;font-size:16px;font-weight:600;letter-spacing:.06em;cursor:pointer;transition:background .2s,transform .08s,box-shadow .2s;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+button:hover{background:var(--brand2);box-shadow:0 6px 18px rgba(0,0,0,.34)}
+button:active{transform:scale(.985);background:linear-gradient(110deg,var(--glow),var(--glow2))}
+button.busy{background:linear-gradient(110deg,var(--glow),var(--glow2),var(--glow));background-size:220% 100%;animation:flow 1s linear infinite;pointer-events:none}
+button.ok{background:#22a35a;animation:none}
+button.bad{background:#c23a2e;animation:shake .35s}
+@keyframes flow{to{background-position:-220% 0}}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+#m{color:#e0483b;font-size:13px;min-height:20px;margin-top:10px}
+footer{color:var(--mut);font-size:12px;display:flex;justify-content:space-between;gap:8px}
+@media(max-width:720px){aside{padding:28px 26px 22px}}</style><!--WP--></head><body>
+<aside><div class="brand"><img src="/favicon.png" alt=""><b>FLUX</b></div>
+<form id="f"><h1>欢迎回来</h1><p>请输入访问密码</p><input id="p" type="password" autocomplete="current-password" autofocus><div id="m"></div><button id="b">登录</button></form>
+<footer><span>FLUX <!--VER--></span><span>nikki 流量面板</span></footer></aside>
+<script>const B=document.getElementById("b");document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
+B.className="busy";B.textContent="登录中…";
 try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
-const j=await r.json();if(r.ok)location.reload();else m.textContent=j.error||"登录失败"}catch(x){m.textContent="连接失败"}}</script></body></html>"""
+const j=await r.json();if(r.ok){B.className="ok";B.textContent="✓ 成功";location.reload()}else{B.className="bad";B.textContent="登录";m.textContent=j.error||"登录失败";setTimeout(()=>B.className="",900)}}catch(x){B.className="bad";B.textContent="登录";m.textContent="连接失败";setTimeout(()=>B.className="",900)}}</script></body></html>"""
 
-_WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}
-form{background:rgba(255,255,255,.58);-webkit-backdrop-filter:blur(22px) saturate(1.7);backdrop-filter:blur(22px) saturate(1.7);border:1px solid rgba(255,255,255,.45);box-shadow:0 12px 40px rgba(0,0,0,.28)}
-input{background:rgba(255,255,255,.55)}
-@media(prefers-color-scheme:dark){form{background:rgba(28,28,30,.55);border-color:rgba(255,255,255,.12)}input{background:rgba(0,0,0,.25)}}</style>"""
+_WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}</style>"""
 
 
 def login_html():
     """登录页;上传了壁纸就带上壁纸背景(毛玻璃卡片)。"""
     from . import wallpaper
     v = wallpaper.info()
-    return _LOGIN.replace("<!--WP-->", (_WP_CSS % v["v"]) if v["has"] else "", 1)
+    from . import config
+    h = _LOGIN.replace("<!--VER-->", config.VERSION, 1)
+    return h.replace("<!--WP-->", (_WP_CSS % v["v"]) if v["has"] else "", 1)
 
