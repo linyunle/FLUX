@@ -404,7 +404,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 <body>
 <div class="app">
 <aside class="side">
-  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><span class="badge" id="roleBadge" style="display:none" title="只读账号:可以查看,不能修改任何设置">只读</span><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
+  <div class="brand"><img class="logo" src="/logo.png" width="32" height="32" alt="FLUX"><h1>FLUX</h1><span class="dot" id="verDot" role="button" tabindex="0"></span><span class="badge" id="ver"></span><button class="badge" id="roleBadge" style="display:none;cursor:pointer;border:0" title="只读账号:可以查看,不能修改任何设置。点一下退出登录">只读 · 退出</button><span class="sp"></span><button id="sideTgl" class="ibtn" title="收起侧栏" aria-label="收起侧栏">‹</button></div>
   <span class="badge new" id="newver" style="display:none" role="button" tabindex="0"></span><span class="badge new" id="noauth" style="display:none" role="button" tabindex="0" title="面板里能看到每台设备访问的域名,建议设置访问密码">未设密码</span>
   <div id="sideMini" class="sidemini" aria-hidden="true"><div id="smD">–</div><div id="smU">–</div><div id="smC" class="sub">–</div></div>
   <nav class="nav" id="nav" role="tablist" aria-label="页面"></nav>
@@ -1983,6 +1983,7 @@ $("#stVac").onclick=async()=>{const m=$("#stMsg"),b=$("#stVac");b.disabled=true;
 $("#vwSave").onclick=async()=>{const m=$("#vwMsg");m.className="msg";try{const j=await post("/api/auth/viewer",{old:$("#vwOld").value,new:$("#vwNew").value});
   m.className="msg ok";m.textContent=j.viewer?"只读密码已保存":"只读账号已关闭";$("#vwOld").value=$("#vwNew").value="";status()}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authRevoke").onclick=async()=>{if(!confirm("让所有设备(包括手机、平板、其他浏览器)都退出登录?这台会保持登录。"))return;const m=$("#authMsg");try{await post("/api/auth/revoke",{});m.className="msg ok";m.textContent="已让所有其他设备退出登录"}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#roleBadge").onclick=async()=>{if(!confirm("退出只读账号?"))return;try{await post("/api/logout",{})}catch(e){}location.reload()};
 $("#authLogout").onclick=async()=>{try{await post("/api/logout",{})}catch(e){}location.reload()};
 $("#noauth").onclick=()=>openSettings("security");
 $("#devImport").onclick=()=>{$("#devPanel").classList.remove("open");openSettings("devices")};
