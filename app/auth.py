@@ -131,7 +131,7 @@ _LOGIN = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta 
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
 body{background-image:radial-gradient(1100px 700px at 85% 15%,rgba(99,102,241,.28),transparent 60%),radial-gradient(900px 600px at 70% 95%,rgba(14,165,233,.22),transparent 60%)}
-aside{position:fixed;left:5vw;top:0;bottom:0;width:min(420px,90vw);display:flex;flex-direction:column;padding:50px 52px 30px;background:var(--s);-webkit-backdrop-filter:blur(7px) saturate(1.25);backdrop-filter:blur(7px) saturate(1.25)}
+aside{position:fixed;left:5vw;top:0;bottom:0;width:min(420px,90vw);display:flex;flex-direction:column;padding:50px 52px 30px;background:var(--s);-webkit-backdrop-filter:blur(7px) saturate(1.25);backdrop-filter:blur(7px) saturate(1.25);box-shadow:0 0 60px rgba(0,0,0,.4),0 0 14px rgba(0,0,0,.22);border-left:1px solid rgba(255,255,255,.32);border-right:1px solid rgba(255,255,255,.18)}
 .brand{display:flex;align-items:center;gap:16px}.brand img{width:52px;height:52px;border-radius:11px;display:block}
 .brand b{font-size:24px;letter-spacing:.01em;font-weight:800}
 form{margin-top:15vh}
