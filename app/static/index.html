@@ -1346,12 +1346,11 @@ const rate=n=>fmt(n)+"/s";
 /* 速度折线:samples = [[时间戳, 上行, 下行], ...],最近 120 秒 */
 const WAVES=new Set();
 /* 水面波纹:在曲线上叠一层正弦起伏(只在有水的地方) */
-const WV_SPEED=2600,WV_WL=72;   // 相位 = 毫秒/WV_SPEED(越大越慢);波长 72px 比采样间距长得多,曲线才平滑
 function rippleD(p,amp,base,wl,ph){return smooth(p.map(([x,y])=>[x,y<base-1.5?y+amp*Math.sin(x/wl*6.2832+ph):y]))}
-setInterval(()=>{if(document.hidden||!WAVES.size)return;const ph=Date.now()/WV_SPEED;
+setInterval(()=>{if(document.hidden||!WAVES.size)return;const ph=Date.now()/450;
   for(const b of WAVES){if(!b.isConnected){WAVES.delete(b);continue}const w=b._w;if(!w)continue;
-    for(const n of ["a","b"]){const p=w[n];if(p.length<2)continue;const d=rippleD(p,w.amp,w.base,WV_WL,ph),f=b.querySelector(".wf-"+n),l=b.querySelector(".wl-"+n);
-      if(f)f.setAttribute("d",`${d}L${p[p.length-1][0].toFixed(1)} ${w.base}L${p[0][0].toFixed(1)} ${w.base}Z`);if(l)l.setAttribute("d",d)}}},80);
+    for(const n of ["a","b"]){const p=w[n];if(p.length<2)continue;const d=rippleD(p,w.amp,w.base,26,ph),f=b.querySelector(".wf-"+n),l=b.querySelector(".wl-"+n);
+      if(f)f.setAttribute("d",`${d}L${p[p.length-1][0].toFixed(1)} ${w.base}L${p[0][0].toFixed(1)} ${w.base}Z`);if(l)l.setAttribute("d",d)}}},60);
 function smooth(p){if(p.length<2)return"";let d=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
   for(let i=1;i<p.length;i++){const [x0,y0]=p[i-1],[x1,y1]=p[i],mx=(x0+x1)/2;d+=` C${mx.toFixed(1)} ${y0.toFixed(1)} ${mx.toFixed(1)} ${y1.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`}return d}
 /* o: {fmtY, max(固定上限,内存用), tip(样本)->html};样式取 TH.viz.style:line=曲线 / wave=水波 */
@@ -1372,12 +1371,12 @@ function drawRt(box,samples,H,o={}){
   let wv=null;
   if(wave){
     const sm=a=>a.map((v,i)=>{let t=0,w=0;for(let k=-2;k<=2;k++){const j=i+k;if(j<0||j>=a.length)continue;const c=3-Math.abs(k);t+=a[j]*c;w+=c}return t/w});
-    const base=T+ph,amp=Math.min(2.2,Math.max(.8,ph*.03));
+    const base=T+ph,amp=Math.min(3,Math.max(1.2,ph*.045));
     const P2=i=>{const ys=sm(sm(samples.map(x=>x[i])));return samples.map((x,n)=>[X(x[0]),Y(ys[n])])};
     wv={base,amp,a:P2(2),b:P2(1)};
-    g+=`<defs>${[["a","--vzd","--down"],["b","--vzu","--up"]].map(([n,v,d])=>`<linearGradient id="${gid}${n}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(${v},var(${d}));stop-opacity:.7"/><stop offset="1" style="stop-color:var(${v},var(${d}));stop-opacity:.12"/></linearGradient>`).join("")}<filter id="${gid}glow" x="-5%" y="-40%" width="110%" height="180%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
-    const area=(n,col)=>{const p=wv[n];if(p.length<2)return"";const d=rippleD(p,amp,base,WV_WL,Date.now()/WV_SPEED);
-      return `<path class="wf-${n}" d="${d}L${p[p.length-1][0].toFixed(1)} ${base}L${p[0][0].toFixed(1)} ${base}Z" fill="url(#${gid}${n})"/><path class="wl-${n}" d="${d}" fill="none" style="stroke:${col}" stroke-width="1.8" stroke-linecap="round" opacity=".95" filter="url(#${gid}glow)"/>`};
+    g+=`<defs>${[["a","--vzd","--down"],["b","--vzu","--up"]].map(([n,v,d])=>`<linearGradient id="${gid}${n}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(${v},var(${d}));stop-opacity:.78"/><stop offset="1" style="stop-color:var(${v},var(${d}));stop-opacity:.12"/></linearGradient>`).join("")}</defs>`;
+    const area=(n,col)=>{const p=wv[n];if(p.length<2)return"";const d=rippleD(p,amp,base,26,Date.now()/450);
+      return `<path class="wf-${n}" d="${d}L${p[p.length-1][0].toFixed(1)} ${base}L${p[0][0].toFixed(1)} ${base}Z" fill="url(#${gid}${n})"/><path class="wl-${n}" d="${d}" fill="none" style="stroke:${col}" stroke-width="1.6" stroke-linecap="round" opacity=".9"/>`};
     g+=area("b",cB)+area("a",cA);
   }else{
     const line=(i,col)=>samples.length?`<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" points="${samples.map(x=>X(x[0]).toFixed(1)+","+Y(x[i]).toFixed(1)).join(" ")}"/>`:"";

@@ -325,6 +325,13 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["auto_backups"] = [{"name": b["name"], "size": b["size"]} for b in health.listing()]
     except Exception as e:
         out["health"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 更新检查(为什么没提示新版本:看 error / latest / 仓库是否绑定)
+    try:
+        from . import update
+        u = update.check()
+        out["update"] = {k: u.get(k) for k in ("current", "latest", "newer", "enabled", "error")}
+    except Exception as e:
+        out["update"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- UPS
     try:
         uc = ups.load_cfg(con)

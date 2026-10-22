@@ -546,8 +546,8 @@ def check_wan(con, cfg, now):
     # 所有「正常回应过」的公共目标都在丢包才算宽带有问题(单个目标丢包常是对方限速/屏蔽 ICMP)
     if s["up"] and ext and all(v["loss"] >= pct for v in ext) and cfg["rules"]["wan_loss"]["on"]:
         gw = next((v for v in t.values() if v["gw"]), None)
-        where = ("到网关也在丢包,问题多半在路由器到光猫之间或线路本身" if gw and gw["loss"] >= pct else
-                 "到网关正常,说明路由器和光猫没问题,是运营商/上游线路的问题(和机场无关)" if gw else "")
+        where = ("到网关(PPPoE 对端,即运营商接入设备)也在丢包:要么线路真有问题,要么运营商对 ICMP 限速。对照「TCP 重传率」:没有重传提醒就多半只是 ICMP 被限速,不影响上网;有重传提醒再报障" if gw and gw["loss"] >= pct else
+                 "到网关正常,说明路由器和光猫没问题,问题在运营商骨干/上游(和机场无关)" if gw else "")
         if _allow("wan_loss", "wan", cfg["rules"]["wan_loss"]["cool_min"], now):
             fire(con, cfg, "wan_loss", "warn", "wan", "宽带丢包偏高",
                  f"最近 5 分钟到公共 DNS 的丢包 {'、'.join(k + ' ' + str(v['loss']) + '%' for k, v in t.items() if not v['gw'] and not v['silent'])}。{where}", now)
