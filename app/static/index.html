@@ -277,8 +277,7 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .stile.ok{border-left-color:var(--good)}.stile.warn{border-left-color:var(--warn)}.stile.bad{border-left-color:var(--bad)}.stile.info{border-left-color:var(--accent)}
 .stile.warn .v{color:var(--warn)}.stile.bad .v{color:var(--bad)}
 .find{display:flex;gap:10px;align-items:flex-start;padding:8px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:6px}.find:first-child{border-top:0}
-#backSec{position:fixed;bottom:22px;right:24px;z-index:40;border-radius:16px;padding:6px 14px;background:var(--accent);color:#fff;border:0;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
-@media(max-width:820px){#backSec{right:14px;bottom:16px}}
+#backSec{padding:12px 16px}#backSec h2{margin:0}
 .ignb{align-self:center;font-size:12px;padding:2px 10px;border-radius:12px;color:var(--muted);background:transparent;border:1px solid var(--line);cursor:pointer}
 .find .t{flex:1;min-width:0}.find .go{color:var(--muted);align-self:center}
 .allok{display:flex;gap:8px;align-items:center;color:var(--good);padding:10px 4px}
@@ -2046,7 +2045,7 @@ const miniTbl=(head,rows)=>rows.length?`<div class="scroll"><table><thead><tr>${
 
 /* 安全页顶部:指标卡 + 需要关注 */
 let BACK=null;
-function backBtn(){let b=$("#backSec");if(!b){b=document.createElement("button");b.id="backSec";b.textContent="‹ 返回安全";b.onclick=()=>{BACK=null;S.tab="security";showTab();refresh()};document.body.appendChild(b)}b.style.display=BACK&&S.tab!=="security"?"":"none"}
+function backBtn(){let c=$("#backSec");if(!c){c=document.createElement("div");c.id="backSec";c.className="card";c.innerHTML='<h2><button id="backSecBtn">← 返回安全</button></h2>';$(".main .inner").insertBefore(c,$(".main .inner").firstChild);$("#backSecBtn").onclick=()=>{BACK=null;S.tab="security";showTab();refresh()}}c.style.display=BACK&&S.tab!=="security"?"":"none"}
 function secGo(go){const [k,v]=String(go||"").split(":");
   if((k==="tab"||k==="set")&&S.tab==="security")BACK="security";
   if(k==="tab"){S.tab=v;showTab();refresh()}
