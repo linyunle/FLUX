@@ -116,8 +116,8 @@ def leaks(con, days=7):
     dns_rows = []
     try:
         for host, b in con.execute(
-                "SELECT t.host, SUM(t.up+t.down) s FROM traffic t WHERE t.day>=? AND t.host IN (SELECT host FROM dns WHERE mode='normal') "
-                "AND t.node NOT IN (%s) AND t.node NOT LIKE 'REJECT%%' GROUP BY t.host ORDER BY s DESC LIMIT 60" % ",".join("?" * len(d)), [since] + list(d)):
+                "SELECT t.host, SUM(t.up+t.down) s FROM traffic t WHERE t.day>=? AND t.host IN (SELECT host FROM dns WHERE mode='normal' AND last>=? AND host NOT IN (SELECT host FROM dns WHERE mode='fake-ip' AND last>=?)) "
+                "AND t.node NOT IN (%s) AND t.node NOT LIKE 'REJECT%%' GROUP BY t.host ORDER BY s DESC LIMIT 60" % ",".join("?" * len(d)), [since, int(time.time()) - days * 86400, int(time.time()) - days * 86400] + list(d)):
             if not _IPLIT.match(host) and not _in_list(host, CN_SUFFIX):
                 dns_rows.append({"host": host, "bytes": b})
     except Exception:
