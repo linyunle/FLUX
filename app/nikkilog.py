@@ -338,3 +338,15 @@ def top_messages(con, since, n=10):
         sample.setdefault(k, (lvl, msg))
     top = sorted(cnt.items(), key=lambda x: -x[1])[:n]
     return [{"src": k[0], "n": c, "lv": LV_NAME[sample[k][0]], "example": sample[k][1][:200]} for k, c in top]
+
+
+def provider_errors(con, name="", n=5, days=7):
+    """nikki 日志里和订阅(provider)更新有关的警告 / 错误,最新的在前;name 非空时只要提到这个订阅的。"""
+    since = int(time.time()) - days * 86400
+    sql, args = "SELECT ts,msg FROM nklog WHERE ts>=? AND lvl<=4 AND (msg LIKE '%rovider%' OR msg LIKE '%ubscri%' OR msg LIKE '%订阅%')", [since]
+    if name:
+        sql += " AND msg LIKE ? ESCAPE '\\'"
+        args.append("%" + name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(max(1, min(50, n)))
+    return [(r[0], r[1]) for r in con.execute(sql, args)]

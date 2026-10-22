@@ -632,6 +632,31 @@ def test_security():
     config.VERSION = "dev"
 
 
+def test_v030():
+    import tempfile
+    from app import auth, config, alerts, db, nikkilog
+    # 磁盘:忽略 / 单独阈值
+    cfg = alerts.load_cfg.__globals__["copy"].deepcopy(alerts.DEFAULT_CFG)
+    cfg["disks"] = alerts._norm_disks({"/music": {"ign": True}, "/sdb2": {"pct": "95"}, "/x": {"ign": False, "pct": 500}, "/y": "bad"})
+    assert cfg["disks"] == {"/music": {"ign": True, "pct": None}, "/sdb2": {"ign": False, "pct": 95.0}}, cfg["disks"]
+    assert alerts.disk_rule(cfg, "/music")[0] and alerts.disk_rule(cfg, "/sdb2") == (False, 95.0) and alerts.disk_rule(cfg, "/data") == (False, cfg["rules"]["sys_disk"]["pct"])
+    # 登录锁定重启后还在
+    d = tempfile.mkdtemp(); config.DATA_DIR = d
+    auth._fails.clear(); auth._lloaded[0] = False
+    for _ in range(5): auth.fail("10.1.1.1")
+    assert auth.locked("10.1.1.1") and oct(os.stat(os.path.join(d, "lockout.json")).st_mode & 0o777) == "0o600"
+    auth._fails.clear(); auth._lloaded[0] = False
+    assert auth.locked("10.1.1.1") and not auth.locked("10.1.1.2")
+    # 告警冷却落盘
+    con = db.open_db() if False else None
+    import sqlite3
+    c2 = sqlite3.connect(os.path.join(d, "t.db")); c2.execute("CREATE TABLE kv(k TEXT PRIMARY KEY, v TEXT)")
+    alerts._cool.clear(); alerts._cool[("sys_disk", "/music")] = time.time(); alerts._cool_saved[0] = ""
+    alerts.cool_save(c2); alerts._cool.clear(); alerts.cool_load(c2)
+    assert ("sys_disk", "/music") in alerts._cool and time.time() - alerts._cool[("sys_disk", "/music")] < 60
+    alerts._cool.clear()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

@@ -66,6 +66,11 @@ def selfcheck(con, now=None):
     for i, d in enumerate(sysinfo.STATE.get("disks") or ([dict(sysinfo.STATE["disk"], name="面板数据盘")] if sysinfo.STATE.get("disk") else [])):
         if d.get("pct") is None:
             continue
+        try:
+            if alerts.disk_rule(alerts.load_cfg(con), d.get("mp") or "")[0]:
+                continue
+        except Exception:
+            pass
         if d["pct"] >= 95:
             out.append(_f("bad", f"「{d['name']}」快满了", f"已用 {d['pct']}%,剩余 {d['free'] // 1048576} MB。" + ("数据库写不进去会丢统计。" if i == 0 else "")))
         elif d["pct"] >= 85:
@@ -325,6 +330,12 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["auto_backups"] = [{"name": b["name"], "size": b["size"]} for b in health.listing()]
     except Exception as e:
         out["health"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 订阅更新相关的 nikki 日志(排查订阅长时间没更新)
+    try:
+        from . import nikkilog as _nk
+        out["sub_update_log"] = [f"{time.strftime('%m-%d %H:%M:%S', time.localtime(t))} {m(x)[:240]}" for t, x in _nk.provider_errors(con, "", 30)]
+    except Exception as e:
+        out["sub_update_log"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- 更新检查(为什么没提示新版本:看 error / latest / 仓库是否绑定)
     try:
         from . import update

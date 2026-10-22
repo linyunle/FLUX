@@ -252,6 +252,10 @@ try:
         if any(x["host"] == "www.bilibili.com" for x in lk["cn_proxy"]) and any(x["host"] == "www.google.com" for x in lk["fo_direct"]): break
     ok(any(x["host"] == "www.bilibili.com" for x in lk["cn_proxy"]) and any(x["host"] == "www.google.com" for x in lk["fo_direct"]), f"分流检查:国内走代理 / 境外直连 {lk['cn_proxy'][:1]} {lk['fo_direct'][:1]}")
     ok(lk["dns_local"], "分流检查:本地解析的代理域名")
+    ok(all("devs" in x and isinstance(x["devs"]["names"], list) for x in lk["cn_proxy"] + lk["fo_direct"] + lk["dns_local"]) and any(x["devs"]["names"] for x in lk["cn_proxy"] + lk["fo_direct"]), f"分流检查:带来源设备 {lk['cn_proxy'][:1]}")
+    c, r = post("/api/alerts/config", {"disks": {"/mnt/x": {"ign": True}, "/mnt/y": {"pct": 97}}})
+    ok(c == 200 and r["disks"] == {"/mnt/x": {"ign": True, "pct": None}, "/mnt/y": {"ign": False, "pct": 97.0}} and "disk_list" in r, f"告警:磁盘忽略 / 单独阈值保存 {r.get('disks')}")
+    c, r = post("/api/alerts/config", {"disks": {}}); ok(c == 200 and r["disks"] == {}, "告警:磁盘设置可清空")
     rh = get("/api/rulehealth"); ok(rh["match"] and rh["match"]["share"] > 0, f"规则健康:落到兜底的占比 {rh['match']}")
     gj = None
     for _ in range(20):
@@ -333,6 +337,7 @@ try:
     ok(post("/api/docker/act", {"id": "b" * 12, "action": "stop"})[0] == 400, "容器:只读模式下不能操作")
     ok("docker" in get("/api/backup") and get("/api/backup")["docker"]["on"], "备份:包含容器设置")
     dg = get("/api/diag"); ex_ = dg["ext"]
+    ok("update" in ex_ and "sub_update_log" in ex_ and isinstance(ex_["sub_update_log"], list), "诊断包:带更新检查与订阅更新日志")
     ok(ex_["docker"]["ok"] is True and len(ex_["docker"]["containers"]) == 4 and ex_["docker"]["summary"]["total"] == 4 and "recent_events" in ex_["docker"], "诊断包:容器详情")
     ok("top_tags_24h" in ex_["syslog"] and "recent_warn_and_above" in ex_["syslog"] and "series_3h" in ex_["ups"] and "certs" in ex_["expiry"] and ex_["listen"]["current"]["port"] == WEB_P and ex_["disks"] is not None and "features" in dg, "诊断包:日志/UPS/到期/监听/磁盘")
     # ---- v0.24.2 温度来源 / 日志导出 / 诊断含日志明细

@@ -180,6 +180,14 @@ def check_stale(con, cfg, now):
             continue
         age = now - at
         if age >= r["hours"] * 3600 and alerts._allow("sub_stale", p["name"], r["cool_min"], now):
+            why = ""
+            try:
+                from . import nikkilog
+                es = nikkilog.provider_errors(con, p["name"], 1) or nikkilog.provider_errors(con, "", 1)
+                if es:
+                    why = f" nikki 日志里最近一条相关报错({time.strftime('%m-%d %H:%M', time.localtime(es[0][0]))}):{es[0][1][:160]}"
+            except Exception:
+                pass
             alerts.fire(con, cfg, "sub_stale", "warn", p["name"], f"订阅「{p['name']}」{int(age // 3600)} 小时没更新",
                         f"nikki 上次更新这个订阅是 {time.strftime('%m-%d %H:%M', time.localtime(at))}。可能是订阅地址失效、机场换了域名,或 nikki 更新失败;"
-                        "到 nikki 里手动更新一次看看报什么错。官方用量/到期数据也会停在旧值。", now)
+                        "到 nikki 里手动更新一次看看报什么错。官方用量/到期数据也会停在旧值。" + why, now)

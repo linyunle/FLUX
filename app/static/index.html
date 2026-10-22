@@ -279,6 +279,10 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .find{display:flex;gap:10px;align-items:flex-start;padding:8px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:6px}.find:first-child{border-top:0}
 #backSec{padding:12px 16px}#backSec h2{margin:0}
 .ignb{align-self:center;font-size:12px;padding:2px 10px;border-radius:12px;color:var(--muted);background:transparent;border:1px solid var(--line);cursor:pointer}
+#noPwBar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:12px;background:#fff4e5;color:#8a4b00;border:1px solid #f5c98a}
+#noPwBar .sp{flex:1}#noPwBar button{border:0;border-radius:8px;padding:4px 12px;background:#e8891a;color:#fff;cursor:pointer}#noPwBar #noPwX{background:transparent;color:#8a4b00;font-size:16px;padding:0 6px}
+:root[data-mode=dark] #noPwBar{background:#3a2a10;color:#f3c27c;border-color:#6b4a1a}
+.alact a{color:var(--accent)}
 .find .t{flex:1;min-width:0}.find .go{color:var(--muted);align-self:center}
 .allok{display:flex;gap:8px;align-items:center;color:var(--good);padding:10px 4px}
 .secgrid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:var(--gap)}
@@ -1804,17 +1808,25 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
 /* ---------- 告警 ---------- */
 const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复",note:"记录"};
 const fmtTs=t=>{const d=new Date(t*1000);return pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())};
+let NKAPI="";
+function nkPanelUrl(){try{const u=new URL(NKAPI);return location.protocol+"//"+location.hostname+":"+u.port+"/ui/"}catch(e){return""}}
+function alertActs(r){const a=[];
+  if(r.kind==="sub_stale"&&nkPanelUrl())a.push(`<a href="${esc(nkPanelUrl())}" target="_blank" rel="noopener" data-aact="nk">在 nikki 里更新订阅 ↗</a>`);
+  if(r.kind==="sys_disk"&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="disk" data-mp="${esc(r.key==="disk"?"":r.key)}">忽略这块盘</a>`);
+  return a.length?`<div class="sub alact">${a.join(" · ")}</div>`:""}
 function alertRow(r,seen){return `<tr class="${r.ts>seen&&r.level!=="ok"?"unseen":""} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}">
   <td class="n" style="white-space:nowrap;text-align:left">${fmtTs(r.ts)}</td><td><span class="lv ${r.level}">${LV[r.level]||r.level}</span></td>
-  <td><b>${esc(r.title)}</b><div class="sub">${esc(r.detail)}</div></td><td class="hide-s sub">${esc(r.sent)}</td></tr>`}
-function alertOpen(e){const tr=e.target.closest("tr.click,.ev.click");if(!tr)return;const k=tr.dataset.k,key=tr.dataset.key;
+  <td><b>${esc(r.title)}</b><div class="sub">${esc(r.detail)}</div>${alertActs(r)}</td><td class="hide-s sub">${esc(r.sent)}</td></tr>`}
+document.addEventListener("click",async e=>{const a=e.target.closest("[data-aact=disk]");if(!a)return;e.preventDefault();e.stopPropagation();
+  try{const c=await get("/api/alerts/config");const d=c.disks||{};d[a.dataset.mp]=Object.assign({},d[a.dataset.mp],{ign:true});await post("/api/alerts/config",{rules:c.rules,channels:c.channels.map(x=>({id:x.id,type:x.type,name:x.name,on:x.on!==false,url:"",token:"",chat:""})),quiet:c.quiet,disks:d});a.textContent="已忽略(可在 设置 → 告警通知 恢复)"}catch(er){a.textContent="失败:"+er.message}},true);
+function alertOpen(e){if(e.target.closest("[data-aact]"))return;const tr=e.target.closest("tr.click,.ev.click");if(!tr)return;const k=tr.dataset.k,key=tr.dataset.key;
   if(k.startsWith("node"))openDetail("node",{node:key});else openDetail("dev",{key,name:tr.dataset.t.replace(/^[^:]*:/,"")})}
 function timelineH(j){
   const day=t=>{const d=new Date(t*1000),n=new Date();return d.toDateString()===n.toDateString()?"今天":new Date(n-86400000).toDateString()===d.toDateString()?"昨天":`${d.getMonth()+1} 月 ${d.getDate()} 日`};
   let h="",cur="";
   for(const r of j.rows){const dy=day(r.ts);if(dy!==cur){cur=dy;h+=`<div class="day">${dy}</div>`}
     const tm=new Date(r.ts*1000);
-    h+=`<div class="ev ${r.level} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}"><span class="t">${String(tm.getHours()).padStart(2,"0")}:${String(tm.getMinutes()).padStart(2,"0")}</span><b>${esc(r.title)}</b><span class="kd">${esc(j.kinds[r.kind]||r.kind)}</span>${r.detail?`<div class="sub">${esc(r.detail)}</div>`:""}</div>`}
+    h+=`<div class="ev ${r.level} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}"><span class="t">${String(tm.getHours()).padStart(2,"0")}:${String(tm.getMinutes()).padStart(2,"0")}</span><b>${esc(r.title)}</b><span class="kd">${esc(j.kinds[r.kind]||r.kind)}</span>${r.detail?`<div class="sub">${esc(r.detail)}</div>`:""}${alertActs(r)}</div>`}
   return `<div class="tl">${h}</div>`}
 async function loadAlerts(){
   S.alView=S.alView||"list";seg($("#alView"),[["list","列表"],["line","时间线"]],S.alView,k=>{S.alView=k;loadAlerts()});
@@ -1871,9 +1883,15 @@ const RULE_META=[
  ["quota","套餐用量","订阅额度用量达到阈值(在「订阅额度」里设置月流量);≥95% 为严重",[["pct","阈值","%"],["cool_min","间隔","分钟"]]]];
 const CH_HINT={bark:"https://api.day.app/你的KEY",wecom:"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…",feishu:"https://open.feishu.cn/open-apis/bot/v2/hook/…",ntfy:"https://ntfy.sh/你的主题",webhook:"https://…(收到 JSON)"};
 let ALR={},ALC=[],ALQ={},ALT={};
+let ALD={},ALDL=[];
+function diskRowsH(){if(!ALDL.length)return"";
+  return `<div style="margin:6px 0 2px 24px"><div class="sub">每块盘可以单独设阈值或忽略(比如存音乐、本来就写满的盘):</div>`+ALDL.map((d,i)=>{const v=ALD[d.mp]||{};
+    return `<div class="ps" style="margin:2px 0"><span style="min-width:150px">${esc(d.name)}${d.mp?` <span class="sub">${esc(d.mp)}</span>`:""} <span class="sub">${d.pct==null?"":d.pct+"%"}</span></span>
+    <label class="sub"><input type="checkbox" data-d="${i}.ign" ${v.ign?"checked":""}> 忽略</label>
+    <label class="sub">单独阈值 <input type="number" data-d="${i}.pct" value="${v.pct==null?"":v.pct}" placeholder="默认" step="any" min="1" max="100"> %</label></div>`}).join("")+"</div>"}
 function renderAlertCfg(){
   $("#alRules").innerHTML=RULE_META.map(([k,name,desc,fs])=>`<div class="alrule"><div class="hd"><label style="cursor:pointer;display:flex;gap:6px;align-items:center"><input type="checkbox" data-r="${k}.on" ${ALR[k].on?"checked":""}><b>${name}</b></label></div><div class="sub" style="margin-left:24px">${desc}</div>
-    ${fs.length?`<div class="ps">${fs.map(([f,l,u])=>`<label class="sub">${l} <input type="number" data-r="${k}.${f}" value="${ALR[k][f]}" step="any"> ${u}</label>`).join("")}</div>`:""}</div>`).join("");
+    ${fs.length?`<div class="ps">${fs.map(([f,l,u])=>`<label class="sub">${l} <input type="number" data-r="${k}.${f}" value="${ALR[k][f]}" step="any"> ${u}</label>`).join("")}</div>`:""}${k==="sys_disk"?diskRowsH():""}</div>`).join("");
   $("#alChans").innerHTML=ALC.length?ALC.map((c,i)=>`<div class="alch"><div class="r1"><select data-c="${i}.type">${Object.entries(ALT).map(([v,l])=>`<option value="${v}" ${c.type===v?"selected":""}>${l}</option>`).join("")}</select>
     <input type="text" data-c="${i}.name" value="${esc(c.name||"")}" placeholder="名称" style="width:130px"><label class="crow sub" style="cursor:pointer"><input type="checkbox" data-c="${i}.on" ${c.on!==false?"checked":""}> 启用</label><span class="sp" style="flex:1"></span>
     <button data-act="test" data-i="${i}">发送测试</button><button data-act="del" data-i="${i}">删除</button></div>
@@ -1881,11 +1899,12 @@ function renderAlertCfg(){
       :`<input type="password" autocomplete="off" data-c="${i}.url" value="${esc(c.url||"")}" placeholder="${c.has_secret?"地址已保存 "+esc(c.hint||"")+"(留空 = 不修改)":CH_HINT[c.type]||"https://…"}">`}</div>
     <div class="msg" id="alT${i}"></div></div>`).join(""):'<div class="sub">还没有推送渠道。告警仍会记录在「告警」页签里。</div>';
   document.querySelectorAll("#sec-alerts [data-q]").forEach(el=>{const f=el.dataset.q;if(el.type==="checkbox")el.checked=!!ALQ[f];else el.value=ALQ[f]||""})}
-async function loadAlertCfg(){const j=await get("/api/alerts/config");ALR=j.rules;ALC=j.channels;ALQ=j.quiet;ALT=j.types;
+async function loadAlertCfg(){const j=await get("/api/alerts/config");ALR=j.rules;ALC=j.channels;ALQ=j.quiet;ALT=j.types;ALD=j.disks||{};ALDL=j.disk_list||[];
   $("#alLearn").textContent=j.learn_left>0?`学习期还剩约 ${Math.ceil(j.learn_left/60)} 分钟:这段时间内见到的设备都会记为已知,不会报「新设备」。`:"";$("#alMsg").textContent="";renderAlertCfg()}
 $("#sec-alerts").addEventListener("input",e=>alertEdit(e,false));$("#sec-alerts").addEventListener("change",e=>alertEdit(e,true));
 function alertEdit(e,ch){const t=e.target,v=t.type==="checkbox"?t.checked:t.value;
   if(t.dataset.r){const [k,f]=t.dataset.r.split(".");ALR[k][f]=t.type==="number"?(t.value===""?ALR[k][f]:+t.value):v}
+  else if(t.dataset.d){const [i,f]=t.dataset.d.split("."),mp=ALDL[+i].mp;const o=ALD[mp]=ALD[mp]||{ign:false,pct:null};if(f==="ign")o.ign=!!v;else o.pct=t.value===""?null:+t.value;if(!o.ign&&o.pct==null)delete ALD[mp]}
   else if(t.dataset.q)ALQ[t.dataset.q]=v;
   else if(t.dataset.c){const [i,f]=t.dataset.c.split(".");ALC[+i][f]=v;if(f==="type"&&ch){ALC[+i].has_secret=false;ALC[+i].hint="";ALC[+i].url=ALC[+i].token=ALC[+i].chat="";renderAlertCfg()}}}
 $("#sec-alerts").addEventListener("click",async e=>{const b=e.target.closest("button[data-act]");if(!b)return;const i=+b.dataset.i;
@@ -1894,8 +1913,8 @@ $("#sec-alerts").addEventListener("click",async e=>{const b=e.target.closest("bu
     try{const r=await post("/api/alerts/test",{channel:ALC[i]});m.className="msg "+(r.ok?"ok":"err");m.textContent=r.ok?"已发送,请到对应 App 里确认收到":"发送失败:"+r.error}catch(er){m.className="msg err";m.textContent=er.message}b.disabled=false}});
 $("#alAddCh").onclick=()=>{if(ALC.length>=10)return;ALC.push({id:"c"+(Date.now()%1e9),type:"bark",name:"",on:true,url:""});renderAlertCfg()};
 $("#alCfgSave").onclick=async()=>{const m=$("#alMsg");m.className="msg";
-  try{const j=await post("/api/alerts/config",{rules:ALR,channels:ALC.map(c=>({id:c.id,type:c.type,name:c.name,on:c.on!==false,url:c.url||"",token:c.token||"",chat:c.chat||""})),quiet:ALQ});
-    ALR=j.rules;ALC=j.channels;ALQ=j.quiet;renderAlertCfg();m.className="msg ok";m.textContent="已保存"}catch(er){m.className="msg err";m.textContent=er.message}};
+  try{const j=await post("/api/alerts/config",{rules:ALR,channels:ALC.map(c=>({id:c.id,type:c.type,name:c.name,on:c.on!==false,url:c.url||"",token:c.token||"",chat:c.chat||""})),quiet:ALQ,disks:ALD});
+    ALR=j.rules;ALC=j.channels;ALQ=j.quiet;ALD=j.disks||{};ALDL=j.disk_list||[];renderAlertCfg();m.className="msg ok";m.textContent="已保存"}catch(er){m.className="msg err";m.textContent=er.message}};
 
 /* ---------- 设置 / 导入 / 更新 ---------- */
 function openM(id){$(id).classList.add("open")}function closeM(id){$(id).classList.remove("open")}
@@ -2096,13 +2115,14 @@ function loadDns(){load("dns","/api/dns",{},j=>{
 
 function leakBlock(title,hint,rows,total,cols){
   return `<div class="h3" style="margin-top:${title.startsWith("国内")?0:16}px">${title} <span class="sub">${hint}${total?" · 合计 "+fmt(total):""}</span></div>`+(rows.length?miniTbl(cols,rows):'<div class="sub" style="margin:4px 0 10px">未发现 ✓</div>')}
+const devsH=r=>{const d=r.devs||{names:[],n:0};return d.names.length?esc(d.names.join("、"))+(d.n>d.names.length?` 等 ${d.n} 台`:""):"-"};
 function loadLeaks(){load("leaks","/api/leaks",{days:7},j=>{
-  const rowsA=j.cn_proxy.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
-  const rowsB=j.fo_direct.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
-  const rowsC=j.dns_local.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td></tr>`);
-  $("#lkBody").innerHTML=leakBlock("国内站点走了代理","浪费机场流量、增加延迟:检查是否漏了国内规则集",rowsA,j.cn_proxy_bytes,["域名","流量","节点 / 规则"])
-   +leakBlock("境外站点直连","可能被阻断或暴露真实访问:检查是否漏了境外规则",rowsB,j.fo_direct_bytes,["域名","流量","节点 / 规则"])
-   +leakBlock("走代理但在本机用真实 DNS 解析","该域名的连接 dnsMode=normal,没有走 fake-ip / 远程解析,可能把查询暴露给本地 DNS",rowsC,j.dns_local_bytes,["域名","流量"])})}
+  const rowsA=j.cn_proxy.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="sub">${devsH(r)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
+  const rowsB=j.fo_direct.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="sub">${devsH(r)}</td><td class="n sub" style="text-align:right">${esc(r.node)} · ${esc(r.rule)}</td></tr>`);
+  const rowsC=j.dns_local.map(r=>`<tr><td class="k pv">${esc(r.host)}</td><td class="n">${fmt(r.bytes)}</td><td class="sub" style="text-align:right">${devsH(r)}</td></tr>`);
+  $("#lkBody").innerHTML=leakBlock("国内站点走了代理","浪费机场流量、增加延迟:检查是否漏了国内规则集",rowsA,j.cn_proxy_bytes,["域名","流量","来源设备","节点 / 规则"])
+   +leakBlock("境外站点直连","可能被阻断或暴露真实访问:检查是否漏了境外规则",rowsB,j.fo_direct_bytes,["域名","流量","来源设备","节点 / 规则"])
+   +leakBlock("走代理但在本机用真实 DNS 解析","该域名的连接 dnsMode=normal,没有走 fake-ip / 远程解析,可能把查询暴露给本地 DNS",rowsC,j.dns_local_bytes,["域名","流量","来源设备"])})}
 
 function loadGeo(){load("geo","/api/geo",{days:7},j=>{
   const el=$("#geoBody");
@@ -2345,6 +2365,11 @@ async function status(){try{const s=await get("/api/status");
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=tabsFor();if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
   {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}}updAcct(s.auth);
+  try{NKAPI=(s.config&&s.config.api)||NKAPI}catch(e){}
+  {let bn=$("#noPwBar");const need=s.auth&&!s.auth.enabled;let hid="";try{hid=sessionStorage.getItem("flux.nopw.hide")||""}catch(e){}
+    if(need&&!hid){if(!bn){bn=document.createElement("div");bn.id="noPwBar";bn.innerHTML='<b>⚠ 没有设置访问密码</b><span>局域网里任何人打开页面,都能看到每台设备访问过的域名。</span><span class="sp"></span><button id="noPwGo">现在设置</button><button id="noPwX" title="本次不再提示">×</button>';$(".main .inner").insertBefore(bn,$(".main .inner").firstChild);
+      $("#noPwGo").onclick=()=>openSettings("security");$("#noPwX").onclick=()=>{try{sessionStorage.setItem("flux.nopw.hide","1")}catch(e){}bn.style.display="none"}}bn.style.display=""}
+    else if(bn)bn.style.display="none"}
   {const na=$("#noauth");let seen="";try{seen=localStorage.getItem("nt.noauth.seen")||""}catch(e){}na.style.display=s.auth&&!s.auth.enabled&&!seen?"":"none"}
   const nv=$("#newver");if(s.update.newer){nv.style.display="";nv.textContent="新版本 "+s.update.latest;nv.onclick=()=>openSettings("conn")}else nv.style.display="none";
   if(!c.ok&&!c.last_ok&&s.config.source==="env"){/* 首次打开且连不上:直接弹设置 */}

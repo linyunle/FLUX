@@ -315,16 +315,56 @@ def cookie_header(val, clear=False, secure=False, remember=True):
     return f"{COOKIE}={'' if clear else val}; Path=/{age}; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
 
 
+def _lpath():
+    return os.path.join(config.DATA_DIR, "lockout.json")
+
+
+_lloaded = [False]
+
+
+def _lload():
+    """重启后锁定状态不丢:只保存「锁定到几点」,计数仍在内存里。"""
+    _lloaded[0] = True
+    try:
+        with open(_lpath(), encoding="utf-8") as f:
+            d = json.load(f)
+        now = time.time()
+        for ip, until in (d or {}).items():
+            if isinstance(until, (int, float)) and until > now:
+                _fails[str(ip)] = [0, float(until)]
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
+def _lsave():
+    try:
+        now = time.time()
+        d = {ip: f[1] for ip, f in _fails.items() if f[1] > now}
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        tmp = _lpath() + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        os.replace(tmp, _lpath())
+    except OSError:
+        pass
+
+
 def locked(ip):
+    if not _lloaded[0]:
+        _lload()
     f = _fails.get(ip)
     return bool(f and f[1] > time.time())
 
 
 def fail(ip):
+    if not _lloaded[0]:
+        _lload()
     f = _fails.setdefault(ip, [0, 0])
     f[0] += 1
     if f[0] >= 5:
         f[0], f[1] = 0, time.time() + 60
+        _lsave()
     if len(_fails) > 500:
         _fails.clear()
 

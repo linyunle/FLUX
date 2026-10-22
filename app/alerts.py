@@ -94,7 +94,7 @@ LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080
           "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
-DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}}
+DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}, "disks": {}}
 
 _lock = threading.RLock()
 _cool = {}       # (kind, key) -> 上次触发时间
@@ -159,6 +159,31 @@ def _mask(c):
     return m
 
 
+def _norm_disks(x):
+    """{挂载点: {ign: 是否忽略, pct: 单独阈值或 None}};只保留有设置的盘。"""
+    out = {}
+    if isinstance(x, dict):
+        for mp, v in list(x.items())[:40]:
+            if not isinstance(v, dict) or not isinstance(mp, str):
+                continue
+            pct = v.get("pct")
+            try:
+                pct = float(pct) if pct not in (None, "") else None
+            except (TypeError, ValueError):
+                pct = None
+            if pct is not None and not 1 <= pct <= 100:
+                pct = None
+            if v.get("ign") or pct is not None:
+                out[mp[:200]] = {"ign": bool(v.get("ign")), "pct": pct}
+    return out
+
+
+def disk_rule(cfg, mp):
+    """(是否忽略, 阈值)"""
+    v = (cfg.get("disks") or {}).get(mp or "") or {}
+    return bool(v.get("ign")), (v.get("pct") if v.get("pct") is not None else cfg["rules"]["sys_disk"]["pct"])
+
+
 def load_cfg(con):
     cfg = copy.deepcopy(DEFAULT_CFG)
     try:
@@ -176,6 +201,7 @@ def load_cfg(con):
     cfg["channels"] = [c for c in (d.get("channels") or []) if isinstance(c, dict) and c.get("type") in CHANNEL_TYPES]
     q = d.get("quiet") or {}
     cfg["quiet"] = {"on": bool(q.get("on")), "start": _hhmm(q.get("start"), "23:00"), "end": _hhmm(q.get("end"), "07:00")}
+    cfg["disks"] = _norm_disks(d.get("disks"))
     return cfg
 
 
@@ -198,6 +224,7 @@ def save_cfg(con, body):
     cfg["channels"] = chans
     q = body.get("quiet") or {}
     cfg["quiet"] = {"on": bool(q.get("on")), "start": _hhmm(q.get("start"), "23:00"), "end": _hhmm(q.get("end"), "07:00")}
+    cfg["disks"] = _norm_disks(body.get("disks") if "disks" in body else cur.get("disks"))
     with con:
         con.execute("INSERT INTO kv(k,v) VALUES('alert_cfg',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
                     (json.dumps(cfg, ensure_ascii=False),))
@@ -210,6 +237,7 @@ def public_cfg(con):
     if _state["start"]:
         learn_left = max(0, int(_state["start"] + config.ALERT_LEARN - time.time()))
     return {"rules": cfg["rules"], "channels": [_mask(c) for c in cfg["channels"]], "quiet": cfg["quiet"],
+            "disks": cfg["disks"], "disk_list": [{"mp": d.get("mp") or "", "name": d.get("name") or d.get("mp") or "", "pct": d.get("pct")} for d in (sysinfo.STATE.get("disks") or [])],
             "kinds": KINDS, "types": CHANNEL_TYPES, "learn_left": learn_left}
 
 
@@ -481,9 +509,12 @@ def check_sys(con, cfg, now):
         fire(con, cfg, "sys_temp", "warn", "temp", f"路由器温度 {tm:.0f}℃",
              f"最高温度传感器读数 {tm:.1f}℃(阈值 {r['sys_temp']['c']:g}℃)。检查散热、通风,或是否长时间满载。", now)
     for d in (s.get("disks") or ([dict(s["disk"], name="面板数据所在盘", mp="")] if s.get("disk") else [])):
-        if r["sys_disk"]["on"] and d.get("pct") is not None and d["pct"] >= r["sys_disk"]["pct"] and _allow("sys_disk", d.get("mp") or "disk", r["sys_disk"]["cool_min"], now):
+        ign, thr = disk_rule(cfg, d.get("mp") or "")
+        if ign:
+            continue
+        if r["sys_disk"]["on"] and d.get("pct") is not None and d["pct"] >= thr and _allow("sys_disk", d.get("mp") or "disk", r["sys_disk"]["cool_min"], now):
             fire(con, cfg, "sys_disk", "warn", d.get("mp") or "disk", f"磁盘「{d.get('name', '')}」已用 {d['pct']:.0f}%",
-                 f"{d.get('name', '')}{'(' + d['mp'] + ')' if d.get('mp') else ''}已用 {d['pct']:.1f}%,剩余 {d['free'] // 1048576} MB(阈值 {r['sys_disk']['pct']:g}%)。", now)
+                 f"{d.get('name', '')}{'(' + d['mp'] + ')' if d.get('mp') else ''}已用 {d['pct']:.1f}%,剩余 {d['free'] // 1048576} MB(阈值 {thr:g}%)。", now)
     m = s.get("mem")
     if r["sys_mem"]["on"] and m and m["total"] and m["used"] * 100 / m["total"] >= r["sys_mem"]["pct"] and _allow("sys_mem", "mem", r["sys_mem"]["cool_min"], now):
         fire(con, cfg, "sys_mem", "warn", "mem", f"路由器内存已用 {m['used'] * 100 // m['total']}%",
@@ -617,8 +648,38 @@ def evaluate(con, now=None):
             log("告警检查出错", kind, e)
 
 
+def cool_load(con):
+    """告警冷却时间落盘:容器重启后同一条告警不会立刻再发一遍。"""
+    try:
+        r = con.execute("SELECT v FROM kv WHERE k='alert_cool'").fetchone()
+        now = time.time()
+        for k, t in (json.loads(r[0]) if r else {}).items():
+            kind, _, key = k.partition("\x1f")
+            if isinstance(t, (int, float)) and now - t < 7 * 86400:
+                _cool.setdefault((kind, key), t)
+    except Exception as e:
+        log("读取告警冷却出错", e)
+
+
+_cool_saved = [""]
+
+
+def cool_save(con):
+    try:
+        now = time.time()
+        d = {f"{k[0]}\x1f{k[1]}": round(v) for k, v in _cool.items() if now - v < 7 * 86400}
+        js = json.dumps(d, ensure_ascii=False)
+        if js != _cool_saved[0]:
+            with con:
+                con.execute("INSERT INTO kv(k,v) VALUES('alert_cool',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (js,))
+            _cool_saved[0] = js
+    except Exception as e:
+        log("保存告警冷却出错", e)
+
+
 def run():
     con = db.open_db()
+    cool_load(con)
     try:
         note(con, "boot", "boot", f"面板启动 {config.VERSION}", "容器重启或更新后会记一条;配合下面的「路由器重启」可以区分是面板重启还是路由器重启。")
     except Exception:
@@ -629,6 +690,7 @@ def run():
             evaluate(con)
         except Exception as e:
             log("告警引擎出错", e)
+        cool_save(con)
         try:
             from . import insight
             insight.maybe_push_report(con)

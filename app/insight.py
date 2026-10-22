@@ -9,7 +9,7 @@ import re
 import time
 
 from . import agh, alerts, collector, config, geo, netstat, realtime
-from .util import api_call, log
+from .util import api_call, is_mac, log
 
 
 def _web():
@@ -101,6 +101,22 @@ def leaks(con, days=7):
     d, r = w.kind_names()
     rows = con.execute("SELECT host, node, rule, SUM(up+down) b, COUNT(DISTINCT client) c FROM traffic WHERE day>=? GROUP BY host, node, rule", (since,)).fetchall()
     cn_proxy, fo_direct = {}, {}
+    from . import devices
+    macips, stored = devices.ips_by_dev(con), devices.stored_names(con)
+
+    def devs_of(hosts):
+        """每个域名的主要来源设备(按流量),最多 3 个名字。"""
+        if not hosts:
+            return {}
+        by = {}
+        for h, cl, b in con.execute("SELECT host, client, SUM(up+down) FROM traffic WHERE day>=? AND host IN (%s) GROUP BY host, client" % ",".join("?" * len(hosts)), [since] + list(hosts)):
+            by.setdefault(h, []).append((b, cl))
+        out = {}
+        for h, lst in by.items():
+            lst.sort(reverse=True)
+            names = [devices.NAMES.label(cl, macips.get(cl, [] if is_mac(cl) else [cl]), stored) or (macips.get(cl) or [cl])[0] for _, cl in lst[:3]]
+            out[h] = {"names": names, "n": len(lst)}
+        return out
     for host, node, rule, b, c in rows:
         if not host or _IPLIT.match(host):
             continue
@@ -123,8 +139,12 @@ def leaks(con, days=7):
     except Exception:
         pass
     f = lambda m: sorted(m.values(), key=lambda x: -x["bytes"])[:15]
-    return {"days": days, "cn_proxy": f(cn_proxy), "cn_proxy_bytes": sum(x["bytes"] for x in cn_proxy.values()),
-            "fo_direct": f(fo_direct), "fo_direct_bytes": sum(x["bytes"] for x in fo_direct.values()),
+    cp, fd = f(cn_proxy), f(fo_direct)
+    dv = devs_of([x["host"] for x in cp + fd] + [x["host"] for x in dns_rows[:12]])
+    for x in cp + fd + dns_rows[:12]:
+        x["devs"] = dv.get(x["host"], {"names": [], "n": 0})
+    return {"days": days, "cn_proxy": cp, "cn_proxy_bytes": sum(x["bytes"] for x in cn_proxy.values()),
+            "fo_direct": fd, "fo_direct_bytes": sum(x["bytes"] for x in fo_direct.values()),
             "dns_local": dns_rows[:12], "dns_local_bytes": sum(x["bytes"] for x in dns_rows)}
 
 
