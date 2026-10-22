@@ -277,6 +277,9 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .stile.ok{border-left-color:var(--good)}.stile.warn{border-left-color:var(--warn)}.stile.bad{border-left-color:var(--bad)}.stile.info{border-left-color:var(--accent)}
 .stile.warn .v{color:var(--warn)}.stile.bad .v{color:var(--bad)}
 .find{display:flex;gap:10px;align-items:flex-start;padding:8px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:6px}.find:first-child{border-top:0}
+#backSec{position:fixed;bottom:22px;right:24px;z-index:40;border-radius:16px;padding:6px 14px;background:var(--accent);color:#fff;border:0;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+@media(max-width:820px){#backSec{right:14px;bottom:16px}}
+.ignb{align-self:center;font-size:12px;padding:2px 10px;border-radius:12px;color:var(--muted);background:transparent;border:1px solid var(--line);cursor:pointer}
 .find .t{flex:1;min-width:0}.find .go{color:var(--muted);align-self:center}
 .allok{display:flex;gap:8px;align-items:center;color:var(--good);padding:10px 4px}
 .secgrid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:var(--gap)}
@@ -950,7 +953,7 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dat
   else if(k==="devs"){S.devs.clear();renderDevList()}
   else{S[k]="";if(k==="q")$("#hostQ").value=""}
   renderChrome();syncAp();refresh()};
-function showTab(){for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";placeAcct();renderChrome()}
+function showTab(){setTimeout(()=>{if(S.tab==="security")BACK=null;if(typeof backBtn==="function")backBtn()},0);for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";placeAcct();renderChrome()}
 /* 右上角账号按钮:桌面端有搜索栏的页面放在搜索栏最右边,没有搜索栏的页面(设置 / 告警 / 安全 / 容器)放在页面顶部右侧;
    手机端变成小图标,放在顶栏搜索行里主题按钮的后面 */
 const ACC_ICO='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
@@ -2042,16 +2045,27 @@ const WD=["周一","周二","周三","周四","周五","周六","周日"];
 const miniTbl=(head,rows)=>rows.length?`<div class="scroll"><table><thead><tr>${head.map((h,i)=>`<th class="${i?"n":""}">${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`:"";
 
 /* 安全页顶部:指标卡 + 需要关注 */
+let BACK=null;
+function backBtn(){let b=$("#backSec");if(!b){b=document.createElement("button");b.id="backSec";b.textContent="‹ 返回安全";b.onclick=()=>{BACK=null;S.tab="security";showTab();refresh()};document.body.appendChild(b)}b.style.display=BACK&&S.tab!=="security"?"":"none"}
 function secGo(go){const [k,v]=String(go||"").split(":");
+  if((k==="tab"||k==="set")&&S.tab==="security")BACK="security";
   if(k==="tab"){S.tab=v;showTab();refresh()}
   else if(k==="set")openSettings(v);
   else if(k==="sec"){const m={agh:"#aghCard",dns:"#dnsCard",lk:"#lkCard",q:"#qCard",geo:"#geoCard"}[v];const el=m&&$(m);if(el)el.scrollIntoView({behavior:"smooth",block:"start"})}}
 document.addEventListener("click",e=>{const el=e.target.closest("[data-go]");if(el)secGo(el.dataset.go)});
 const secTilesH=j=>j.tiles.map(t=>`<button class="stile ${t.level}" data-go="${esc(t.go)}" title="${esc(t.sub)}"><span class="l">${esc(t.label)}</span><span class="v">${esc(t.value)}</span><span class="s">${esc(t.sub)}</span></button>`).join("");
-const secFindsH=j=>j.findings.length?j.findings.map(x=>`<div class="find" data-go="${esc(x.go)}"><span class="lv ${x.level}">${LV[x.level]||x.level}</span><div class="t"><b>${esc(x.title)}</b><div class="sub">${esc(x.detail)}</div></div><span class="go">›</span></div>`).join(""):'<div class="allok"><span>✓</span><b>目前没有需要处理的事项</b></div>';
+const IGN_K="flux.secIgn";
+const ignGet=()=>{try{return JSON.parse(localStorage.getItem(IGN_K)||"[]")}catch(e){return[]}};
+const ignSet=a=>{try{localStorage.setItem(IGN_K,JSON.stringify(a))}catch(e){}};
+const ignKey=x=>x.go+"|"+x.title.replace(/[\d.]+\s*(%|[KMGT]?B)?/g,"#");
+const secFindsH=j=>{const ig=new Set(ignGet()),all=j.findings,vis=all.filter(x=>!(x.level!=="bad"&&ig.has(ignKey(x)))),hid=all.length-vis.length;
+  const rows=vis.map(x=>`<div class="find" data-go="${esc(x.go)}"><span class="lv ${x.level}">${LV[x.level]||x.level}</span><div class="t"><b>${esc(x.title)}</b><div class="sub">${esc(x.detail)}</div></div>${x.level!=="bad"?`<button class="ignb" data-ign="${esc(ignKey(x))}" title="忽略这一项(可在下方恢复)">忽略</button>`:""}<span class="go">›</span></div>`).join("");
+  return (rows||'<div class="allok"><span>✓</span><b>目前没有需要处理的事项</b></div>')+(hid?`<div class="sub" style="margin-top:8px">已忽略 ${hid} 项 · <a href="#" id="ignReset">恢复显示</a></div>`:"")};
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ign]");if(b){e.stopPropagation();e.preventDefault();const a=ignGet();a.push(b.dataset.ign);ignSet(a);loadSecTab();return}
+  if(e.target.id==="ignReset"){e.preventDefault();ignSet([]);loadSecTab()}},true);
 function loadSecTab(){load("secs","/api/secsum",{},j=>{
   $("#secTiles").innerHTML=secTilesH(j);$("#secFinds").innerHTML=secFindsH(j);
-  const n=j.bad+j.warn;$("#secLvl").innerHTML=n?`<span class="lv ${j.bad?"bad":"warn"}">${n} 项待处理</span>`:'<span class="lv ok">正常</span>';$("#secAt").textContent=fmtTs(j.at)})}
+  const ig=new Set(ignGet()),vis=j.findings.filter(x=>!(x.level!=="bad"&&ig.has(ignKey(x)))),n=vis.filter(x=>x.level==="bad"||x.level==="warn").length,hasBad=vis.some(x=>x.level==="bad");$("#secLvl").innerHTML=n?`<span class="lv ${hasBad?"bad":"warn"}">${n} 项待处理</span>`:'<span class="lv ok">正常</span>';$("#secAt").textContent=fmtTs(j.at)})}
 function loadSecurity(){loadSecTab();loadAgh();loadDns();loadLeaks();loadGeo();loadHeat();loadQuality()}
 function loadAgh(){load("agh","/api/agh",{},j=>{
   const el=$("#aghBody");
