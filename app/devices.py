@@ -351,7 +351,7 @@ def import_uci(con, text):
                 con.execute("INSERT INTO devices(dev,name) VALUES(?,?) ON CONFLICT(dev) DO UPDATE SET name=excluded.name",
                             (k.lower(), h["name"][:60]))
                 n += 1
-    log(f"导入设备名 {n} 条")
+    log(f"导入设备别名 {n} 条")
     return {"hosts": len(hosts), "entries": n}
 
 

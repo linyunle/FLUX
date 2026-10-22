@@ -1,4 +1,4 @@
-"""节点测速(可选):nikki 只给策略组里的节点做延迟测试,其它节点没有测速数据,节点评分就看不到。
+"""节点探测(可选):nikki 只给策略组里的节点做延迟测试,其它节点没有测速数据,节点评分就看不到。
 开启后,面板每隔一段时间让 nikki 给「最近 24 小时真正用过的节点」测一次延迟(GET /proxies/节点/delay,
 不改任何配置),结果会进 nikki 的测速记录,再被面板读回去算评分。只测在用的节点,请求量很小。"""
 import json
@@ -73,7 +73,7 @@ def _test_one(n, url, prov):
             err = f"HTTP {e.code}"
             if e.code in (404, 400) and path is not paths[-1]:
                 continue   # 这个接口不认,换下一个
-            return False, err   # 504 之类 = 节点测速超时,是正常的失败
+            return False, err   # 504 之类 = 节点探测超时,是正常的失败
         except Exception as e:
             return False, type(e).__name__
     return False, err
@@ -93,7 +93,7 @@ def _run(nodes, url):
             bad += 1   # 超时也会被 nikki 记成一次失败的测速,这正是评分要的数据
             errs[err] = errs.get(err, 0) + 1
     _state.update(running=False, result={"at": int(time.time()), "ok": ok, "fail": bad, "n": len(nodes), "errs": errs})
-    log(f"节点测速完成:{len(nodes)} 个节点,{ok} 个有响应,{bad} 个超时/失败" + (f"({'、'.join(f'{k}×{v}' for k, v in errs.items())})" if errs else ""))
+    log(f"节点探测完成:{len(nodes)} 个节点,{ok} 个有响应,{bad} 个超时/失败" + (f"({'、'.join(f'{k}×{v}' for k, v in errs.items())})" if errs else ""))
 
 
 def check(con, cfg, now):

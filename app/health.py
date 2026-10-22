@@ -49,7 +49,7 @@ def checks(con):
     if st.get("ok"):
         out.append(_item("nikki 接口", "ok", f"连接正常,最近一次成功 {_ago(now - st.get('last_ok', now))}前"))
     else:
-        out.append(_item("nikki 接口", "bad", st.get("error") or "连不上", "到「设置 → 连接」检查 API 地址和密钥"))
+        out.append(_item("nikki 接口", "bad", st.get("error") or "连不上", "到「设置 → 内核连接」检查 API 地址和密钥"))
     try:
         du = shutil.disk_usage(config.DATA_DIR)
         lv = "bad" if du.free < 100 << 20 else "warn" if du.free < 500 << 20 else "ok"
@@ -77,12 +77,12 @@ def checks(con):
         out.append(_item("nikki 日志目录", "ok", f"{d} 可读({len(fs)} 个文件)"))
     except OSError:
         out.append(_item("nikki 日志目录", "warn", f"{d} 不存在或读不了,只能通过 nikki 接口收内核日志",
-                         "compose 里加只读挂载 /var/log/nikki:/host/var/log/nikki(设置 → nikki 日志里有写法)"))
+                         "compose 里加只读挂载 /var/log/nikki:/host/var/log/nikki(设置 → 内核与插件日志里有写法)"))
     lease = "/host/tmp/dhcp.leases"
     out.append(_item("DHCP 租约文件", "ok" if os.access(lease, os.R_OK) else "info",
                      "可读" if os.access(lease, os.R_OK) else "没挂载:动态地址的设备只能显示 IP,看不到主机名"))
     if not auth.enabled():
-        out.append(_item("访问密码", "warn", "没有设置:同一局域网的任何人都能打开并修改面板", "设置 → 安全与隐私 里设置访问密码"))
+        out.append(_item("访问密码", "warn", "没有设置:同一局域网的任何人都能打开并修改面板", "设置 → 安全与访问 里设置访问密码"))
     else:
         out.append(_item("访问密码", "ok", "已设置" + ("(含只读账号)" if auth.has_viewer() else "")))
     if os.environ.get("ALLOW_NETS"):

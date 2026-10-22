@@ -30,7 +30,7 @@ def short_ua(ua):
 
 
 def _label(con, ip):
-    """IP -> 设备名(按 ARP/DHCP 记录找 MAC,再取你起的名字);找不到返回空。"""
+    """IP -> 设备别名(按 ARP/DHCP 记录找 MAC,再取你起的名字);找不到返回空。"""
     try:
         from . import alerts
         r = con.execute("SELECT mac FROM ipmap WHERE ip=? ORDER BY seen DESC LIMIT 1", (ip,)).fetchone()

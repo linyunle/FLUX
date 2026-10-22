@@ -289,7 +289,7 @@ def check(con, cfg, now):
     r = cfg["rules"]["syslog_crit"]
     lines = "\n".join(f"{time.strftime('%H:%M:%S', time.localtime(x[0]))} [{SEV[x[2]]}] {x[3] + ': ' if x[3] else ''}{x[4][:160]}" for x in hit[:5])
     title = f"路由器日志出现 {len(hit)} 条严重信息"
-    detail = f"{lines}\n(完整日志在「设置 → 系统日志」)"
+    detail = f"{lines}\n(完整日志在「设置 → 路由器系统日志」)"
     if r["on"] and alerts._allow("syslog_crit", "syslog", r["cool_min"], now):
         alerts.fire(con, cfg, "syslog_crit", "warn", "syslog", title, detail, now)
     else:

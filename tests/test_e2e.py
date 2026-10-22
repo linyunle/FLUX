@@ -605,6 +605,20 @@ try:
     ok(rq2(adm, "/api/status")[0] == 200 and rq2(other, "/api/status")[0] == 200 and all(r["id"] != vrow_[0]["id"] for r in rq2(adm, "/api/auth/sessions")[1]["rows"]), "已登录设备:其他设备不受影响,被踢的从列表消失")
     ok(rq2(adm, "/api/auth/session/revoke", {"id": "nope"})[0] == 400, "已登录设备:不存在的会话号被拒")
     vw = sess(); ok(rq2(vw, "/api/login", {"password": "viewerpw1"})[0] == 200, "已登录设备:被踢的账号可以重新登录")
+    # 只读账号权限勾选 / 登录记住选项
+    mac_ = "aa:bb:cc:dd:ee:01"
+    ok(rq2(vw, "/api/device", {"dev": mac_, "name": "只读改名"})[0] == 403 and rq2(vw, "/api/status")[1]["auth"]["perms"] == {"export": False, "edit": False}, "只读权限:默认不能改设备别名,导出也关着")
+    ok(rq2(vw, "/api/auth/viewer/perms", {"edit": True})[0] == 403, "只读权限:只读账号自己不能改权限")
+    ok(rq2(adm, "/api/auth/viewer/perms", {"export": True, "edit": True})[1]["perms"] == {"export": True, "edit": True}, "只读权限:管理员勾选后生效")
+    ok(rq2(vw, "/api/device", {"dev": mac_, "name": "只读改名"})[0] == 200 and rq2(vw, "/api/groups/set", {"dev": mac_, "group": "测试组"})[0] == 200, "只读权限:开放后可以改设备别名 / 分组")
+    ok(rq2(vw, "/api/groups/policy", {"group": "测试组", "on": True, "allow": "x.com"})[0] == 403 and rq2(vw, "/api/devices/import", {"text": "1.1.1.1 a"})[0] == 403 and rq2(vw, "/api/config", {"api": "http://x:1"})[0] == 403, "只读权限:开放编辑也不包含分组白名单 / 导入 / 连接设置")
+    ok(rq2(vw, "/api/status")[1]["auth"]["perms"]["export"] is True, "只读权限:前端能读到自己的权限")
+    rq2(adm, "/api/device", {"dev": mac_, "name": ""}); rq2(adm, "/api/auth/viewer/perms", {"export": False, "edit": False})
+    c_, j_, h_ = rq2(sess(), "/api/login", {"password": "viewerpw1", "remember": False})
+    ok(c_ == 200 and "Max-Age" not in h_["Set-Cookie"], "登录:不勾选「30 天内免登录」= 会话 Cookie(没有 Max-Age)")
+    c_, j_, h_ = rq2(sess(), "/api/login", {"password": "viewerpw1", "remember": True})
+    ok("Max-Age=2592000" in h_["Set-Cookie"], "登录:勾选「30 天内免登录」= 保留 30 天")
+    ok("Max-Age=2592000" in rq2(sess(), "/api/login", {"password": "viewerpw1"})[2]["Set-Cookie"], "登录:没带 remember 的 API 调用沿用 30 天")
     # 退出所有设备
     ok(rq2(adm, "/api/auth/revoke", {})[0] == 200 and rq2(adm, "/api/status")[0] == 200, "退出所有设备:当前管理员会话保持")
     ok(rq2(vw, "/api/status")[0] == 401, "退出所有设备:其他会话(只读)失效")

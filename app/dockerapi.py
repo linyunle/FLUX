@@ -72,7 +72,7 @@ def save_cfg(con, body):
         raise ValueError("地址要写成 http://127.0.0.1:2375 这样,只允许本机/内网地址")
     c = {"on": bool(body.get("on")), "url": url, "control": bool(body.get("control"))}
     if c["control"] and not control_ok():
-        raise ValueError("要先在「设置 → 安全与隐私」设置访问密码,才能开启容器的启动/停止功能")
+        raise ValueError("要先在「设置 → 安全与访问」设置访问密码,才能开启容器的启动/停止功能")
     with con:
         con.execute("INSERT INTO kv(k,v) VALUES('docker',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(c),))
     with _lock:
@@ -284,7 +284,7 @@ def act(con, cid, action, ip=""):
         raise ValueError("不支持的操作")
     cfg = load_cfg(con)
     if not cfg["on"] or not cfg["control"]:
-        raise ValueError("没有开启容器的启动/停止功能(设置 → 容器)")
+        raise ValueError("没有开启容器的启动/停止功能(设置 → 容器管理)")
     if not control_ok():
         raise ValueError("没有设置访问密码,不能操作容器")
     now = time.time()

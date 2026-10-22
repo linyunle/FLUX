@@ -1,6 +1,6 @@
 """AdGuard Home 接入:读 DNS 统计和被拦截的查询。
 
-账号密码在面板「设置 → DNS(AdGuard Home)」里填,只存在 data 目录的数据库里(kv 表 agh_cfg),
+账号密码在面板「设置 → DNS 解析(AdGuard Home)」里填,只存在 data 目录的数据库里(kv 表 agh_cfg),
 接口不会原样返回密码。只读:面板不会改 AdGuard 的任何设置。
 """
 import base64
@@ -94,7 +94,7 @@ def _pairs(lst, n=10):
 
 
 def _ip_names(con):
-    """IP → 设备名(面板已知的设备),AdGuard 里的客户端是 IP。"""
+    """IP → 设备别名(面板已知的设备),AdGuard 里的客户端是 IP。"""
     from . import alerts
     cache = alerts._dev_names(con)
     out = {}

@@ -608,6 +608,13 @@ def test_security():
     auth.revoke_all()
     assert auth.cookie_role(ca) is None
     auth.load(); assert auth.has_viewer() and auth.check_role("viewer-pw2") == "v"   # 重启后还在
+    cs, cl = auth.make_cookie("a", remember=False), auth.make_cookie("a", remember=True)
+    assert auth.cookie_short(cs) and not auth.cookie_short(cl) and auth.cookie_role(cs) == "a"
+    assert "Max-Age" not in auth.cookie_header("x", remember=False) and "Max-Age=2592000" in auth.cookie_header("x")
+    assert auth.perms() == {"export": False, "edit": False}
+    auth.set_perms({"edit": True}); assert auth.perms() == {"export": False, "edit": True}
+    auth.load(); assert auth.perms()["edit"] is True                      # 重启后还在
+    auth.set_viewer(""); assert auth.perms() == {"export": False, "edit": False}   # 没有只读账号时权限不生效
     assert "Secure" in auth.cookie_header("x", secure=True) and "Secure" not in auth.cookie_header("x")
     # 升级前自动备份:版本变了才备份,只留 3 份,文件权限 600
     d2 = tempfile.mkdtemp(); config.DATA_DIR = d2; config.DB_PATH = os.path.join(d2, "t.db")

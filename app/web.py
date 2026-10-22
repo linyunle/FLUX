@@ -344,7 +344,7 @@ def q_protocols(p):
 
 
 def q_apps(p):
-    """应用识别(域名特征 + 端口)。by=app / cat / client(Top Talkers) / node;可用 app、cat 过滤做联动下钻。"""
+    """应用特征库(域名特征 + 端口)。by=app / cat / client(Top Talkers) / node;可用 app、cat 过滤做联动下钻。"""
     by = one(p, "by", "app")
     if by not in ("app", "cat", "client", "node"):
         return 400, {"error": "by 不对"}
@@ -791,7 +791,7 @@ def q_status(p):
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
         "now": int(time.time()), "live_at": live()["at"],
-        "auth": {"enabled": auth.enabled(), "env": auth.is_env(), "role": getattr(_ctx, "role", "a"), "viewer": auth.has_viewer(), "viewer_env": auth.viewer_is_env(), "allow_nets": bool(os.environ.get("ALLOW_NETS"))}, "alerts_unread": _wcon_ro(alerts.unread),
+        "auth": {"enabled": auth.enabled(), "env": auth.is_env(), "role": getattr(_ctx, "role", "a"), "viewer": auth.has_viewer(), "perms": auth.perms(), "viewer_env": auth.viewer_is_env(), "allow_nets": bool(os.environ.get("ALLOW_NETS"))}, "alerts_unread": _wcon_ro(alerts.unread),
         "wan": bool(collector.WAN_IFACES), "airports": airport_names(),
         "docker": bool(_wcon_ro(lambda con: dockerapi.load_cfg(con)["on"])),
     }
@@ -962,10 +962,10 @@ def p_group_policy(body):
     return _wcon(lambda con: groups.save_policy(con, body.get("group"), body.get("on"), body.get("allow")))
 
 
-AUDIT = {"/api/alerts/config": "修改告警规则 / 推送渠道", "/api/agh/config": "修改 AdGuard 连接", "/api/quota": "修改机场套餐",
-         "/api/report/config": "修改周报设置", "/api/apps/rules": "修改应用识别规则", "/api/airports/rules": "修改机场归类规则",
+AUDIT = {"/api/alerts/config": "修改告警规则 / 推送渠道", "/api/agh/config": "修改 AdGuard 连接", "/api/quota": "修改订阅额度",
+         "/api/report/config": "修改周报设置", "/api/apps/rules": "修改应用特征库规则", "/api/airports/rules": "修改订阅归类规则",
          "/api/groups/policy": "修改分组白名单", "/api/restore": "从备份恢复设置", "/api/config": "修改 nikki 连接",
-         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/probe": "修改节点测速设置"}
+         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/probe": "修改节点探测设置"}
 
 
 def _audit(path, body):
@@ -1183,6 +1183,7 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 
 VIEWER_DENY_GET = {"/api/backup", "/api/diag", "/api/syslog/export", "/api/nklog/export", "/api/docker/logs", "/api/docker/cfg", "/api/agh/config",
                    "/api/alerts/config", "/api/report/config", "/api/dns/cfg", "/api/listen", "/api/storage", "/api/health", "/api/autobackup/get", "/api/auth/sessions"}
 VIEWER_POST_OK = {"/api/logout", "/api/clienterr"}
+VIEWER_EDIT_POST = {"/api/device", "/api/groups/set", "/api/presence/watch"}   # 管理员给只读账号开了「修改设备别名 / 分组 / 关注」才放行
 VIEWER_POST_NOOP = {"/api/ui", "/api/alerts/seen"}     # 外观 / 已读标记:只读账号改了也不写到服务器(否则会覆盖管理员的布局),但不报错
 
 
@@ -1260,8 +1261,8 @@ class Handler(BaseHTTPRequestHandler):
     def _ip(self):
         return self._who()[0]
 
-    def _ck(self, val, clear=False):
-        return {"Set-Cookie": auth.cookie_header(val, clear=clear, secure=self._who()[1])}
+    def _ck(self, val, clear=False, remember=True):
+        return {"Set-Cookie": auth.cookie_header(val, clear=clear, secure=self._who()[1], remember=remember)}
 
     def _net_ok(self):
         peer = self.client_address[0]
@@ -1284,9 +1285,11 @@ class Handler(BaseHTTPRequestHandler):
                 auth.touch(sid, self._ip(), self.headers.get("User-Agent", ""))
         return role
 
-    def _mk(self, role):
-        """给这次登录发一个新会话 Cookie(记下来源 IP 和浏览器)。"""
-        return self._ck(auth.make_cookie(role, self._ip(), self.headers.get("User-Agent", "")))
+    def _mk(self, role, remember=None):
+        """给这次登录发一个新会话 Cookie(记下来源 IP 和浏览器)。remember=None:沿用当前 Cookie 的模式(30 天 / 仅本次)。"""
+        if remember is None:
+            remember = not auth.cookie_short(self._cookie()) if self._cookie() else True
+        return self._ck(auth.make_cookie(role, self._ip(), self.headers.get("User-Agent", ""), remember), remember=remember)
 
     def _authed(self, params):
         return self._role(params) is not None
@@ -1360,7 +1363,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, data)
 
     def _syslog_export(self, params):
-        """把当前筛选条件下的路由器日志导出成纯文本(最多 5000 条);默认把 IP / MAC / 设备名打码,方便发给别人看。"""
+        """把当前筛选条件下的路由器日志导出成纯文本(最多 5000 条);默认把 IP / MAC / 设备别名打码,方便发给别人看。"""
         con = ro()
         try:
             rows = syslog.query(con, int(one(params, "level", "7") or 7), one(params, "q"), min(5000, int(one(params, "n", "1000") or 1000)))
@@ -1375,7 +1378,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, body, "text/plain; charset=utf-8", extra)
 
     def _nklog_export(self, params):
-        """nikki 内核 / 插件日志导出成纯文本(最多 5000 条);默认打码 IP / MAC / 设备名,dom=1 再把域名换成代号。"""
+        """nikki 内核 / 插件日志导出成纯文本(最多 5000 条);默认打码 IP / MAC / 设备别名,dom=1 再把域名换成代号。"""
         con = ro()
         try:
             rows = nikkilog.query(con, one(params, "src"), int(one(params, "level", "7") or 7), one(params, "q"), min(5000, int(one(params, "n", "1000") or 1000)))
@@ -1415,7 +1418,9 @@ class Handler(BaseHTTPRequestHandler):
         if auth.locked(ip):
             return self._send(429, {"error": "尝试次数太多,请 1 分钟后再试"})
         try:
-            pw = str(self._json_body().get("password") or "")
+            d_ = self._json_body()
+            pw = str(d_.get("password") or "")
+            rem = d_.get("remember", True) is not False
         except ValueError as e:
             return self._send(400, {"error": str(e)})
         role = auth.check_role(pw)
@@ -1425,7 +1430,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._seen("login_ok")
                 if role == "v":
                     log("只读账号登录", ip)
-            return self._send(200, {"ok": True, "role": role}, extra=self._mk(role) if auth.enabled() else None)
+            return self._send(200, {"ok": True, "role": role}, extra=self._mk(role, rem) if auth.enabled() else None)
         auth.fail(ip)
         log("登录失败", ip)
         self._seen("login_fail")
@@ -1489,7 +1494,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._deny()
         if u.path == "/api/logout":
             return self._send(200, {"ok": True}, extra=self._ck("", clear=True))
-        if role == "v" and u.path not in VIEWER_POST_OK:
+        if role == "v" and u.path not in VIEWER_POST_OK and not (u.path in VIEWER_EDIT_POST and auth.perms()["edit"]):
             if u.path in VIEWER_POST_NOOP:
                 return self._send(200, {"ok": True, "readonly": True})
             return self._send(403, {"error": "只读账号不能修改设置"})
@@ -1499,6 +1504,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._auth_viewer()
         if u.path == "/api/auth/revoke":
             return self._auth_revoke()
+        if u.path == "/api/auth/viewer/perms":
+            try:
+                auth.set_perms(self._json_body())
+            except ValueError as e:
+                return self._send(400, {"error": str(e)})
+            log("只读账号权限已修改", self._ip())
+            return self._send(200, {"ok": True, "perms": auth.perms()})
         if u.path == "/api/auth/session/revoke":
             return self._auth_sess_revoke()
         fn = POST_ROUTES.get(u.path)

@@ -1,4 +1,4 @@
-"""登录页壁纸:在「设置 → 安全与隐私」上传一张图,登录页就像 Argon 主题那样以它为背景(登录卡片是毛玻璃)。
+"""登录页壁纸:在「设置 → 安全与访问」上传一张图,登录页就像 Argon 主题那样以它为背景(登录卡片是毛玻璃)。
 图片存在 data/wallpaper.bin;只接受 JPEG / PNG / WebP(按文件头判断,不信浏览器给的类型),最大 700KB(页面里会先自动压缩)。"""
 import base64
 import json
@@ -115,7 +115,7 @@ def status():
 
 
 def _get(url, limit):
-    from . import geo        # 复用 GeoIP 下载用的代理设置(设置 → 数据 里那个)
+    from . import geo        # 复用 GeoIP 下载用的代理设置(设置 → GeoIP 数据库 里那个)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 FLUX"})
     with geo._opener().open(req, timeout=30) as r:
         return r.read(limit + 1)

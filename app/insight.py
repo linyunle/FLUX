@@ -150,7 +150,7 @@ def heatmap(con, devs=None, days=14):
     return {"days": days, "cells": cells, "max": peak[0], "peak": {"weekday": peak[1], "hour": peak[2], "bytes": peak[0]} if peak[0] else None}
 
 
-# ---------------------------------------------------------------- 机场套餐
+# ---------------------------------------------------------------- 订阅额度
 def _date_or_empty(v, label):
     v = str(v or "").strip()
     if not v:
@@ -425,7 +425,7 @@ def check_quota_expire(con, cfg, now):
             lvl = "bad" if d <= 1 else "warn"
             title = f"套餐已到期:{q['airport']}" if d < 0 else f"套餐今天到期:{q['airport']}" if d == 0 else f"套餐 {d} 天后到期:{q['airport']}"
             alerts.fire(con, cfg, "quota_expire", lvl, q["airport"], title,
-                        f"{q['airport']} 的到期日是 {q['expire']}。记得续费;续费后到「设置 → 机场套餐」把到期日改成新的日期。", now)
+                        f"{q['airport']} 的到期日是 {q['expire']}。记得续费;续费后到「设置 → 订阅额度」把到期日改成新的日期。", now)
 
 
 def check_quota(con, cfg, now):
@@ -612,7 +612,7 @@ def secsum(con, force=False):
         if ns:
             bad = [n for n, v in ns.items() if (v.get("fails") or 0) >= 3]
             lvl = "bad" if len(bad) == len(ns) else "warn" if bad else "ok"
-            tile("nodes", "节点测速", f"{len(ns) - len(bad)} / {len(ns)}", "可用 / 全部" if not bad else "失败:" + "、".join(bad[:2]), lvl, "tab:nodes")
+            tile("nodes", "节点探测", f"{len(ns) - len(bad)} / {len(ns)}", "可用 / 全部" if not bad else "失败:" + "、".join(bad[:2]), lvl, "tab:nodes")
             if bad:
                 find("bad" if lvl == "bad" else "warn", f"{len(bad)} 个节点连续测速失败", "、".join(bad[:5]), "tab:nodes")
     except Exception as e:
@@ -647,9 +647,9 @@ def secsum(con, force=False):
             sh = rh["match"]["share"]
             tile("match", "兜底规则占比", f"{sh}%", "落到 Match 的流量", "warn" if sh >= 30 else "ok", "tab:rules")
             if sh >= 30:
-                find("warn", f"{sh}% 的流量落到兜底规则", "大量域名没被任何规则覆盖,到「规则策略」页查看", "tab:rules")
+                find("warn", f"{sh}% 的流量落到兜底规则", "大量域名没被任何规则覆盖,到「规则」页查看", "tab:rules")
         if rh.get("has_hits") and rh.get("zero_total", 0) >= 20:
-            find("info", f"{rh['zero_total']} 条规则从未命中", "可以考虑清理,到「规则策略」页查看", "tab:rules")
+            find("info", f"{rh['zero_total']} 条规则从未命中", "可以考虑清理,到「规则」页查看", "tab:rules")
     except Exception as e:
         log("安全概览(规则)", e)
     try:
@@ -666,7 +666,7 @@ def secsum(con, force=False):
                     find("bad" if q["pct"] >= 95 else "warn", f"{q['airport']} 套餐已用 {q['pct']}%",
                          f"{_b(q['used'])} / {q['gb']:g} GB" + (f";按近 7 天速度预计 {q['exhaust']} 用完" if q["exhaust"] else ""), "tab:nodes")
         else:
-            tile("quota", "套餐用量", "未设置", "机场套餐", "info", "set:quota")
+            tile("quota", "套餐用量", "未设置", "订阅额度", "info", "set:quota")
     except Exception as e:
         log("安全概览(套餐)", e)
     on = auth.enabled() or bool(config.PAGE_TOKEN)

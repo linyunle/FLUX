@@ -1,6 +1,6 @@
 """自检 + 诊断包。
 自检:对面板自己的运行状态、数据一致性、配置做一遍检查,把「看起来不对劲」的地方列出来(很多 bug 会先在这里露出来)。
-诊断包:版本、配置摘要、节点/订阅状态、最近告警、面板日志、前端报错、自检结果打成一个 JSON;默认把 IP/MAC/设备名打码,不含任何密码或 Token。"""
+诊断包:版本、配置摘要、节点/订阅状态、最近告警、面板日志、前端报错、自检结果打成一个 JSON;默认把 IP/MAC/设备别名打码,不含任何密码或 Token。"""
 import hashlib
 import os
 import platform
@@ -49,7 +49,7 @@ def selfcheck(con, now=None):
     c = w.collector.COLLECTOR
     st = dict(c.status) if c else {}
     if not c or not st.get("ok"):
-        out.append(_f("bad", "面板连不上 nikki", f"{st.get('error') or '采集器未启动'}。检查「设置 → 连接」里的地址和密码。"))
+        out.append(_f("bad", "面板连不上 nikki", f"{st.get('error') or '采集器未启动'}。检查「设置 → 内核连接」里的地址和密码。"))
     live_at = w.live()["at"]
     if live_at and now - live_at > 20:
         out.append(_f("warn", "实时采集停了", f"实时数据已经 {int(now - live_at)} 秒没有更新,设备页/实时速度会停住。看面板日志里有没有「实时速度读取失败」。"))
@@ -117,18 +117,18 @@ def selfcheck(con, now=None):
         if w.airport_of(node) == airports.NONE:
             noc += s or 0
     if tot and noc * 100 / tot >= 20:
-        out.append(_f("warn", "有不少流量归不到机场", f"近 7 天 {round(noc * 100 / tot)}% 的代理流量落在「未分类」节点上。到「设置 → 机场归类」补规则,套餐用量和机场统计才准。"))
+        out.append(_f("warn", "有不少流量归不到机场", f"近 7 天 {round(noc * 100 / tot)}% 的代理流量落在「未分类」节点上。到「设置 → 订阅归类」补规则,套餐用量和机场统计才准。"))
     used = {r[0] for r in con.execute("SELECT DISTINCT node FROM hourly WHERE hour>=?", (time.strftime("%Y-%m-%d %H", time.localtime(now - 86400)),))} - airports.SPECIAL - {"DIRECT", "REJECT"}
     scored = {r[0] for r in con.execute("SELECT DISTINCT node FROM qoe WHERE hour>=?", (time.strftime("%Y-%m-%d %H", time.localtime(now - 86400)),))}
     if len(used) >= 3 and len(used & scored) * 2 < len(used):
-        out.append(_f("info", "多数在用的节点没有测速评分", f"最近 24 小时用到 {len(used)} 个节点,只有 {len(used & scored)} 个有测速数据。开启「设置 → 节点测速」后评分会覆盖在用的节点。"))
+        out.append(_f("info", "多数在用的节点没有测速评分", f"最近 24 小时用到 {len(used)} 个节点,只有 {len(used & scored)} 个有测速数据。开启「设置 → 节点探测」后评分会覆盖在用的节点。"))
     q = _kv(con, "quota", {}) or {}
     nodes = w.all_nodes()
     aps = {w.airport_of(n) for n in nodes}
     off = providers.official()
     for ap in q:
         if ap not in aps and ap not in off:
-            out.append(_f("warn", f"套餐「{ap}」对不上任何机场", "机场名和「机场归类」/订阅名都不一致,这条套餐不会有用量。"))
+            out.append(_f("warn", f"套餐「{ap}」对不上任何机场", "机场名和「订阅归类」/订阅名都不一致,这条套餐不会有用量。"))
     wn = wan.snapshot()
     if wn["at"] and wn["up"] is False:
         out.append(_f("bad", "宽带现在是断的", "路由器没有默认路由。"))
@@ -155,12 +155,12 @@ def selfcheck(con, now=None):
     try:
         ls = listen.status()
         if ls["fallback_from"]:
-            out.append(_f("warn", f"面板端口 {ls['fallback_from']} 被占用,现在用的是 {ls['current']['port']}", "「设置 → 连接 → 面板自己的访问地址和端口」里改成一个固定的空闲端口,避免每次重启地址变化。"))
+            out.append(_f("warn", f"面板端口 {ls['fallback_from']} 被占用,现在用的是 {ls['current']['port']}", "「设置 → 内核连接 → 面板自己的访问地址和端口」里改成一个固定的空闲端口,避免每次重启地址变化。"))
     except Exception:
         pass
     try:
         if ups.STATE.get("onbatt_since"):
-            out.append(_f("bad", "UPS 正在用电池供电", "市电断了,看「设置 → UPS 与到期」里的电量和预计续航。"))
+            out.append(_f("bad", "UPS 正在用电池供电", "市电断了,看「设置 → 电源与到期监控」里的电量和预计续航。"))
         if dockerapi.load_cfg(con)["on"] and dockerapi.STATE["ok"]:
             rows = (dockerapi._cache["v"] or {}).get("rows") or []
             bad = [r["name"] for r in rows if r["state"] == "restarting" or "unhealthy" in (r.get("status") or "")]
@@ -177,7 +177,7 @@ def selfcheck(con, now=None):
         ac = agh.load_cfg(con)
         d = agh._cache.get("data") or {}
         if ac["url"] and ac["on"] and d.get("configured") and d.get("ok") is False:
-            out.append(_f("warn", "读不到 AdGuard Home", f"{d.get('error') or '连接失败'}。「设置 → DNS」里检查地址和账号。"))
+            out.append(_f("warn", "读不到 AdGuard Home", f"{d.get('error') or '连接失败'}。「设置 → DNS 解析」里检查地址和账号。"))
         for s in dnsx.servers_status(con, now)["servers"]:
             if s["at"] and s["ms"] is None:
                 out.append(_f("warn", f"DNS 服务器「{s['name']}」没有响应", f"{s['note']}(近 24 小时丢包 {s['loss_pct']}%)。看「安全」页的 DNS 卡片。"))
@@ -187,7 +187,7 @@ def selfcheck(con, now=None):
         if dm["q24"] >= 200 and dm["nx_rate"] >= 30:
             out.append(_f("info", f"dnsmasq 的 NXDOMAIN 比例偏高({dm['nx_rate']}%)", "说明很多查询的域名不存在;看「安全」页 DNS 卡片里「查不到的域名」,常见原因是 IPv6 / 搜索域 / 某个设备在乱查。"))
         if syslog.load_cfg(con)["on"] and not dm["enabled"] and not (ac["url"] and ac["on"]):
-            out.append(_f("info", "没有 DNS 查询统计", "没接 AdGuard Home,也没收到 dnsmasq 的查询日志。在「设置 → DNS」里看开启办法(路由器开 dnsmasq 查询日志,面板只读)。"))
+            out.append(_f("info", "没有 DNS 查询统计", "没接 AdGuard Home,也没收到 dnsmasq 的查询日志。在「设置 → DNS 解析」里看开启办法(路由器开 dnsmasq 查询日志,面板只读)。"))
     except Exception:
         pass
     try:
@@ -196,15 +196,15 @@ def selfcheck(con, now=None):
             e24 = sum(v for k, v in nl["by_24h"].items() if k.endswith(":错误"))
             if e24 >= 10:
                 tm = nikkilog.top_messages(con, int(now) - 86400, 1)
-                out.append(_f("warn", f"最近 24 小时 nikki 日志有 {e24} 条错误", (f"最多的是:{tm[0]['example'][:90]}(×{tm[0]['n']})。" if tm else "") + "到「设置 → nikki 日志」查看;诊断包里附了汇总和最近的明细。"))
+                out.append(_f("warn", f"最近 24 小时 nikki 日志有 {e24} 条错误", (f"最多的是:{tm[0]['example'][:90]}(×{tm[0]['n']})。" if tm else "") + "到「设置 → 内核与插件日志」查看;诊断包里附了汇总和最近的明细。"))
             if not nl["rows"] and not nl["mode"]["core"] and not nl["mode"]["app"]:
-                out.append(_f("info", "还没有收到 nikki 日志", "启动后需要一会儿;如果一直没有,看「设置 → nikki 日志」里的提示(要在 compose 里只读挂载 /var/log/nikki)。"))
+                out.append(_f("info", "还没有收到 nikki 日志", "启动后需要一会儿;如果一直没有,看「设置 → 内核与插件日志」里的提示(要在 compose 里只读挂载 /var/log/nikki)。"))
     except Exception:
         pass
     try:
         from . import auth, health
         if not auth.enabled():
-            out.append(_f("warn", "面板没有设置访问密码", "同一局域网的任何人都能打开面板、看到每台设备访问的域名并修改设置。到「设置 → 安全与隐私」设置访问密码。"))
+            out.append(_f("warn", "面板没有设置访问密码", "同一局域网的任何人都能打开面板、看到每台设备访问的域名并修改设置。到「设置 → 安全与访问」设置访问密码。"))
         for c_ in health.checks(con):
             if c_["level"] == "bad" and c_["name"] in ("数据目录可写", "数据目录磁盘", "后台任务"):
                 out.append(_f("bad", c_["name"] + "异常", c_["detail"] + (";" + c_["hint"] if c_["hint"] else "")))

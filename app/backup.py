@@ -1,6 +1,6 @@
-"""设置的备份与恢复。
+"""设置的备份恢复。
 - 外观(卡片显示/顺序/主题)原本只存在浏览器里,现在也会同步一份到服务器(kv: ui_theme),换浏览器/清缓存不会丢。
-- 备份文件是一个 JSON:外观、告警规则与渠道、AdGuard、套餐、周报、机场归类规则、应用识别规则、设备名。
+- 备份文件是一个 JSON:外观、告警规则与渠道、AdGuard、套餐、周报、订阅归类规则、应用特征库规则、设备别名。
   默认不含任何密钥(推送地址/Token、AdGuard 密码);勾选「包含密钥」才写进去,文件要自己保管好。
 - 恢复只覆盖文件里有的部分;缺密钥的推送渠道/AdGuard 密码会沿用已保存的,没有就跳过并提示。"""
 import json
@@ -110,18 +110,18 @@ def restore(con, d):
     if isinstance(d.get("dns"), dict):
         step("DNS 服务器", lambda: dnsx.save_cfg(con, d["dns"]))
     if isinstance(d.get("quota"), dict):
-        step("机场套餐", lambda: insight.save_quota(con, {"quota": d["quota"]}))
+        step("订阅额度", lambda: insight.save_quota(con, {"quota": d["quota"]}))
     if isinstance(d.get("report"), dict):
         step("周报", lambda: insight.save_report_cfg(con, d["report"]))
     if isinstance(d.get("airport_rules"), str):
-        step("机场归类规则", lambda: airports.save(con, d["airport_rules"]))
+        step("订阅归类规则", lambda: airports.save(con, d["airport_rules"]))
     if isinstance(d.get("app_rules"), str):
-        step("应用识别规则", lambda: appsig.save(con, d["app_rules"]))
+        step("应用特征库规则", lambda: appsig.save(con, d["app_rules"]))
     if isinstance(d.get("devices"), dict):
         def g():
             for k, v in list(d["devices"].items())[:2000]:
                 devices.rename(con, str(k), str(v))
-        step("设备名", g)
+        step("设备别名", g)
     if isinstance(d.get("dev_groups"), dict):
         def h():
             for k, v in list(d["dev_groups"].items())[:2000]:
@@ -134,7 +134,7 @@ def restore(con, d):
                     groups.save_policy(con, g, v.get("on"), v.get("allow"))
         step("分组白名单", i)
     if isinstance(d.get("probe"), dict):
-        step("节点测速", lambda: probe.save_cfg(con, d["probe"]))
+        step("节点探测", lambda: probe.save_cfg(con, d["probe"]))
     if isinstance(d.get("dev_watch"), list):
         def w():
             for k in d["dev_watch"][:500]:

@@ -109,7 +109,7 @@ def boot(handler):
             continue
         if p != port:
             _S["fallback_from"] = port
-            log(f"⚠ 端口 {port} 被占用,面板改用 :{p}。想固定端口:先在这个页面「设置 → 连接」里改一个没人用的端口")
+            log(f"⚠ 端口 {port} 被占用,面板改用 :{p}。想固定端口:先在这个页面「设置 → 内核连接」里改一个没人用的端口")
         _S["main"] = {"host": host, "port": p, "srv": srv, "src": src if p == port else "fallback"}
         return srv
     if saved:                    # 页面里存的地址彻底绑不上:删掉它,回到环境变量

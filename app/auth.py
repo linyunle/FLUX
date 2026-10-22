@@ -12,9 +12,11 @@ import time
 from . import config
 
 COOKIE = "flux_sid"
-TTL = 30 * 86400
+TTL = 30 * 86400            # 勾选「30 天内免登录」:Cookie 和服务器端都保留 30 天
+SHORT_TTL = 12 * 3600       # 不勾选(仅本次):浏览器关掉就没了,服务器端最多也只认 12 小时
 _lock = threading.Lock()
-_st = {"salt": "", "hash": "", "key": "", "env": False, "vsalt": "", "vhash": "", "venv": False}
+_st = {"salt": "", "hash": "", "key": "", "env": False, "vsalt": "", "vhash": "", "venv": False, "vperms": {}}
+VPERMS = {"export": "导出表格(域名清单等)", "edit": "修改设备别名 / 分组 / 关注设备"}   # 只读账号可额外开放的权限,默认都关
 _fails = {}  # ip -> [次数, 锁定到]
 _sess = {}     # sid -> {role, ip, ua, created, last, exp}  已登录设备(单个踢下线用)
 _revoked = {}  # sid -> 过期时间  被踢下线的会话(没过期前一直拒绝)
@@ -38,6 +40,7 @@ def _save():
         d = {"salt": _st["salt"], "hash": _st["hash"], "key": _st["key"]}
         if not _st["venv"]:
             d.update(vsalt=_st["vsalt"], vhash=_st["vhash"])
+        d["vperms"] = _st["vperms"]
         json.dump(d, f)
     os.replace(tmp, _path())
 
@@ -82,9 +85,10 @@ def load():
             with open(_path(), encoding="utf-8") as f:
                 d = json.load(f)
             _st.update(salt=d.get("salt", ""), hash=d.get("hash", ""), key=d.get("key", ""), env=False,
-                       vsalt=d.get("vsalt", ""), vhash=d.get("vhash", ""), venv=False)
+                       vsalt=d.get("vsalt", ""), vhash=d.get("vhash", ""), venv=False,
+                       vperms={k: bool(v) for k, v in (d.get("vperms") or {}).items() if k in VPERMS})
         except (OSError, ValueError):
-            _st.update(salt="", hash="", key="", env=False, vsalt="", vhash="", venv=False)
+            _st.update(salt="", hash="", key="", env=False, vsalt="", vhash="", venv=False, vperms={})
         envpw = os.environ.get("PANEL_PASSWORD", "")
         if envpw:
             salt = secrets.token_hex(16)
@@ -177,6 +181,19 @@ def set_viewer(new):
         _ssave()
 
 
+def perms():
+    """只读账号当前被额外开放的权限(没有只读账号时全为 False)。"""
+    return {k: bool(_st["vperms"].get(k)) and bool(_st["vhash"]) for k in VPERMS}
+
+
+def set_perms(d):
+    if not _st["hash"]:
+        raise ValueError("请先设置管理员访问密码")
+    with _lock:
+        _st["vperms"] = {k: bool((d or {}).get(k)) for k in VPERMS}
+        _save()
+
+
 def revoke_all():
     """退出所有设备:换签名密钥,所有已发出的会话(含当前)立刻失效;调用方给当前浏览器重新发一个。"""
     if not _st["hash"]:
@@ -192,9 +209,9 @@ def _sig(exp, role, sid=""):
     return hmac.new(k.encode(), (f"{exp}.{role}.{sid}" if sid else f"{exp}.{role}").encode(), hashlib.sha256).hexdigest()
 
 
-def make_cookie(role="a", ip="", ua=""):
+def make_cookie(role="a", ip="", ua="", remember=True):
     """新会话:Cookie = 过期时间.角色.会话号.签名;同时记下来源 IP / 浏览器,方便在「已登录设备」里看和踢下线。"""
-    exp = int(time.time()) + TTL
+    exp = int(time.time()) + (TTL if remember else SHORT_TTL)
     sid = secrets.token_hex(6)
     now = int(time.time())
     with _lock:
@@ -284,9 +301,18 @@ def valid_cookie(val):
     return cookie_role(val) is not None
 
 
-def cookie_header(val, clear=False, secure=False):
-    age = 0 if clear else TTL
-    return f"{COOKIE}={'' if clear else val}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
+def cookie_short(val):
+    """这个 Cookie 是不是「仅本次」登录的(剩余有效期不超过 SHORT_TTL)。"""
+    try:
+        return int(str(val).split(".")[0]) - time.time() <= SHORT_TTL + 60
+    except (ValueError, AttributeError):
+        return False
+
+
+def cookie_header(val, clear=False, secure=False, remember=True):
+    """remember=False:不写 Max-Age,变成会话 Cookie,浏览器关闭就丢。"""
+    age = "; Max-Age=0" if clear else f"; Max-Age={TTL}" if remember else ""
+    return f"{COOKIE}={'' if clear else val}; Path=/{age}; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
 
 
 def locked(ip):
@@ -368,21 +394,23 @@ button.ok{background:#22a35a;animation:none}
 button.bad{background:#c23a2e;animation:shake .35s}
 @keyframes flow{to{background-position:-220% 0}}
 @keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.rm{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--mut);font-size:13px;cursor:pointer;user-select:none}.rm input{width:16px;height:16px;padding:0;margin:0;accent-color:#0e0e0e;cursor:pointer}
 #m{color:#d63a2c;font-size:13px;min-height:20px;margin-top:10px;font-weight:500}
 footer{margin-top:auto;text-align:center;color:var(--mut);font-size:12px;line-height:2;text-shadow:0 0 6px rgba(255,255,255,.35)}
 @media(prefers-color-scheme:dark){footer{text-shadow:none}}
 @media(max-width:720px){aside{left:0;width:100%;padding:36px 30px 24px}form{margin-top:12vh}}</style><!--WP--></head><body>
 <aside><div class="brand"><img src="/favicon.png" alt=""><b>FLUX</b></div>
-<form id="f"><h1>请输入访问密码</h1><div class="fld"><svg viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V11a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V6a3 3 0 0 1 3-3zm0 10a2 2 0 0 1 1 3.7V19h-2v-2.3A2 2 0 0 1 12 13z"/></svg><input id="p" type="password" placeholder="请输入访问密码" autocomplete="current-password" autofocus></div><div id="m"></div><button id="b">登录</button></form>
+<form id="f"><h1>请输入访问密码</h1><div class="fld"><svg viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V11a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V6a3 3 0 0 1 3-3zm0 10a2 2 0 0 1 1 3.7V19h-2v-2.3A2 2 0 0 1 12 13z"/></svg><input id="p" type="password" placeholder="请输入访问密码" autocomplete="current-password" autofocus></div><label class="rm"><input type="checkbox" id="rm" checked><span>30 天内免登录</span></label><div id="m"></div><button id="b">登录</button></form>
 <footer>FLUX <!--VER--><br>nikki 流量面板</footer></aside>
-<script>const B=document.getElementById("b");document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
+<script>const B=document.getElementById("b"),RM=document.getElementById("rm");try{if(localStorage.getItem("flux.rm")==="0")RM.checked=false}catch(e){}
+RM.onchange=()=>{try{localStorage.setItem("flux.rm",RM.checked?"1":"0")}catch(e){}};document.getElementById("f").onsubmit=async e=>{e.preventDefault();const m=document.getElementById("m");m.textContent="";
 B.className="busy";B.textContent="登录中";
-try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
+try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value,remember:document.getElementById("rm").checked})});
 const j=await r.json();if(r.ok){B.className="ok";B.textContent="成功";location.reload()}else{B.className="bad";B.textContent="登录";m.textContent=j.error||"登录失败";setTimeout(()=>B.className="",900)}}catch(x){B.className="bad";B.textContent="登录";m.textContent="连接失败";setTimeout(()=>B.className="",900)}}</script></body></html>"""
 
 _WP_CSS = """<style>body{background:#222 url(/wallpaper?v=%d) center/cover no-repeat fixed}
 @media(max-width:720px){aside{background:linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,0) 34%%,rgba(0,0,0,0) 62%%,rgba(0,0,0,.5));-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;border:0;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.55)}
-.fld{border-color:rgba(255,255,255,.75)}.fld:focus-within{border-color:#fff}input{color:#fff;text-shadow:none}input::placeholder{color:rgba(255,255,255,.85)}footer{color:rgba(255,255,255,.92)}#m{color:#ff8a80}}</style>"""
+.fld{border-color:rgba(255,255,255,.75)}.fld:focus-within{border-color:#fff}input{color:#fff;text-shadow:none}input::placeholder{color:rgba(255,255,255,.85)}footer{color:rgba(255,255,255,.92)}.rm{color:rgba(255,255,255,.92)}#m{color:#ff8a80}}</style>"""
 
 
 def login_html():
