@@ -265,6 +265,8 @@ try:
     ok(lp["host"] == "www.bilibili.com" and len(lp["calc"]["steps"]) == 4 and len(lp["real"]["steps"]) >= 4 and lp["history"]["rows"], f"域名查询:推算 + 实际 {[x['main'] for x in lp['real']['steps']][-2:]}")
     ok(get("/api/lookup?host=https://www.google.com/x")["host"] == "www.google.com", "域名查询:URL 自动取域名")
     ok(req_code("/api/lookup?host=%20") == 400, "域名查询:空输入 400")
+    c, lt = post("/api/lookup/test", {"host": "www.baidu.com"})
+    ok(c == 200 and lt["ok"] and lt["rule"] == "RuleSet" and lt["payload"] == "mockset" and lt["chain"] == ["国内", "直连"] and lt["kind"] == "直连", f"实时规则测试:命中规则和链路 {lt}")
     cp = get("/api/compare"); ok(len(cp["series"]["cur"]) == 7 and "traffic" in cp and "notes" in cp, "周对比:结构完整")
     tl = get("/api/timeline?hours=24"); ok(len(tl["rows"]) == 24 and "marks" in tl, "故障时间线:24 小时")
     wf = get("/api/wifi"); ok(wf["available"] is False and "hint" in wf, "无线事件:没有日志时给出开启办法")

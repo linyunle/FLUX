@@ -1,0 +1,36 @@
+name: 问题反馈
+description: 面板显示不对、功能异常、报错
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **请不要贴密码、Token、订阅链接、nikki secret、AdGuard 账号。** 截图和日志发出前请自行检查并打码。
+  - type: input
+    id: version
+    attributes:
+      label: FLUX 版本
+      description: 左上角的版本号,例如 v0.32.0
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      description: 路由器型号 / 系统(ImmortalWrt 版本)/ nikki 版本 / 浏览器
+  - type: textarea
+    id: what
+    attributes:
+      label: 做了什么,看到了什么
+      description: 期望的结果是什么,实际是什么;能附截图最好
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 诊断包
+      description: "`docker logs --tail 200 flux` 的输出;或 设置 → 审计日志 下载的诊断包(默认已打码)拖进来"

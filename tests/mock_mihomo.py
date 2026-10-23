@@ -23,6 +23,7 @@ def conns():
         l3 = c("l3", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "api.example.org", 1)
         l3["metadata"]["destinationIP"] = "216.160.83.56"
         extra += [c("l1", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "www.bilibili.com", 2), l2, l3]
+    extra += [c(pc["id"], "127.0.0.1", ["直连", "国内"], "RuleSet", pc["host"], 1) | {"rulePayload": "mockset"} for pc in STATE.get("probe_conns", [])]
     return extra + [
         c("a", "192.168.1.10", ["HK-01", "Proxy"], "RuleSet", "youtube.com", 1),
         c("b", "fd00::10", ["HK-01", "Proxy"], "RuleSet", "netflix.com", 2),     # 同一台设备的 IPv6
@@ -49,6 +50,7 @@ class API(BaseHTTPRequestHandler):
         if not self._auth(): return
         p = unquote(self.path)
         if p == "/version": return self._j(200, {"version": "v1.19.0-mock"})
+        if p == "/configs": return self._j(200, {"mixed-port": STATE.get("mixed", 0), "mode": "rule"})
         if p.startswith("/logs"):   # 流式日志:第一次连上发 3 行,之后的连接只挂着 2 秒就断开
             self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
             import time as _t
@@ -133,7 +135,19 @@ class Probe(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
 
+class ConnectProxy(BaseHTTPRequestHandler):
+    """只认 CONNECT:登记一条来自 127.0.0.1 的连接,回 200"""
+    def log_message(self, *a): pass
+    def do_CONNECT(self):
+        host = self.path.rsplit(":", 1)[0]
+        STATE.setdefault("probe_conns", []).append({"id": "pc%d" % len(STATE.get("probe_conns", [])), "host": host})
+        self.send_response(200, "Connection established"); self.end_headers()
+
+
 def start(api_port, probe_port):
+    STATE["mixed"] = api_port + 1
+    cp = ThreadingHTTPServer(("127.0.0.1", api_port + 1), ConnectProxy); cp.daemon_threads = True
+    threading.Thread(target=cp.serve_forever, daemon=True).start()
     for port, h in ((api_port, API), (probe_port, Probe)):
         s = ThreadingHTTPServer(("127.0.0.1", port), h); s.daemon_threads = True
         threading.Thread(target=s.serve_forever, daemon=True).start()

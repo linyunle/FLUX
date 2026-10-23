@@ -782,11 +782,21 @@ def q_airports(p):
                  "rules": airports.rules_text(), "names": airport_names()}
 
 
+def _nikki_ui():
+    con = ro()
+    try:
+        return backup.nikki_ui(con)
+    except Exception:
+        return {"host": "", "port": "", "path": ""}
+    finally:
+        con.close()
+
+
 def q_status(p):
     c = collector.COLLECTOR
     cf = config.get()
     return 200, {
-        "version": config.VERSION, "update": update.check(),
+        "version": config.VERSION, "update": update.check(), "nikki_ui": _nikki_ui(),
         "conn": dict(c.status) if c else {"ok": False, "error": "采集器未启动"},
         "config": {"api": cf["api"], "has_secret": bool(cf["secret"]), "source": cf["source"]},
         "interval": config.INTERVAL, "keep_days": config.KEEP_DAYS, "hour_keep_days": config.HOUR_KEEP_DAYS,
@@ -1156,7 +1166,7 @@ def q_sessions(con, p):
 
 
 GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con)), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
-POST_ROUTES.update({"/api/lookup/probe": lambda body: lookup.probe(body),
+POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_nikki_ui(con, body)), "/api/lookup/probe": lambda body: lookup.probe(body), "/api/lookup/test": lambda body: lookup.live_test(body),
     "/api/storage/clean": lambda body: health.clean(body),
     "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),
     "/api/nklog/clear": lambda body: _wcon(lambda con: nikkilog.clear(con)),
@@ -1178,7 +1188,7 @@ POST_ROUTES.update({"/api/lookup/probe": lambda body: lookup.probe(body),
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
+AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置"})
 
 
 _ctx = threading.local()

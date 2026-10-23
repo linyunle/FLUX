@@ -5,10 +5,11 @@
 遇到时只能标出「前面有这些规则集可能先命中」,真正命中哪条以「实际路由」(历史记录里的规则)为准。
 """
 import re
+import socket
 import time
 import urllib.parse
 
-from . import agh, collector
+from . import agh, collector, config
 from .util import api_call, log
 
 _HOST = re.compile(r"^[a-z0-9._\-一-鿿:\[\]]{1,253}$")
@@ -129,26 +130,38 @@ def lookup(con, host):
         modes = sorted({d["mode"] or "?" for d in dnsrows})
         fake = any(d["mode"] == "fake-ip" for d in dnsrows)
         calc.append(_step(2, "DNS 解析", "按历史推算", "fake-ip(代理 DNS 返回占位地址)" if fake and modes == ["fake-ip"] else "、".join(modes),
-                          "记录里出现过的解析方式;" + ("全部走 nikki DNS" if modes == ["fake-ip"] else "有连接没走 fake-ip,可能是设备自带 DNS / DoH"),
+                          "记录里出现过的解析方式;" + ("全部走 nikki DNS" if modes == ["fake-ip"] else
+                          "直连域名用真实 DNS 解析是正常的" if obs and _kind(obs["node"]) == "直连" else "有连接没走 fake-ip,可能是设备自带 DNS / DoH"),
                           [f"{d['ip'] or '(fake-ip,无真实 IP)'} · {d['mode']} · {time.strftime('%m-%d %H:%M', time.localtime(d['last']))}" for d in dnsrows]))
     else:
         calc.append(_step(2, "DNS 解析", "无记录", "面板没记录过这个域名的解析方式", "第一次被访问后才会有"))
+    sure = not unknown
+    obs_rule = next(({"index": i + 1, "proxy": str(r.get("proxy") or "")} for i, r in enumerate(rules) if i + 1 == obs_idx), None) if obs_idx else None
+    fallback_only = bool(first) and _norm(first["type"]) in ("match", "final")
     if is_ip:
-        calc.append(_step(3, "规则匹配", "IP", "IP 地址按 IP 类规则匹配(IP-CIDR / GEOIP 等)", "面板只推算域名规则,请看右边实际路由"))
-    elif first:
+        calc.append(_step(3, "规则匹配", "IP", "IP 地址按 IP 类规则匹配(IP-CIDR / GEOIP 等)", "面板只推算域名规则,请看右边实际路由或点「实时测试」"))
+        target = (obs and obs["group"]) or ""
+    elif first and not fallback_only:
         det = [f"第 {u['index']} 条 {u['rule']} → {u['proxy']}" for u in unknown[:8]]
-        sure = not unknown
         calc.append(_step(3, "规则匹配", f"第 {first['index']} 条", f"{first['type']} {first['payload']}" if first["payload"] else first["type"],
                           ("前面没有需要展开的规则集,按顺序确定命中这条。" if sure else
-                           f"前面还有 {len(unknown)} 条规则集 / GEOSITE 面板读不到内容,可能先命中它们;以实际路由为准。"),
+                           f"前面还有 {len(unknown)} 条规则集 / GEOSITE 面板读不到内容,可能先命中它们;点「实时测试」可得到准确结果。"),
                           det, "" if sure else "warn"))
+        target = first["proxy"]
+    elif obs_rule:
+        # 前面有读不到内容的规则集,而历史连接已经告诉我们实际命中的是哪条:以它为准,兜底规则只是「都没命中时」的结果
+        calc.append(_step(3, "规则匹配", f"第 {obs_rule['index']} 条(历史)", obs["rule"],
+                          f"静态规则里只剩兜底;历史连接显示实际命中的是这条规则集。兜底规则(第 {first['index']} 条)只在所有规则集都没命中时才会用。" if first else "历史连接显示命中的是这条规则集。",
+                          [f"第 {u['index']} 条 {u['rule']} → {u['proxy']}" for u in unknown[:8]]))
+        target = obs_rule["proxy"]
+    elif first:
+        calc.append(_step(3, "规则匹配", "待确认", "静态规则只能推到兜底 " + first["type"],
+                          f"前面有 {len(unknown)} 条规则集 / GEOSITE 面板读不到内容,不知道会不会先命中;没有历史记录,点「实时测试」才能确定。" if unknown else "没有更多规则了,会走兜底。",
+                          [f"第 {u['index']} 条 {u['rule']} → {u['proxy']}" for u in unknown[:8]], "warn"))
+        target = "" if unknown else first["proxy"]
     else:
-        calc.append(_step(3, "规则匹配", "未知", "没有找到静态规则能命中", "可能由规则集 / GEOSITE 命中,看实际路由", [f"第 {u['index']} 条 {u['rule']} → {u['proxy']}" for u in unknown[:8]], "warn"))
-    target = (first or {}).get("proxy") or (obs and obs["group"]) or ""
-    if not first and unknown and not obs:
-        target = ""
-    if obs_idx and obs and not first:
-        target = next((str(r.get("proxy") or "") for i, r in enumerate(rules) if i + 1 == obs_idx), target)
+        calc.append(_step(3, "规则匹配", "未知", "没有找到静态规则能命中", "可能由规则集 / GEOSITE 命中,点「实时测试」", [f"第 {u['index']} 条 {u['rule']} → {u['proxy']}" for u in unknown[:8]], "warn"))
+        target = (obs and obs["group"]) or ""
     if target:
         ch = _chain(target)
         leaf = ch[-1]
@@ -157,7 +170,9 @@ def lookup(con, host):
                           (f"当前延迟 {d['delay']} ms" if d.get("delay") else "") + ((" · 已连续 %d 次测速失败" % d["fails"]) if d.get("fails") else ""), [], "warn" if d.get("fails") else ""))
         out["leaf"] = leaf
     else:
-        calc.append(_step(4, "最终出口", "未知", "无法推算", "规则集命中的目标要看实际路由"))
+        calc.append(_step(4, "最终出口", "未知", "无法推算", "规则集命中的目标要看实际路由,或点「实时测试」"))
+    if out.get("leaf") and _kind(out["leaf"]) != "代理":
+        out["leaf"] = ""
     out["calc"] = {"title": "规则路由", "badge": "按规则推算", "steps": calc}
 
     # ======== 实际
@@ -173,10 +188,12 @@ def lookup(con, host):
         t0 = time.time()
         q = api_call("/dns/query?" + urllib.parse.urlencode({"name": host, "type": "A"}), timeout=6) or {}
         ms = int((time.time() - t0) * 1000)
-        ans = [a.get("data") for a in (q.get("Answer") or []) if a.get("data")]
+        allans = q.get("Answer") or []
+        ans = [a.get("data") for a in allans if a.get("data") and int(a.get("type") or 1) == 1]
+        cn = [str(a.get("data")).rstrip(".") for a in allans if int(a.get("type") or 0) == 5]
         fake = any(str(a).startswith(("198.18.", "198.19.")) for a in ans)
         real_step = _step(2, "DNS 解析", f"{ms} ms", ("FakeIP " if fake else "") + ("、".join(ans[:4]) if ans else "没有返回地址"),
-                          "nikki 实时查询" + (" · 返回占位地址,说明这个域名走代理 DNS" if fake else ""), [], "" if ans else "warn")
+                          "nikki 实时查询" + (" · 返回占位地址,说明这个域名走代理 DNS" if fake else ""), ([f"CNAME → {x}" for x in cn[:3]]), "" if ans else "warn")
     except Exception as e:
         real_step = _step(2, "DNS 解析", "失败", f"nikki DNS 查询失败:{type(e).__name__}", "只读查询,没有改动任何设置", [], "warn")
     # AGH
@@ -221,7 +238,7 @@ def lookup(con, host):
         if out.get("leaf") and out["leaf"] != leafs and exact:
             real[-1]["sub"] += f" · 与推算的出口不同(推算:{out['leaf']}),策略组可能切换过"
             real[-1]["level"] = "warn"
-        out["real_node"] = leafs
+        out["real_node"] = leafs if _kind(leafs) == "代理" else ""
     else:
         real.append(_step(4, "规则匹配", "无", "没有连接记录", ""))
         real.append(_step(5, "最终出口", "未知", "没有连接记录", "访问一次后再来查"))
@@ -251,3 +268,62 @@ def _bytes(n):
         if n < 1024 or u == "TB":
             return f"{n:.0f} {u}" if u == "B" else f"{n:.1f} {u}"
         n /= 1024
+
+
+def live_test(body):
+    """实时规则测试:从本机通过 nikki 的混合端口对「域名:443」发一个 CONNECT(只建立隧道,不传任何数据),
+    再从 nikki 的 /connections 读出这条新连接命中的规则和链路。规则集 / GEOSITE 面板读不到内容时,这是唯一能得到准确结果的办法。"""
+    host = clean(body.get("host"))
+    port = int(body.get("port") or 443)
+    if port not in (80, 443):
+        port = 443
+    try:
+        cfg = api_call("/configs", timeout=6) or {}
+    except Exception as e:
+        return {"ok": False, "host": host, "error": f"读取 nikki 配置失败:{type(e).__name__}"}
+    pport = int(cfg.get("mixed-port") or cfg.get("port") or 0)
+    if not pport:
+        return {"ok": False, "host": host, "error": "nikki 没有开启 mixed-port / port,无法发起实时测试"}
+    ahost = urllib.parse.urlparse(config.get()["api"]).hostname or "127.0.0.1"
+    t0 = time.time()
+    try:
+        sk = socket.create_connection((ahost, pport), timeout=5)
+    except OSError as e:
+        return {"ok": False, "host": host, "error": f"连不上 nikki 的代理端口 {ahost}:{pport}({type(e).__name__})"}
+    try:
+        sk.settimeout(8)
+        sk.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: FLUX-probe\r\n\r\n".encode())
+        try:
+            first = sk.recv(256).split(b"\r\n")[0].decode("latin1")
+        except OSError as e:
+            first = f"(无响应:{type(e).__name__})"
+        ms = int((time.time() - t0) * 1000)
+        if " 407 " in first:
+            return {"ok": False, "host": host, "error": "nikki 的代理端口要求认证,面板不保存也不需要这个认证;实时测试不可用,请看历史记录"}
+        found = None
+        for _ in range(6):
+            try:
+                for cn in (api_call("/connections", timeout=6) or {}).get("connections") or []:
+                    m = cn.get("metadata") or {}
+                    if str(m.get("host") or "").lower() == host and str(m.get("sourceIP") or "") in ("127.0.0.1", "::1", ahost):
+                        found = cn
+            except Exception:
+                pass
+            if found:
+                break
+            time.sleep(0.3)
+        res = {"ok": bool(found), "host": host, "connect": first, "ms": ms}
+        if found:
+            m = found.get("metadata") or {}
+            chain = list(reversed(found.get("chains") or []))
+            res.update(rule=str(found.get("rule") or ""), payload=str(found.get("rulePayload") or ""), chain=chain,
+                       leaf=chain[-1] if chain else "", kind=_kind(chain[-1]) if chain else "", dns=str(m.get("dnsMode") or ""), type=str(m.get("type") or ""),
+                       remote=str(m.get("remoteDestination") or m.get("destinationIP") or ""))
+        else:
+            res["error"] = "发出了连接但没在 nikki 连接列表里找到(可能 nikki 只统计非本机来源,或连接已关闭)"
+        return res
+    finally:
+        try:
+            sk.close()
+        except OSError:
+            pass

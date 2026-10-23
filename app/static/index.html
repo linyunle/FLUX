@@ -300,6 +300,10 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .agc .rb{height:6px;border-radius:3px;background:rgba(127,127,127,.15);margin-top:3px}.agc .rb i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#ff9500,#ffb84d)}
 .cbars{display:flex;gap:16px;align-items:flex-end;height:110px}.cbg{display:flex;gap:4px;flex:1;height:100%;align-items:flex-end}.cb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:10px;color:var(--muted)}.cb i{width:100%;border-radius:3px 3px 0 0;display:block}
 .kv{display:flex;gap:10px;align-items:baseline;padding:3px 0}.kv b{font-size:18px}.tlsvg text.tll{font-size:10px;fill:var(--muted)}.cmpnotes{margin-bottom:8px;display:flex;flex-wrap:wrap}
+#ghTop{display:inline-flex;align-items:center;margin-right:6px}#ghTop .ghl{margin:0}
+html[data-role=v] #rtGo,html[data-role=v] #lkpLive{display:none}
+.agbox{background:var(--surface);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow,0 1px 3px rgba(0,0,0,.06))}
+#aghCard{background:transparent;box-shadow:none;padding:0}#aghCard>h2{padding:0 2px}
 .find .t{flex:1;min-width:0}.find .go{color:var(--muted);align-self:center}
 .allok{display:flex;gap:8px;align-items:center;color:var(--good);padding:10px 4px}
 .secgrid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:var(--gap)}
@@ -553,10 +557,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 </section>
 
 <section id="tab-security" style="display:none">
-  <div class="aghtop" id="aghTop" style="display:none"></div>
+  <div class="card" id="aghCard"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
   <div class="tiles secgrid" id="secTiles" style="position:static"></div>
   <div class="card" id="secFindCard"><h2>待处理事项 <span id="secLvl"></span><span class="sp"></span><span class="sub" id="secAt"></span></h2><div id="secFinds"></div></div>
-  <div class="card" id="aghCard"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
   <div class="card" id="dnsCard"><h2>DNS · dnsmasq 与自定义服务器 <span class="sp"></span><span class="sub" id="dnsNote"></span><button id="dnsGo">设置</button></h2><div id="dnsBody"></div></div>
   <div class="card" id="lkCard"><h2>分流检查 <span class="sub">启发式:按内置的常见国内 / 境外域名清单判断,只是排查线索,不是判决</span><span class="sp"></span><span class="sub">近 7 天</span></h2><div id="lkBody"></div></div>
   <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
@@ -594,8 +597,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-domains" style="display:none">
   <div class="card" id="lkpCard"><h2>域名路由查询 <span class="sub">输入一个域名:左边是按规则推算会怎么走,右边是实际怎么走的(历史连接 + 实时 DNS)</span></h2>
-    <div class="lkprow"><input id="lkpIn" placeholder="例如 github.com" autocomplete="off" spellcheck="false"><button class="pri" id="lkpGo">查询</button></div>
-    <div id="lkpOut"></div></div>
+    <div class="lkprow"><input id="lkpIn" placeholder="例如 github.com" autocomplete="off" spellcheck="false"><button class="pri" id="lkpGo">查询</button><button id="lkpLive" title="让 nikki 现在真发一次连接,读它命中的规则">实时规则测试</button></div>
+    <div id="lkpLiveOut"></div><div id="lkpOut"></div></div>
   <div class="card">
     <h2>域名清单 <span class="sub">谁访问过哪些域名(按连接记录统计,不是 DNS 查询日志)</span>
       <span class="sp"></span>
@@ -607,6 +610,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 </section>
 
 <section id="tab-rules" style="display:none">
+  <div class="card" id="rtCard"><h2>实时规则测试 <span class="sub">让 nikki 现在真发一次连接(只建立隧道,不传数据),看这个域名实际命中哪条规则、走哪个节点;规则集 / GEOSITE 也能测准</span></h2>
+    <div class="lkprow"><input id="rtIn" placeholder="例如 github.com" autocomplete="off" spellcheck="false"><button class="pri" id="rtGo">实时测试</button><button id="rtLk">推算 + 历史记录</button></div>
+    <div id="rtOut"></div></div>
   <div class="card"><h2>策略组 <span class="sub">点一行 = 只看这个策略组</span></h2><div class="scroll" id="grpTbl"></div></div>
   <div class="card"><h2>命中规则 <span class="sub">点一行 = 只看这条规则</span></h2><div class="scroll" id="ruleTbl"></div></div>
   <div class="card"><h2>规则健康 <span class="sub" id="rhNote"></span></h2><div id="rhBody"></div></div>
@@ -664,6 +670,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <button id="sTest">只测试连接</button>
     <button id="sSave" class="pri">验证并保存</button>
   </div>
+  <div class="h3" style="margin-top:14px">nikki 面板链接 <span class="sub">告警里「在 nikki 里更新订阅 ↗」打开的地址;留空的项自动取:当前访问面板的主机名 / nikki 控制端口 / /ui/</span></div>
+  <div class="row2" style="gap:8px;flex-wrap:wrap"><input id="nuHost" placeholder="主机名,如 192.168.100.1" style="width:200px"><input id="nuPort" placeholder="端口,如 9090" style="width:110px" inputmode="numeric"><input id="nuPath" placeholder="路径,如 /ui/ 或 /ui/#/proxies" style="width:220px"><button id="nuSave">保存</button></div>
+  <div class="sub" id="nuPrev" style="margin-top:4px"></div><div class="msg" id="nuMsg"></div>
   <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">nikki 改了地址 / 密码 / 认证,各自在哪里改?</summary>
   <div class="sub" style="line-height:1.7;margin-top:6px">
   · <b>接口地址 + 密码(secret)</b>:就是上面这两项。nikki(mihomo)的接口没有用户名,只有「地址:端口 + 密码」。改了之后这里同步改,状态栏左下角的圆点会变灰/红并提示 401 或连不上,点它也能回到这里。<br>
@@ -983,16 +992,19 @@ $("#chips").onclick=e=>{const b=e.target.closest("b");if(!b)return;const k=b.dat
 function showTab(){setTimeout(()=>{if(S.tab==="security")BACK=null;if(typeof backBtn==="function")backBtn()},0);for(const [k] of TABS_ALL)$("#tab-"+k).style.display=k===S.tab?"":"none";$("#dataTop").style.display=(S.tab==="settings"||S.tab==="alerts"||S.tab==="security"||S.tab==="docker")?"none":"";$("#tiles").style.display=S.tab==="overview"?"":"none";placeAcct();renderChrome()}
 /* 右上角账号按钮:桌面端有搜索栏的页面放在搜索栏最右边,没有搜索栏的页面(设置 / 告警 / 安全 / 容器)放在页面顶部右侧;
    手机端变成小图标,放在顶栏搜索行里主题按钮的后面 */
+const GHL='<a class="ghl" href="https://github.com/linyunle/FLUX" target="_blank" rel="noopener noreferrer" title="项目地址:github.com/linyunle/FLUX" aria-label="项目地址 GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>';
 const ACC_ICO='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
 const mqAcc=matchMedia("(max-width:820px)");
 function placeAcct(){const b=$("#acctBtn"),on=b.dataset.on==="1",v=b.dataset.role==="v",mob=mqAcc.matches,bar=$("#dataTop").style.display!=="none";
+  let g=$("#ghTop");if(!g){g=document.createElement("span");g.id="ghTop";g.innerHTML=GHL;}
   b.classList.toggle("ico",mob);b.innerHTML=mob?ACC_ICO:(v?"只读 · 退出":"退出登录");
   b.title=v?"只读账号:可以查看,不能修改设置。点一下退出登录":"退出登录";b.setAttribute("aria-label",v?"只读账号,退出登录":"退出登录");
   if(mob){$(".side").appendChild(b);b.style.display=on?"":"none";$("#acctBar").style.display="none"}
-  else{(bar?$("#filters"):$("#acctBar")).appendChild(b);b.style.display=on?"":"none";$("#acctBar").style.display=!bar&&on?"flex":"none"}}
+  else{(bar?$("#filters"):$("#acctBar")).appendChild(b);b.parentNode.insertBefore(g,b);g.style.display="";b.style.display=on?"":"none";$("#acctBar").style.display=!bar?"flex":"none"}
+  if(mob)g.style.display="none"}
 mqAcc.addEventListener&&mqAcc.addEventListener("change",placeAcct);
 function updAcct(a){a=a||{};const b=$("#acctBtn"),v=a.role==="v",pm=a.perms||{},h=document.documentElement;b.dataset.on=(v||a.enabled)?"1":"";b.dataset.role=v?"v":"a";
-  h.toggleAttribute("data-vro",v&&!pm.edit);h.toggleAttribute("data-vnoexp",v&&!pm.export);placeAcct()}
+  h.dataset.role=v?"v":"a";h.toggleAttribute("data-vro",v&&!pm.edit);h.toggleAttribute("data-vnoexp",v&&!pm.export);placeAcct()}
 $("#acctBtn").onclick=async()=>{if(!confirm("退出登录?"))return;try{await post("/api/logout",{})}catch(e){}location.reload()};
 
 /* ---------- 设备下拉 ---------- */
@@ -1365,6 +1377,16 @@ const fmtDay=d=>{if(!d)return"–";const t=ymd(new Date());return d===t?"今天"
 function direction(r){const t=r.up+r.down;if(!t)return"–";const f=r.direct/t;
   return f>=.98?'<span class="tag">直连</span>':f<=.02?'<span class="tag" style="color:var(--accent);border-color:var(--accent)">代理</span>':`<span class="tag">混合 · 直连 ${Math.round(f*100)}%</span>`}
 function devCell(r){return r.devs.map(d=>esc(d.name||d.key)).join("、")+(r.ndev>r.devs.length?` 等 ${r.ndev} 台`:"")}
+function liveH(r){if(!r.ok)return`<div class="msg err">${esc(r.error||"测试失败")}</div>`;
+  const ch=r.chain&&r.chain.length?r.chain.join(" → "):"(无)",kc=r.kind==="直连"?"warn":"";
+  return`<div class="lpanel" style="margin-top:8px"><div class="ph"><b>实时测试结果</b><span class="chip">${esc(r.host)}</span><span class="chip">${r.ms} ms</span></div>
+  ${lkpStep({n:1,title:"命中规则",tag:r.rule||"?",main:r.payload?`${r.rule} / ${r.payload}`:(r.rule||"?"),sub:"nikki 连接记录里这条连接实际命中的规则(含规则集 / GEOSITE)"})}
+  ${lkpStep({n:2,title:"最终出口",tag:r.kind||"?",main:ch,sub:"链路由策略组 → … → 节点",level:kc})}
+  ${lkpStep({n:3,title:"入口 / DNS",tag:r.type||"?",main:"DNS 方式:"+(r.dns||"?"),sub:r.remote?"远端 "+r.remote:""})}</div>`}
+async function runLive(host,out){host=(host||"").trim();if(!host)return;out.innerHTML='<div class="sub">测试中(约 1~3 秒)…</div>';
+  try{out.innerHTML=liveH(await post("/api/lookup/test",{host}))}catch(e){out.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+$("#rtGo").onclick=()=>runLive($("#rtIn").value,$("#rtOut"));$("#rtIn").onkeydown=e=>{if(e.key==="Enter")runLive($("#rtIn").value,$("#rtOut"))};
+$("#rtLk").onclick=()=>{const v=$("#rtIn").value.trim();if(!v)return;S.tab="domains";showTab();refresh();lookupHost(v)};
 const lkpStep=st=>`<div class="lstep ${st.level||""}"><div class="num">${st.n}</div><div class="body"><div class="hd"><span class="tt">${esc(st.title)}</span><span class="chip">${esc(st.tag)}</span></div><div class="mn">${esc(st.main)}</div>${st.sub?`<div class="sub">${esc(st.sub)}</div>`:""}${st.details&&st.details.length?`<details><summary>查看详情</summary>${st.details.map(d=>`<div class="sub">${esc(d)}</div>`).join("")}</details>`:""}</div></div>`;
 const lkpPanel=(p,extra)=>`<div class="lpanel"><div class="ph"><b>${esc(p.title)}</b><span class="chip">${esc(p.badge)}</span>${extra||""}</div>${p.steps.slice().reverse().map(lkpStep).join("")}</div>`;
 async function lookupHost(h){h=(h||$("#lkpIn").value||"").trim();if(!h)return;$("#lkpIn").value=h;const o=$("#lkpOut");o.innerHTML='<div class="sub">查询中…</div>';
@@ -1373,7 +1395,7 @@ async function lookupHost(h){h=(h||$("#lkpIn").value||"").trim();if(!h)return;$(
     o.innerHTML=`<div class="g2">${lkpPanel(j.calc)}${lkpPanel(j.real,node&&!ro?`<span class="sp" style="flex:1"></span><button id="lkpProbe" data-n="${esc(node)}">实测出口延迟</button><span class="sub" id="lkpPm"></span>`:"")}</div>${j.errors.length?`<div class="msg warn">${j.errors.map(esc).join(";")}</div>`:""}`;
     const b=$("#lkpProbe");if(b)b.onclick=async()=>{b.disabled=true;$("#lkpPm").textContent="测试中…";try{const r=await post("/api/lookup/probe",{host:j.host,node:b.dataset.n});$("#lkpPm").textContent=r.ok?(r.delay?`${r.node}:${r.delay} ms`:`${r.node}:超时 / 失败`):"失败:"+r.error}catch(e){$("#lkpPm").textContent=e.message}b.disabled=false}
   }catch(e){o.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
-$("#lkpGo").onclick=()=>lookupHost();$("#lkpIn").onkeydown=e=>{if(e.key==="Enter")lookupHost()};
+$("#lkpGo").onclick=()=>lookupHost();$("#lkpLive").onclick=()=>runLive($("#lkpIn").value,$("#lkpLiveOut"));$("#lkpIn").onkeydown=e=>{if(e.key==="Enter")lookupHost()};
 function loadDomains(){$("#domMerge").checked=S.merge;
   load("domains","/api/domains",{...base(),merge:S.merge?"1":"0",limit:400},j=>{S.domRows=j.rows;
     $("#domNote").textContent=`${j.from===j.to?j.from:j.from+" ~ "+j.to} · 共 ${j.count} 个${j.merge?"域名(子域名已合并)":"主机名"}${j.rows.length<j.count?",只显示前 "+j.rows.length+" 个":""}。短于 10 秒的连接记不到,所以没传数据的域名不会出现。`;
@@ -1855,8 +1877,10 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
 /* ---------- 告警 ---------- */
 const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复",note:"记录"};
 const fmtTs=t=>{const d=new Date(t*1000);return pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())};
-let NKAPI="";
-function nkPanelUrl(){try{const u=new URL(NKAPI);return location.protocol+"//"+location.hostname+":"+u.port+"/ui/"}catch(e){return""}}
+let NKAPI="",NKUI={host:"",port:"",path:""};
+function nkPanelUrl(){try{const u=new URL(NKAPI),h=NKUI.host||location.hostname,p=NKUI.port||u.port,pa=NKUI.path||"/ui/";return location.protocol+"//"+(h.includes(":")&&!h.startsWith("[")?"["+h+"]":h)+(p?":"+p:"")+pa}catch(e){return""}}
+function nuFill(){$("#nuHost").value=NKUI.host;$("#nuPort").value=NKUI.port;$("#nuPath").value=NKUI.path;$("#nuPrev").textContent="当前链接:"+(nkPanelUrl()||"(未读到 nikki API 端口)");$("#nuMsg").textContent=""}
+$("#nuSave").onclick=async()=>{const m=$("#nuMsg");m.className="msg";try{const j=await post("/api/nikkiui",{host:$("#nuHost").value,port:$("#nuPort").value,path:$("#nuPath").value});NKUI=j;nuFill();m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};
 const MUTABLE=["wan_loss","retrans_high","conn_many","traffic_spike","node_degrade","sub_stale","sys_temp","sys_mem","sys_conntrack","geo_new"];
 function alertActs(r){const a=[];
   if(r.kind==="sub_stale"&&nkPanelUrl())a.push(`<a href="${esc(nkPanelUrl())}" target="_blank" rel="noopener" data-aact="nk">在 nikki 里更新订阅 ↗</a>`);
@@ -1998,7 +2022,7 @@ async function loadSettings(){
   for(const [k] of SETS)$("#sec-"+k).style.display=k===S.set?"":"none";
   try{
     if(S.set==="look")renderLook();
-    else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sClr").checked=false;$("#sMsg").textContent="";renderUpd(st.update);loadListen()}
+    else if(S.set==="conn"){const st=await get("/api/status");$("#sApi").value=st.config.api;$("#sSec").value="";$("#sSec").placeholder=st.config.has_secret?"已保存(留空 = 不修改)":"没有密码就留空";$("#sClr").checked=false;$("#sMsg").textContent="";renderUpd(st.update);loadListen();NKUI=st.nikki_ui||NKUI;nuFill()}
     else if(S.set==="alerts")await loadAlertCfg();
     else if(S.set==="dns"){await loadAghCfg();await loadDnsCfg()}
     else if(S.set==="geo")await loadGeoSet();
@@ -2081,7 +2105,6 @@ $("#lsCancel").onclick=async()=>{try{await post("/api/listen",{cancel:true});loa
 $("#sSave").onclick=async()=>{const m=$("#sMsg");m.className="msg";m.textContent="验证中…";
   try{const body={api:$("#sApi").value};if($("#sClr").checked)body.clear_secret=true;else if($("#sSec").value!=="")body.secret=$("#sSec").value;const j=await post("/api/config",body);m.className="msg ok";m.textContent="已保存,连接成功"+(j.version?"(mihomo "+j.version+")":"");status()}
   catch(e){m.className="msg err";m.textContent=e.message}};
-const GHL='<a class="ghl" href="https://github.com/linyunle/FLUX" target="_blank" rel="noopener noreferrer" title="项目地址:github.com/linyunle/FLUX" aria-label="项目地址 GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>';
 function renderUpd(u){
   if(!u.enabled){$("#updBox").innerHTML='<div class="sub">当前是本地构建,没有绑定 GitHub 仓库,不检查更新。'+GHL+'</div>';return}
   $("#updBox").innerHTML=`<div>版本 <b>${esc(u.current)}</b>${u.latest?` · 最新 <b>${esc(u.latest)}</b>`:""} <button id="uChk">检查更新</button>${GHL}</div>
@@ -2178,15 +2201,15 @@ function aghTopH(j){const rk=(j.top_blocked||[]).slice(0,4),mx=Math.max(1,...rk.
   <div class="agc"><div class="al">已拦截<span class="ar">${j.rate}%</span></div><div class="av o">${j.blocked.toLocaleString()}</div><div class="asp">${areaSpark(j.series_blocked,"#ff9500","agc2")}</div></div>
   <div class="agc"><div class="al">被拦截域名排行</div>${rk.length?rk.map(r=>`<div class="rk"><div class="rt"><span class="pv">${esc(r.d)}</span><b>${r.n.toLocaleString()}</b></div><div class="rb"><i style="width:${Math.max(4,r.n*100/mx)}%"></i></div></div>`).join(""):'<div class="sub" style="margin-top:8px">暂无</div>'}</div>`}
 function loadAgh(){load("agh","/api/agh",{},j=>{
-  const el=$("#aghBody"),top=$("#aghTop");top.style.display=j.configured&&j.ok?"":"none";if(j.configured&&j.ok)top.innerHTML=aghTopH(j);
+  const el=$("#aghBody"),card=$("#aghCard");{const dc=$("#dnsCard");if(!j.configured){if(card.nextElementSibling!==dc&&card.previousElementSibling!==$("#secFindCard"))dc.parentNode.insertBefore(card,dc)}else{const t0=$("#secTiles");if(card.nextElementSibling!==t0)t0.parentNode.insertBefore(card,t0)}}
   if(!j.configured){$("#aghNote").textContent="";el.innerHTML='<div class="empty">还没接入 AdGuard Home。<a href="#" id="aghSet">去设置</a>(在面板里填账号密码,不要发到聊天里)</div>';const a=$("#aghSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("dns")};return}
   if(!j.ok){$("#aghNote").textContent=j.url;el.innerHTML=`<div class="msg err">${esc(j.error||"读取失败")}</div>`;return}
   $("#aghNote").textContent=j.url+" · 近 "+(j.unit==="days"?"天":"24 小时");
   const t=(l,v,s)=>`<div class="tile"><div class="l">${l}</div><div class="v">${uv(v)}</div><div class="s">${s||"&nbsp;"}</div></div>`;
-  el.innerHTML=`<div class="tiles" style="position:static;margin-bottom:10px">${t("安全浏览 / 家长控制",(j.safebrowsing+j.parental).toLocaleString(),"")}</div>
-  <div class="g2"><div><div class="h3" style="margin-top:0">被拦截最多的域名</div>${miniTbl(["域名","次数"],j.top_blocked.map(r=>`<tr><td class="k pv">${esc(r.d)}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div>
-  <div><div class="h3" style="margin-top:0">查询最多的设备</div>${miniTbl(["设备","查询"],j.top_clients.map(r=>`<tr><td class="k">${esc(r.name||r.ip)}${r.name&&r.name!==r.ip?` <span class="sub">${esc(r.ip)}</span>`:""}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div></div>
-  <div class="h3">最近被拦截的查询${j.log_error?` <span class="sub">(${esc(j.log_error)})</span>`:""}</div>${miniTbl(["时间 / 设备 / 域名","规则"],(j.recent||[]).slice(0,12).map(r=>`<tr><td class="k"><span class="sub">${esc(r.t.slice(5))}</span> ${esc(r.name||r.ip)} → <span class="pv">${esc(r.d)}</span></td><td class="n sub" style="text-align:right">${esc(r.rule||r.reason)}</td></tr>`))||'<div class="empty">最近没有被拦截的查询</div>'}`})}
+  el.innerHTML=`<div class="aghtop">${aghTopH(j)}</div><div class="sub" style="margin:-4px 2px 10px">安全浏览 / 家长控制拦截 ${(j.safebrowsing+j.parental).toLocaleString()} 次</div>
+  <div class="g2"><div class="agbox"><div class="h3" style="margin-top:0">被拦截最多的域名</div>${miniTbl(["域名","次数"],j.top_blocked.map(r=>`<tr><td class="k pv">${esc(r.d)}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div>
+  <div class="agbox"><div class="h3" style="margin-top:0">查询最多的设备</div>${miniTbl(["设备","查询"],j.top_clients.map(r=>`<tr><td class="k">${esc(r.name||r.ip)}${r.name&&r.name!==r.ip?` <span class="sub">${esc(r.ip)}</span>`:""}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div></div>
+  <div class="agbox" style="margin-top:14px"><div class="h3" style="margin-top:0">最近被拦截的查询${j.log_error?` <span class="sub">(${esc(j.log_error)})</span>`:""}</div>${miniTbl(["时间 / 设备 / 域名","规则"],(j.recent||[]).slice(0,12).map(r=>`<tr><td class="k"><span class="sub">${esc(r.t.slice(5))}</span> ${esc(r.name||r.ip)} → <span class="pv">${esc(r.d)}</span></td><td class="n sub" style="text-align:right">${esc(r.rule||r.reason)}</td></tr>`))||'<div class="empty">最近没有被拦截的查询</div>'}</div>`})}
 $("#aghGo").onclick=()=>openSettings("dns");
 $("#dnsGo").onclick=()=>openSettings("dns");
 function loadDns(){load("dns","/api/dns",{},j=>{
@@ -2457,7 +2480,7 @@ async function status(){try{const s=await get("/api/status");
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=tabsFor();if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
   {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}}updAcct(s.auth);
-  try{NKAPI=(s.config&&s.config.api)||NKAPI}catch(e){}
+  try{NKAPI=(s.config&&s.config.api)||NKAPI;NKUI=s.nikki_ui||NKUI}catch(e){}
   {let bn=$("#noPwBar");const need=s.auth&&!s.auth.enabled;let hid="";try{hid=sessionStorage.getItem("flux.nopw.hide")||""}catch(e){}
     if(need&&!hid){if(!bn){bn=document.createElement("div");bn.id="noPwBar";bn.innerHTML='<b>⚠ 没有设置访问密码</b><span>局域网里任何人打开页面,都能看到每台设备访问过的域名。</span><span class="sp"></span><button id="noPwGo">现在设置</button><button id="noPwX" title="本次不再提示">×</button>';$(".main .inner").insertBefore(bn,$(".main .inner").firstChild);
       $("#noPwGo").onclick=()=>openSettings("security");$("#noPwX").onclick=()=>{try{sessionStorage.setItem("flux.nopw.hide","1")}catch(e){}bn.style.display="none"}}bn.style.display=""}
