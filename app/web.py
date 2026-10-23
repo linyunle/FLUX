@@ -887,6 +887,58 @@ def q_apprules(p):
     return 200, {"rules": appsig.rules_text(), "cats": appsig.CATS}
 
 
+def _app_hosts(con, p, want, limit):
+    """按域名重新归类 traffic 表里的流量,取出归到 want(应用名)的域名明细(含设备、节点)。
+    app 表本身不存域名;这里只按域名判断(不带端口),端口才能识别出来的应用不会出现在「未识别」里。"""
+    d1, d2 = day_range(p)
+    fw, fa = filters(p, {"dev", "node"})
+    where = " AND ".join(["day >= ?", "day <= ?", "host != ''"] + fw)
+    rows = con.execute(f"SELECT host, SUM(up), SUM(down), COUNT(DISTINCT {DEVX}), GROUP_CONCAT(DISTINCT node) FROM traffic WHERE {where} GROUP BY host", [d1, d2] + fa).fetchall()
+    out = []
+    for host, u, d, nd, nodes in rows:
+        app, cat = appsig.classify(host)
+        if app == want:
+            out.append({"host": host, "up": u, "down": d, "bytes": (u or 0) + (d or 0), "devices": nd, "nodes": (nodes or "").split(",")[:4], "cat": cat})
+    out.sort(key=lambda x: -x["bytes"])
+    return out[:limit], len(out), sum(x["bytes"] for x in out)
+
+
+def q_apphosts(p):
+    """某个应用(可限定设备 / 节点)下面有哪些域名。"""
+    want = one(p, "app")
+    if not want:
+        return 400, {"error": "缺少 app"}
+    con = ro()
+    try:
+        rows, n, tot = _app_hosts(con, p, want, _limit(p))
+    finally:
+        con.close()
+    return 200, {"app": want, "rows": rows, "count": n, "bytes": tot}
+
+
+def q_appunknown(p):
+    """导出「未识别」的域名明细,附一段可以直接发给 AI 的说明,让它按 域名关键字=应用名|类别 给出可导入的文本。"""
+    con = ro()
+    try:
+        rows, n, tot = _app_hosts(con, p, appsig.UNKNOWN[0], 300)
+    finally:
+        con.close()
+    d1, d2 = day_range(p)
+    cats = "、".join(c for c in appsig.CATS if c not in ("局域网",))
+    head = ("下面是家用路由器(nikki / mihomo)流量统计里「未识别」的访问域名,按流量从大到小排列(数据来自 FLUX 面板,已不含设备名和 IP)。\n"
+            "请把能确定归属的域名归到「应用名 + 类别」,输出可以直接导入 FLUX「设置 → 应用特征库」的纯文本,每行一条:\n"
+            "域名关键字=应用名|类别\n"
+            "要求:\n"
+            "1. 域名关键字写主域名(例如 example.com 会匹配它的所有子域名);同一个应用的多个域名各写一行,应用名保持一致。\n"
+            f"2. 类别只能从这些里选:{cats}。选不准就写「其他」。\n"
+            "3. 不确定的域名直接跳过,不要猜测、不要编造。\n"
+            "4. 只输出规则本身:不要序号、不要解释、不要代码块标记、不要表头。\n"
+            f"\n范围:{d1} ~ {d2};共 {n} 个未识别域名(下面列出流量最大的 {len(rows)} 个),合计 {tot} 字节。\n"
+            "清单格式:域名<TAB>流量字节<TAB>访问它的设备数\n")
+    body = "\n".join(f"{r['host']}\t{r['bytes']}\t{r['devices']}" for r in rows)
+    return 200, {"rows": rows, "count": n, "bytes": tot, "text": head.replace("\\n", "\n") + body, "cats": appsig.CATS}
+
+
 def p_apprules(body):
     con = db.open_db()
     try:
@@ -932,7 +984,22 @@ def q_dns(con, p):
 q_agh = _q(lambda con, p: agh.fetch(con, force=one(p, "force") == "1"))
 q_agh_cfg = _q(lambda con, p: agh.public_cfg(con))
 q_rulehealth = _q(lambda con, p: insight.rule_health(con, _days_p(p, 30)))
-q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7)))
+def _until_day(p):
+    try:
+        u = float(one(p, "until", "") or 0)
+    except ValueError:
+        u = 0
+    return time.strftime("%Y-%m-%d", time.localtime(u)) if u else None
+
+
+def _until_ts(p):
+    try:
+        return float(one(p, "until", "") or 0) or None
+    except ValueError:
+        return None
+
+
+q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7), _until_day(p)))
 q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, 14)))
 q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.tail(int(one(p, "n") or 400))})
 q_probe = _q(lambda con, p: probe.status(con))
@@ -944,7 +1011,7 @@ q_quota = _q(lambda con, p: {"rows": insight.quota_status(con), "cfg": insight.q
 q_report = _q(lambda con, p: dict(insight.report(con, _days_p(p, 7)), cfg=insight.report_cfg(con)))
 q_report_cfg = _q(lambda con, p: insight.report_cfg(con))
 q_quality = _q(lambda con, p: insight.quality(con))
-q_geo = _q(lambda con, p: insight.geo_summary(con, _days_p(p, 7)))
+q_geo = _q(lambda con, p: insight.geo_summary(con, _days_p(p, 7), _until_day(p)))
 
 
 def p_agh_cfg(body):
@@ -1052,7 +1119,7 @@ q_wan = _q(lambda con, p: {**wan.snapshot(), "hours": wan.hours(con, 24)})
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/apps/hosts": q_apphosts, "/api/apps/unknown": q_appunknown, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -1165,7 +1232,7 @@ def q_sessions(con, p):
     return {"rows": rows, "note": "升级到 v0.28.2 之前登录的设备不在这个列表里(它们没有会话号);用「退出所有设备」可以一并清掉。"}
 
 
-GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con)), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
+GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con)), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48), _until_ts(p))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24), _until_ts(p))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
 POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_nikki_ui(con, body)), "/api/lookup/probe": lambda body: lookup.probe(body), "/api/lookup/test": lambda body: lookup.live_test(body),
     "/api/storage/clean": lambda body: health.clean(body),
     "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),
@@ -1200,7 +1267,7 @@ _GZ = {}
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 # 只读账号不能读的接口(含敏感配置 / 可能带内网细节的原始数据),以及唯一允许"假装成功"的写接口
-VIEWER_DENY_GET = {"/api/backup", "/api/diag", "/api/syslog/export", "/api/nklog/export", "/api/docker/logs", "/api/docker/cfg", "/api/agh/config",
+VIEWER_DENY_GET = {"/api/backup", "/api/apps/unknown", "/api/diag", "/api/syslog/export", "/api/nklog/export", "/api/docker/logs", "/api/docker/cfg", "/api/agh/config",
                    "/api/alerts/config", "/api/report/config", "/api/dns/cfg", "/api/listen", "/api/storage", "/api/health", "/api/autobackup/get", "/api/auth/sessions"}
 VIEWER_POST_OK = {"/api/logout", "/api/clienterr"}
 VIEWER_EDIT_POST = {"/api/device", "/api/groups/set", "/api/presence/watch"}   # 管理员给只读账号开了「修改设备别名 / 分组 / 关注」才放行

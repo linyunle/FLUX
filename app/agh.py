@@ -146,7 +146,7 @@ def fetch(con, force=False):
                 ip = str(it.get("client") or "")
                 rows.append({"t": str(it.get("time") or "")[:19].replace("T", " "), "d": str(q.get("name") or "")[:100], "ip": ip,
                              "name": names.get(ip, ""), "reason": str(it.get("reason") or ""), "rule": _rule(it)})
-            out["recent"] = rows[:40]
+            out["recent"] = rows[:300]
             by = {}
             for r in rows:
                 by[r["ip"]] = by.get(r["ip"], 0) + 1

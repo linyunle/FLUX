@@ -4,12 +4,15 @@
 规则推算只能展开 Domain / DomainSuffix / DomainKeyword / DomainRegex 四类静态规则;规则集 / GEOSITE 面板读不到内容,
 遇到时只能标出「前面有这些规则集可能先命中」,真正命中哪条以「实际路由」(历史记录里的规则)为准。
 """
+import base64
+import json
 import re
 import socket
 import time
+import urllib.error
 import urllib.parse
 
-from . import agh, collector, config
+from . import agh, collector, config, geo
 from .util import api_call, log
 
 _HOST = re.compile(r"^[a-z0-9._\-一-鿿:\[\]]{1,253}$")
@@ -257,6 +260,15 @@ def probe(body):
     try:
         r = api_call(f"/proxies/{urllib.parse.quote(node, safe='')}/delay?{q}", timeout=9) or {}
         return {"ok": True, "delay": int(r.get("delay") or 0), "node": node}
+    except urllib.error.HTTPError as e:
+        # nikki 的 delay 接口:504 = 超时,503 = 测试出错(节点连不上目标),400 = 参数不对
+        try:
+            msg = json.loads(e.read().decode("utf-8", "replace")).get("message") or ""
+        except Exception:
+            msg = ""
+        why = {504: "超时(6 秒内没通)", 503: "节点连不上这个域名"}.get(e.code, f"nikki 返回 {e.code}")
+        log("域名实测失败", e)
+        return {"ok": False, "node": node, "error": why + (f":{msg}" if msg and e.code not in (504,) else ""), "code": e.code}
     except Exception as e:
         log("域名实测失败", e)
         return {"ok": False, "node": node, "error": f"{type(e).__name__}"}
@@ -292,14 +304,23 @@ def live_test(body):
         return {"ok": False, "host": host, "error": f"连不上 nikki 的代理端口 {ahost}:{pport}({type(e).__name__})"}
     try:
         sk.settimeout(8)
-        sk.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: FLUX-probe\r\n\r\n".encode())
+        auth = ""
+        try:   # 复用「设置 → GeoIP 数据库」里已保存的代理地址里的账号密码(http://用户:密码@127.0.0.1:端口),不另存
+            u = urllib.parse.urlparse(geo.proxy_get() or "")
+            if u.username:
+                tok = base64.b64encode(f"{urllib.parse.unquote(u.username)}:{urllib.parse.unquote(u.password or '')}".encode()).decode()
+                auth = f"Proxy-Authorization: Basic {tok}\r\n"
+        except Exception:
+            pass
+        sk.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: FLUX-probe\r\n{auth}\r\n".encode())
         try:
             first = sk.recv(256).split(b"\r\n")[0].decode("latin1")
         except OSError as e:
             first = f"(无响应:{type(e).__name__})"
         ms = int((time.time() - t0) * 1000)
         if " 407 " in first:
-            return {"ok": False, "host": host, "error": "nikki 的代理端口要求认证,面板不保存也不需要这个认证;实时测试不可用,请看历史记录"}
+            return {"ok": False, "host": host, "error": ("nikki 的代理端口要求认证,已保存的账号密码不对,请在「设置 → GeoIP 数据库 → 下载代理」里改成 http://用户:密码@127.0.0.1:%d" % pport) if auth else
+                    ("nikki 的代理端口要求认证。到「设置 → GeoIP 数据库 → 下载代理」填 http://用户:密码@127.0.0.1:%d(只存在你自己的 data 目录),实时测试就能用;现在请先看历史记录" % pport)}
         found = None
         for _ in range(6):
             try:

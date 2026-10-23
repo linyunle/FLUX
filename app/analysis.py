@@ -112,12 +112,13 @@ def compare(con):
     return out
 
 
-def timeline(con, hours=48):
+def timeline(con, hours=48, until=None):
     """逐小时把 丢包 / 重传 / 节点测速 / 流量 放在一起,标出同时异常的小时并给倾向。"""
     hours = max(6, min(168, int(hours)))
-    now = time.time()
+    now = min(time.time(), float(until)) if until else time.time()
     hrs = [time.strftime("%Y-%m-%d %H", time.localtime(now - i * 3600)) for i in range(hours - 1, -1, -1)]
     first = hrs[0]
+    last = hrs[-1]
     gw = None
     try:
         from . import wan
@@ -126,18 +127,18 @@ def timeline(con, hours=48):
         pass
     silent = {t for (t,) in con.execute("SELECT target FROM wanq GROUP BY target HAVING SUM(n)=SUM(lost)")}
     loss, gloss, rtt = {}, {}, {}
-    for h, t, n, lost, srtt in con.execute("SELECT hour, target, n, lost, sum_rtt FROM wanq WHERE hour>=?", (first,)):
+    for h, t, n, lost, srtt in con.execute("SELECT hour, target, n, lost, sum_rtt FROM wanq WHERE hour>=? AND hour<=?", (first, last)):
         if t in silent or not n:
             continue
         (gloss if t == gw else loss).setdefault(h, []).append((n, lost, srtt))
     agg = lambda d: {h: (round(sum(x[1] for x in v) * 100 / max(1, sum(x[0] for x in v)), 1), round(sum(x[2] for x in v) / max(1, sum(x[0] - x[1] for x in v)), 1)) for h, v in d.items()}
     L, G = agg(loss), agg(gloss)
-    ret = {h: round(rt * 100 / o, 2) for h, o, rt in con.execute("SELECT hour, out, retrans FROM tcp WHERE hour>=?", (first,)) if o and o >= 500}
+    ret = {h: round(rt * 100 / o, 2) for h, o, rt in con.execute("SELECT hour, out, retrans FROM tcp WHERE hour>=? AND hour<=?", (first, last)) if o and o >= 500}
     q = {}
-    for h, n, sd, fails in con.execute("SELECT hour, SUM(n), SUM(sum_d), SUM(fails) FROM qoe WHERE hour>=? GROUP BY hour", (first,)):
+    for h, n, sd, fails in con.execute("SELECT hour, SUM(n), SUM(sum_d), SUM(fails) FROM qoe WHERE hour>=? AND hour<=? GROUP BY hour", (first, last)):
         if n:
             q[h] = {"fail": round((fails or 0) * 100 / n, 1), "avg": round(sd / max(1, n - fails))}
-    tr = dict(con.execute("SELECT hour, SUM(up+down) FROM hourly WHERE hour>=? GROUP BY hour", (first,)).fetchall())
+    tr = dict(con.execute("SELECT hour, SUM(up+down) FROM hourly WHERE hour>=? AND hour<=? GROUP BY hour", (first, last)).fetchall())
     base_avg = sorted(v["avg"] for v in q.values() if v["avg"])
     med = base_avg[len(base_avg) // 2] if base_avg else 0
     rows, marks = [], []
@@ -175,7 +176,7 @@ def timeline(con, hours=48):
             cur = None
     since = int(now - hours * 3600)
     ev = [{"ts": t, "kind": k, "level": lv, "title": ti} for t, k, lv, ti in
-          con.execute("SELECT ts, kind, level, title FROM alerts WHERE ts>=? AND level IN ('warn','bad') ORDER BY ts DESC LIMIT 30", (since,))]
+          con.execute("SELECT ts, kind, level, title FROM alerts WHERE ts>=? AND ts<=? AND level IN ('warn','bad') ORDER BY ts DESC LIMIT 30", (since, int(now)))]
     return {"hours": hours, "rows": rows, "marks": marks[-12:], "events": ev, "median_node_delay": med,
             "has_wan": bool(L), "has_tcp": bool(ret), "has_nodes": bool(q)}
 
@@ -189,11 +190,12 @@ _WIFI = [
 ]
 
 
-def wifi(con, hours=24):
+def wifi(con, hours=24, until=None):
     """路由器把 hostapd 日志转发给面板时,统计每台无线设备的连接 / 断开次数,找出频繁掉线的。"""
     hours = max(1, min(168, int(hours)))
-    since = int(time.time() - hours * 3600)
-    rows = con.execute("SELECT ts, tag, msg FROM syslog WHERE ts>=? AND (tag LIKE 'hostapd%' OR tag LIKE 'wpa%' OR tag LIKE 'netifd%' OR msg LIKE '%AP-STA-%')", (since,)).fetchall()
+    end = int(min(time.time(), float(until))) if until else int(time.time())
+    since = end - hours * 3600
+    rows = con.execute("SELECT ts, tag, msg FROM syslog WHERE ts>=? AND ts<=? AND (tag LIKE 'hostapd%' OR tag LIKE 'wpa%' OR tag LIKE 'netifd%' OR msg LIKE '%AP-STA-%')", (since, end)).fetchall()
     ev = {}
     hourly = {}
     for ts, tag, msg in rows:

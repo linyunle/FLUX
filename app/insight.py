@@ -95,11 +95,12 @@ def _in_list(host, lst):
     return any(host == s or host.endswith("." + s) for s in lst)
 
 
-def leaks(con, days=7):
+def leaks(con, days=7, until_day=None):
     w = _web()
     since = _days_ago(days - 1)
+    until_day = until_day or "9999-12-31"
     d, r = w.kind_names()
-    rows = con.execute("SELECT host, node, rule, SUM(up+down) b, COUNT(DISTINCT client) c FROM traffic WHERE day>=? GROUP BY host, node, rule", (since,)).fetchall()
+    rows = con.execute("SELECT host, node, rule, SUM(up+down) b, COUNT(DISTINCT client) c FROM traffic WHERE day>=? AND day<=? GROUP BY host, node, rule", (since, until_day)).fetchall()
     cn_proxy, fo_direct = {}, {}
     from . import devices
     macips, stored = devices.ips_by_dev(con), devices.stored_names(con)
@@ -109,7 +110,7 @@ def leaks(con, days=7):
         if not hosts:
             return {}
         by = {}
-        for h, cl, b in con.execute("SELECT host, client, SUM(up+down) FROM traffic WHERE day>=? AND host IN (%s) GROUP BY host, client" % ",".join("?" * len(hosts)), [since] + list(hosts)):
+        for h, cl, b in con.execute("SELECT host, client, SUM(up+down) FROM traffic WHERE day>=? AND day<=? AND host IN (%s) GROUP BY host, client" % ",".join("?" * len(hosts)), [since, until_day] + list(hosts)):
             by.setdefault(h, []).append((b, cl))
         out = {}
         for h, lst in by.items():
@@ -132,8 +133,8 @@ def leaks(con, days=7):
     dns_rows = []
     try:
         for host, b in con.execute(
-                "SELECT t.host, SUM(t.up+t.down) s FROM traffic t WHERE t.day>=? AND t.host IN (SELECT host FROM dns WHERE mode='normal' AND last>=? AND host NOT IN (SELECT host FROM dns WHERE mode='fake-ip' AND last>=?)) "
-                "AND t.node NOT IN (%s) AND t.node NOT LIKE 'REJECT%%' GROUP BY t.host ORDER BY s DESC LIMIT 60" % ",".join("?" * len(d)), [since, int(time.time()) - days * 86400, int(time.time()) - days * 86400] + list(d)):
+                "SELECT t.host, SUM(t.up+t.down) s FROM traffic t WHERE t.day>=? AND t.day<=? AND t.host IN (SELECT host FROM dns WHERE mode='normal' AND last>=? AND host NOT IN (SELECT host FROM dns WHERE mode='fake-ip' AND last>=?)) "
+                "AND t.node NOT IN (%s) AND t.node NOT LIKE 'REJECT%%' GROUP BY t.host ORDER BY s DESC LIMIT 60" % ",".join("?" * len(d)), [since, until_day, int(time.time()) - days * 86400, int(time.time()) - days * 86400] + list(d)):
             if not _IPLIT.match(host) and not _in_list(host, CN_SUFFIX):
                 dns_rows.append({"host": host, "bytes": b})
     except Exception:
@@ -573,14 +574,15 @@ def _agh_brief(con):
 
 
 # ---------------------------------------------------------------- 目的地国家
-def geo_summary(con, days=7):
+def geo_summary(con, days=7, until_day=None):
     since = _days_ago(days - 1)
+    until_day = until_day or "9999-12-31"
     by_cc = [{"cc": cc or "??", "bytes": b, "up": u, "down": dn} for cc, b, u, dn in con.execute(
-        "SELECT cc, SUM(up+down) b, SUM(up), SUM(down) FROM geo WHERE day>=? GROUP BY cc ORDER BY b DESC LIMIT 20", (since,))]
+        "SELECT cc, SUM(up+down) b, SUM(up), SUM(down) FROM geo WHERE day>=? AND day<=? GROUP BY cc ORDER BY b DESC LIMIT 20", (since, until_day))]
     by_asn = [{"asn": a or "未知", "bytes": b} for a, b in con.execute(
-        "SELECT asn, SUM(up+down) b FROM geo WHERE day>=? GROUP BY asn ORDER BY b DESC LIMIT 12", (since,))]
-    tot = con.execute("SELECT COALESCE(SUM(up+down),0) FROM geo WHERE day>=?", (since,)).fetchone()[0]
-    all_ = con.execute("SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=?", (since,)).fetchone()[0]
+        "SELECT asn, SUM(up+down) b FROM geo WHERE day>=? AND day<=? GROUP BY asn ORDER BY b DESC LIMIT 12", (since, until_day))]
+    tot = con.execute("SELECT COALESCE(SUM(up+down),0) FROM geo WHERE day>=? AND day<=?", (since, until_day)).fetchone()[0]
+    all_ = con.execute("SELECT COALESCE(SUM(up+down),0) FROM traffic WHERE day>=? AND day<=?", (since, until_day)).fetchone()[0]
     # 节点服务器所在国家(代理流量的真实目的地看不到,只能看出口)
     nodes = []
     for node, remote in con.execute("SELECT node, remote FROM nodeinfo WHERE remote IS NOT NULL AND remote != ''"):

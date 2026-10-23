@@ -179,8 +179,8 @@ CATS = list(SIG) + ["局域网", "其他"]
 def parse_rules(text):
     out = []
     lines = (text or "").splitlines()
-    if len(lines) > 300:
-        raise ValueError("规则最多 300 行")
+    if len(lines) > 1000:
+        raise ValueError("规则最多 1000 行")
     for i, raw in enumerate(lines, 1):
         line = raw.strip()
         if not line or line.startswith("#"):
