@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, lookup, analysis, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -903,6 +903,16 @@ def _q(fn):
     return h
 
 
+def q_lookup(p):
+    con = ro()
+    try:
+        return 200, lookup.lookup(con, one(p, "host"))
+    except ValueError as e:
+        return 400, {"error": str(e)}
+    finally:
+        con.close()
+
+
 def q_dns(con, p):
     names = agh._ip_names(con)
     sv = dnsx.servers_status(con)
@@ -1145,8 +1155,8 @@ def q_sessions(con, p):
     return {"rows": rows, "note": "升级到 v0.28.2 之前登录的设备不在这个列表里(它们没有会话号);用「退出所有设备」可以一并清掉。"}
 
 
-GET_ROUTES.update({"/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
-POST_ROUTES.update({
+GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con)), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
+POST_ROUTES.update({"/api/lookup/probe": lambda body: lookup.probe(body),
     "/api/storage/clean": lambda body: health.clean(body),
     "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),
     "/api/nklog/clear": lambda body: _wcon(lambda con: nikkilog.clear(con)),

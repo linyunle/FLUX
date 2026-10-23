@@ -283,6 +283,23 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 #noPwBar .sp{flex:1}#noPwBar button{border:0;border-radius:8px;padding:4px 12px;background:#e8891a;color:#fff;cursor:pointer}#noPwBar #noPwX{background:transparent;color:#8a4b00;font-size:16px;padding:0 6px}
 :root[data-mode=dark] #noPwBar{background:#3a2a10;color:#f3c27c;border-color:#6b4a1a}
 .alact a{color:var(--accent)}
+.pk{display:flex;justify-content:flex-end;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:12px;color:var(--muted)}.pk i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
+.lkprow{display:flex;gap:8px;margin:6px 0 10px}.lkprow input{flex:1;max-width:420px}
+.lpanel{background:var(--surface2,rgba(127,127,127,.06));border-radius:12px;padding:12px 14px}.lpanel .ph{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.lstep{display:flex;gap:12px;padding:8px 0;position:relative}.lstep+.lstep{border-top:1px dashed var(--line)}
+.lstep .num{flex:none;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px}
+.lstep.warn .num{border-color:#e8891a;color:#e8891a}.lstep .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.lstep .tt{color:var(--muted);font-size:12px}
+.lstep .mn{font-size:15px;font-weight:600;word-break:break-all;margin-top:2px}.lstep summary{cursor:pointer;color:var(--muted);font-size:12px;margin-top:2px}
+.chip{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;background:rgba(127,127,127,.15)}
+.aghtop{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}@media(max-width:1100px){.aghtop{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.aghtop{grid-template-columns:1fr}}
+.agc{background:var(--surface);border-radius:16px;padding:14px 16px 0;box-shadow:var(--shadow,0 1px 3px rgba(0,0,0,.06));overflow:hidden;min-height:128px;display:flex;flex-direction:column}
+.agc .al{font-size:13px;color:var(--muted);display:flex;justify-content:space-between}.agc .ar{color:#ff9500;font-weight:600}
+.agc .av{font-size:30px;font-weight:700;letter-spacing:-.5px;margin:2px 0 4px}.agc .av small{font-size:14px;font-weight:400;color:var(--muted)}.agc .av.o{color:#ff9500}
+.agc .asp{margin:auto -16px 0;height:60px}.agc .asp svg{width:100%;height:100%;display:block}
+.agc .rk{margin-top:8px}.agc .rt{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}.agc .rt .pv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agc .rb{height:6px;border-radius:3px;background:rgba(127,127,127,.15);margin-top:3px}.agc .rb i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#ff9500,#ffb84d)}
+.cbars{display:flex;gap:16px;align-items:flex-end;height:110px}.cbg{display:flex;gap:4px;flex:1;height:100%;align-items:flex-end}.cb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:10px;color:var(--muted)}.cb i{width:100%;border-radius:3px 3px 0 0;display:block}
+.kv{display:flex;gap:10px;align-items:baseline;padding:3px 0}.kv b{font-size:18px}.tlsvg text.tll{font-size:10px;fill:var(--muted)}.cmpnotes{margin-bottom:8px;display:flex;flex-wrap:wrap}
 .find .t{flex:1;min-width:0}.find .go{color:var(--muted);align-self:center}
 .allok{display:flex;gap:8px;align-items:center;color:var(--good);padding:10px 4px}
 .secgrid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:var(--gap)}
@@ -536,11 +553,15 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 </section>
 
 <section id="tab-security" style="display:none">
+  <div class="aghtop" id="aghTop" style="display:none"></div>
   <div class="tiles secgrid" id="secTiles" style="position:static"></div>
   <div class="card" id="secFindCard"><h2>待处理事项 <span id="secLvl"></span><span class="sp"></span><span class="sub" id="secAt"></span></h2><div id="secFinds"></div></div>
   <div class="card" id="aghCard"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
   <div class="card" id="dnsCard"><h2>DNS · dnsmasq 与自定义服务器 <span class="sp"></span><span class="sub" id="dnsNote"></span><button id="dnsGo">设置</button></h2><div id="dnsBody"></div></div>
   <div class="card" id="lkCard"><h2>分流检查 <span class="sub">启发式:按内置的常见国内 / 境外域名清单判断,只是排查线索,不是判决</span><span class="sp"></span><span class="sub">近 7 天</span></h2><div id="lkBody"></div></div>
+  <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
+  <div class="card" id="tlCard"><h2>故障时间线 <span class="sub">丢包 / 重传 / 节点测速 / 流量放在同一条时间轴上,标出同时异常的时段</span><span class="sp"></span><select id="tlHours" aria-label="时间范围" style="padding:3px 6px"><option value="24">24 小时</option><option value="48" selected>48 小时</option><option value="168">7 天</option></select></h2><div id="tlBody"></div></div>
+  <div class="card" id="wfCard"><h2>无线连接事件 <span class="sub" id="wfNote">来自路由器转发的 hostapd 日志</span></h2><div id="wfBody"></div></div>
   <div class="card" id="geoCard"><h2>目的地国家 / ASN <span class="sub" id="geoNote"></span></h2><div id="geoBody"></div></div>
   <div class="card" id="hmCard"><h2>活跃时段热力图 <span class="sub">近 14 天,周几 × 几点的平均流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div id="hmBody"></div></div>
   <div class="card"><h2>周报 <span class="sp"></span><button id="repOpen" class="pri">查看近 7 天周报</button></h2><div class="sub">汇总流量变化、设备 / 域名 / 应用排行、节点质量和告警。可在「设置 → 周报与指标」里设为每周自动推送。</div></div>
@@ -572,6 +593,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 </section>
 
 <section id="tab-domains" style="display:none">
+  <div class="card" id="lkpCard"><h2>域名路由查询 <span class="sub">输入一个域名:左边是按规则推算会怎么走,右边是实际怎么走的(历史连接 + 实时 DNS)</span></h2>
+    <div class="lkprow"><input id="lkpIn" placeholder="例如 github.com" autocomplete="off" spellcheck="false"><button class="pri" id="lkpGo">查询</button></div>
+    <div id="lkpOut"></div></div>
   <div class="card">
     <h2>域名清单 <span class="sub">谁访问过哪些域名(按连接记录统计,不是 DNS 查询日志)</span>
       <span class="sp"></span>
@@ -1006,13 +1030,18 @@ function loadTiles(){
 
 /* ---------- 趋势图 ---------- */
 function niceMax(v){if(v<=0)return 1;const p=Math.pow(2,Math.ceil(Math.log2(v)));const c=[1,1.25,1.5,2].map(x=>x*p/2).find(x=>x>=v);return c||p}
-const TSTYLES=[["bars","堆叠柱"],["group","分组柱"],["line","折线"],["area","面积"]];
+const TSTYLES=[["bars","堆叠柱"],["group","分组柱"],["line","折线"],["area","面积"],["smooth","平滑面积"]];
 /* 统一的卡片高度:每张卡片的「高度」都是这一套。列表每页行数 = (高度-112)/34 = 5 / 8 / 12;图表高度跟着高度走 */
 const BH={s:282,m:384,l:520};
 const HGT={rt:{s:150,m:252,l:388},trend:{s:152,m:254,l:390}};
 function trCols(){const t=TH.trend||{};return {down:hexOk(t.down)?t.down:"var(--down)",up:hexOk(t.up)?t.up:"var(--up)"}}
 function rp(x,y,w,h,r){r=Math.min(r,h,w/2);return r<=0?`M${x} ${y}h${w}v${h}h${-w}z`:`M${x} ${y+h}V${y+r}a${r} ${r} 0 0 1 ${r} ${-r}h${w-2*r}a${r} ${r} 0 0 1 ${r} ${r}V${y+h}z`}
 /* ser: [{k:"down",c:颜色}, ...];style: bars 堆叠 / group 分组 / line / area */
+/* 单调三次样条:曲线平滑且不会冲出数据范围 */
+function mcPath(p){const n=p.length;if(n<2)return"";const dx=[],m=[];for(let i=0;i<n-1;i++){dx.push(p[i+1][0]-p[i][0]||1);m.push((p[i+1][1]-p[i][1])/dx[i])}
+  const t=[m[0]];for(let i=1;i<n-1;i++)t.push(m[i-1]*m[i]<=0?0:(m[i-1]+m[i])/2);t.push(m[n-2]);
+  for(let i=0;i<n-1;i++){if(m[i]===0){t[i]=t[i+1]=0;continue}const a=t[i]/m[i],b=t[i+1]/m[i],h=Math.hypot(a,b);if(h>3){const k=3/h;t[i]=k*a*m[i];t[i+1]=k*b*m[i]}}
+  let d=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;for(let i=0;i<n-1;i++){const x1=p[i][0]+dx[i]/3,x2=p[i+1][0]-dx[i]/3;d+=`C${x1.toFixed(1)} ${(p[i][1]+t[i]*dx[i]/3).toFixed(1)} ${x2.toFixed(1)} ${(p[i+1][1]-t[i+1]*dx[i]/3).toFixed(1)} ${p[i+1][0].toFixed(1)} ${p[i+1][1].toFixed(1)}`}return d}
 function drawChart(box,rows,ser,style,H,labelFn,tipFn){
   const W=Math.max(320,box.clientWidth||700),L=52,R=8,T=8,B=24,pw=W-L-R,ph=H-T-B;
   const vals=r=>ser.map(x=>r[x.k]||0);
@@ -1023,7 +1052,13 @@ function drawChart(box,rows,ser,style,H,labelFn,tipFn){
   for(let i=0;i<=3;i++){const v=max*i/3,y=T+ph-ph*i/3;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${fmt(v)}</text>`}
   const every=Math.ceil(rows.length/Math.max(2,Math.floor(pw/64)));
   const cx=i=>L+bw*i+bw/2;
-  if(style==="line"||style==="area"){
+  if(style==="smooth"){
+    const gid="sm"+(box.id||"x")+Math.floor(Math.random()*1e6);
+    g+=`<defs>${ser.map((x,k)=>`<linearGradient id="${gid}${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${x.c}" stop-opacity=".38"/><stop offset="1" stop-color="${x.c}" stop-opacity=".04"/></linearGradient>`).join("")}</defs>`;
+    ser.forEach((x,k)=>{const pts=rows.map((r,i)=>[cx(i),Y(r[x.k]||0)]);if(pts.length<2)return;const d=mcPath(pts);
+      g+=`<path d="${d}L${pts[pts.length-1][0].toFixed(1)} ${T+ph}L${pts[0][0].toFixed(1)} ${T+ph}Z" fill="url(#${gid}${k})"/><path d="${d}" fill="none" stroke="${x.c}" stroke-width="2.2" stroke-linecap="round"/>`});
+    g+='<line class="smv" y1="'+T+'" y2="'+(T+ph)+'" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>';
+  }else if(style==="line"||style==="area"){
     for(const x of ser){const pts=rows.map((r,i)=>[cx(i),Y(r[x.k]||0)]);
       if(style==="area"&&pts.length>1)g+=`<path d="M${pts[0][0]} ${T+ph}L${pts.map(p=>p[0].toFixed(1)+" "+p[1].toFixed(1)).join("L")}L${pts[pts.length-1][0]} ${T+ph}Z" fill="${x.c}" fill-opacity=".18"/>`;
       if(pts.length>1)g+=`<polyline fill="none" stroke="${x.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>`;
@@ -1038,12 +1073,15 @@ function drawChart(box,rows,ser,style,H,labelFn,tipFn){
   rows.forEach((r,i)=>{if(i%every===0)g+=`<text x="${cx(i)}" y="${H-6}" text-anchor="middle">${esc(labelFn(r))}</text>`;
     g+=`<rect class="hit" data-i="${i}" x="${L+bw*i}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>`});
   box.style.minHeight=H+"px";box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="流量趋势">${g}</svg><div class="tip"></div>`;
+  if(style==="smooth"&&rows.length){let bi=0,bv=-1;rows.forEach((r,i)=>{const t=ser.reduce((a,x)=>a+(r[x.k]||0),0);if(t>bv){bv=t;bi=i}});const pr=rows[bi];
+    box.insertAdjacentHTML("beforeend",`<div class="pk"><span>峰值 ${esc(pr.label||"")}</span>${ser.map(x=>`<span><i style="background:${x.c}"></i>${x.k==="down"?"下行":x.k==="up"?"上行":esc(x.k)} ${fmt(pr[x.k]||0)}</span>`).join("")}</div>`)}
   const tip=box.querySelector(".tip");
   box.onmousemove=e=>{const h=e.target.closest(".hit");if(!h){tip.style.display="none";return}
+    const sv=box.querySelector(".smv");if(sv){const x=cx(+h.dataset.i);sv.setAttribute("x1",x);sv.setAttribute("x2",x);sv.style.display=""}
     const r=rows[+h.dataset.i];tip.innerHTML=tipFn(r);tip.style.display="block";
     const b=box.getBoundingClientRect();let x=e.clientX-b.left+12;if(x+tip.offsetWidth>b.width)x=e.clientX-b.left-tip.offsetWidth-12;
     tip.style.left=Math.max(0,x)+"px";tip.style.top=Math.max(0,e.clientY-b.top-40)+"px"};
-  box.onmouseleave=()=>tip.style.display="none";
+  box.onmouseleave=()=>{tip.style.display="none";const sv=box.querySelector(".smv");if(sv)sv.style.display="none"};
 }
 function trendTable(rows,lab){$("#chartTable").innerHTML=`<table><thead><tr><th>${lab}</th><th class="n">下行</th><th class="n">上行</th><th class="n">合计</th></tr></thead><tbody>${rows.slice().reverse().map(r=>`<tr><td>${esc(r.label)}</td><td class="n">${fmt(r.down)}</td><td class="n">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`}
 const tipUD=r=>`<b>${esc(r.label)}</b><br>↓ ${fmt(r.down)}<br>↑ ${fmt(r.up)}`;
@@ -1327,6 +1365,15 @@ const fmtDay=d=>{if(!d)return"–";const t=ymd(new Date());return d===t?"今天"
 function direction(r){const t=r.up+r.down;if(!t)return"–";const f=r.direct/t;
   return f>=.98?'<span class="tag">直连</span>':f<=.02?'<span class="tag" style="color:var(--accent);border-color:var(--accent)">代理</span>':`<span class="tag">混合 · 直连 ${Math.round(f*100)}%</span>`}
 function devCell(r){return r.devs.map(d=>esc(d.name||d.key)).join("、")+(r.ndev>r.devs.length?` 等 ${r.ndev} 台`:"")}
+const lkpStep=st=>`<div class="lstep ${st.level||""}"><div class="num">${st.n}</div><div class="body"><div class="hd"><span class="tt">${esc(st.title)}</span><span class="chip">${esc(st.tag)}</span></div><div class="mn">${esc(st.main)}</div>${st.sub?`<div class="sub">${esc(st.sub)}</div>`:""}${st.details&&st.details.length?`<details><summary>查看详情</summary>${st.details.map(d=>`<div class="sub">${esc(d)}</div>`).join("")}</details>`:""}</div></div>`;
+const lkpPanel=(p,extra)=>`<div class="lpanel"><div class="ph"><b>${esc(p.title)}</b><span class="chip">${esc(p.badge)}</span>${extra||""}</div>${p.steps.slice().reverse().map(lkpStep).join("")}</div>`;
+async function lookupHost(h){h=(h||$("#lkpIn").value||"").trim();if(!h)return;$("#lkpIn").value=h;const o=$("#lkpOut");o.innerHTML='<div class="sub">查询中…</div>';
+  try{const j=await get("/api/lookup",{host:h});const node=j.real_node||j.leaf||"";
+    const ro=document.documentElement.dataset.vro==="1";
+    o.innerHTML=`<div class="g2">${lkpPanel(j.calc)}${lkpPanel(j.real,node&&!ro?`<span class="sp" style="flex:1"></span><button id="lkpProbe" data-n="${esc(node)}">实测出口延迟</button><span class="sub" id="lkpPm"></span>`:"")}</div>${j.errors.length?`<div class="msg warn">${j.errors.map(esc).join(";")}</div>`:""}`;
+    const b=$("#lkpProbe");if(b)b.onclick=async()=>{b.disabled=true;$("#lkpPm").textContent="测试中…";try{const r=await post("/api/lookup/probe",{host:j.host,node:b.dataset.n});$("#lkpPm").textContent=r.ok?(r.delay?`${r.node}:${r.delay} ms`:`${r.node}:超时 / 失败`):"失败:"+r.error}catch(e){$("#lkpPm").textContent=e.message}b.disabled=false}
+  }catch(e){o.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+$("#lkpGo").onclick=()=>lookupHost();$("#lkpIn").onkeydown=e=>{if(e.key==="Enter")lookupHost()};
 function loadDomains(){$("#domMerge").checked=S.merge;
   load("domains","/api/domains",{...base(),merge:S.merge?"1":"0",limit:400},j=>{S.domRows=j.rows;
     $("#domNote").textContent=`${j.from===j.to?j.from:j.from+" ~ "+j.to} · 共 ${j.count} 个${j.merge?"域名(子域名已合并)":"主机名"}${j.rows.length<j.count?",只显示前 "+j.rows.length+" 个":""}。短于 10 秒的连接记不到,所以没传数据的域名不会出现。`;
@@ -1810,13 +1857,17 @@ const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复",note:"记录"};
 const fmtTs=t=>{const d=new Date(t*1000);return pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())};
 let NKAPI="";
 function nkPanelUrl(){try{const u=new URL(NKAPI);return location.protocol+"//"+location.hostname+":"+u.port+"/ui/"}catch(e){return""}}
+const MUTABLE=["wan_loss","retrans_high","conn_many","traffic_spike","node_degrade","sub_stale","sys_temp","sys_mem","sys_conntrack","geo_new"];
 function alertActs(r){const a=[];
   if(r.kind==="sub_stale"&&nkPanelUrl())a.push(`<a href="${esc(nkPanelUrl())}" target="_blank" rel="noopener" data-aact="nk">在 nikki 里更新订阅 ↗</a>`);
+  if(MUTABLE.includes(r.kind)&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="mute" data-k="${esc(r.kind)}">不再提醒这类</a>`);
   if(r.kind==="sys_disk"&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="disk" data-mp="${esc(r.key==="disk"?"":r.key)}">忽略这块盘</a>`);
   return a.length?`<div class="sub alact">${a.join(" · ")}</div>`:""}
 function alertRow(r,seen){return `<tr class="${r.ts>seen&&r.level!=="ok"?"unseen":""} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}">
   <td class="n" style="white-space:nowrap;text-align:left">${fmtTs(r.ts)}</td><td><span class="lv ${r.level}">${LV[r.level]||r.level}</span></td>
   <td><b>${esc(r.title)}</b><div class="sub">${esc(r.detail)}</div>${alertActs(r)}</td><td class="hide-s sub">${esc(r.sent)}</td></tr>`}
+document.addEventListener("click",async e=>{const m=e.target.closest("[data-aact=mute]");if(!m)return;e.preventDefault();e.stopPropagation();
+  try{const c=await get("/api/alerts/config");c.rules[m.dataset.k].on=false;await post("/api/alerts/config",{rules:c.rules,channels:c.channels.map(x=>({id:x.id,type:x.type,name:x.name,on:x.on!==false,url:"",token:"",chat:""})),quiet:c.quiet,disks:c.disks});m.textContent="已关闭(可在 设置 → 告警通知 重新打开)"}catch(er){m.textContent="失败:"+er.message}},true);
 document.addEventListener("click",async e=>{const a=e.target.closest("[data-aact=disk]");if(!a)return;e.preventDefault();e.stopPropagation();
   try{const c=await get("/api/alerts/config");const d=c.disks||{};d[a.dataset.mp]=Object.assign({},d[a.dataset.mp],{ign:true});await post("/api/alerts/config",{rules:c.rules,channels:c.channels.map(x=>({id:x.id,type:x.type,name:x.name,on:x.on!==false,url:"",token:"",chat:""})),quiet:c.quiet,disks:d});a.textContent="已忽略(可在 设置 → 告警通知 恢复)"}catch(er){a.textContent="失败:"+er.message}},true);
 function alertOpen(e){if(e.target.closest("[data-aact]"))return;const tr=e.target.closest("tr.click,.ev.click");if(!tr)return;const k=tr.dataset.k,key=tr.dataset.key;
@@ -1856,7 +1907,7 @@ const RULE_META=[
  ["dev_offline","设备离线","「关注」的设备超过「离线判定」时间没有出现(内核邻居表里没有确认在线、也没有连接经过 nikki)才算离线,手机省电断 Wi-Fi 几分钟不会误报",[["all","范围(0 = 只关注的设备,1 = 所有设备)",""],["grace_min","离线判定","分钟"],["cool_min","同一设备间隔","分钟"]]],
  ["wan_down","宽带掉线 / 恢复","路由器没有默认路由超过 1 分钟(外网断了);恢复时记一条",[["cool_min","间隔","分钟"]]],
  ["wan_ip","公网 IP 变化","WAN 口地址变了(拨号重连、运营商换地址)。用了 DDNS / 外网访问时有用",[["cool_min","间隔","分钟"]]],
- ["wan_loss","宽带丢包","最近 5 分钟到所有「正常回应」的公共 DNS 的 ICMP 丢包率都超过阈值才提醒(运营商常对 ICMP 限速,单个目标丢包不算);同时看网关,提示问题在路由器侧还是运营商侧",[["pct","丢包率","%"],["cool_min","间隔","分钟"]]],
+ ["wan_loss","宽带丢包","最近 5 分钟到所有「正常回应」的公共 DNS 的 ICMP 丢包率都超过阈值才提醒(运营商常对 ICMP 限速,单个目标丢包不算);同时看网关,提示问题在路由器侧还是运营商侧",[["pct","丢包率","%"],["retrans_pct","且 TCP 重传率 ≥","%(0 = 不要求;设了以后,只丢 ICMP 而 TCP 正常时不提醒)"],["cool_min","间隔","分钟"]]],
  ["sub_stale","订阅长时间没更新","nikki 里的订阅超过这么久没更新(更新失败 / 订阅地址失效),官方用量和到期数据也会过期",[["hours","超过","小时"],["cool_min","间隔","分钟"]]],
  ["syslog_crit","路由器日志严重信息","「路由器系统日志」收到紧急/警报/严重级别,或内存不足、文件系统错误、内核崩溃这类硬故障的日志时提醒(需要先在「设置 → 路由器系统日志」开启接收)",[["cool_min","间隔","分钟"]]],
  ["ups_onbatt","UPS 断电 / 恢复","UPS 切到电池供电(市电断了)时提醒,市电恢复时再提醒一次并告知用了多久电池(需要先在「设置 → 电源与到期监控」开启)",[["cool_min","间隔","分钟"]]],
@@ -2084,14 +2135,55 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-ign]");if(
 function loadSecTab(){load("secs","/api/secsum",{},j=>{
   $("#secTiles").innerHTML=secTilesH(j);$("#secFinds").innerHTML=secFindsH(j);
   const ig=new Set(ignGet()),vis=j.findings.filter(x=>!(x.level!=="bad"&&ig.has(ignKey(x)))),n=vis.filter(x=>x.level==="bad"||x.level==="warn").length,hasBad=vis.some(x=>x.level==="bad");$("#secLvl").innerHTML=n?`<span class="lv ${hasBad?"bad":"warn"}">${n} 项待处理</span>`:'<span class="lv ok">正常</span>';$("#secAt").textContent=fmtTs(j.at)})}
-function loadSecurity(){loadSecTab();loadAgh();loadDns();loadLeaks();loadGeo();loadHeat();loadQuality()}
+const pctTag=(v,inv)=>v==null?"":`<span class="${(inv?v<0:v>0)?"warn":"ok"}" style="margin-left:4px">${v>0?"+":""}${v}%</span>`;
+function loadCompare(){load("cmp","/api/compare",{},j=>{
+  const t=j.traffic,s=j.series,mx=Math.max(1,...s.cur,...s.prev);
+  const bars=(arr,labels,c)=>arr.map((v,i)=>`<div class="cb" title="${labels[i]} ${fmt(v)}"><i style="height:${Math.max(2,v*100/mx)}%;background:${c}"></i><span>${labels[i]}</span></div>`).join("");
+  const kv=(l,a,b,u,worse)=>`<div class="kv"><span class="sub">${l}</span><b>${a==null?"–":a+u}</b><span class="sub">上周 ${b==null?"–":b+u}</span>${a!=null&&b!=null&&worse(a,b)?'<span class="warn">变差</span>':""}</div>`;
+  $("#cmpNote").textContent=`${j.cur[0].slice(5)} ~ ${j.cur[1].slice(5)} 对比 ${j.prev[0].slice(5)} ~ ${j.prev[1].slice(5)}`;
+  $("#cmpBody").innerHTML=`${j.notes.length?`<div class="cmpnotes">${j.notes.map(n=>`<div class="lv ${n.level}" style="margin:2px 6px 2px 0">${esc(n.text)}</div>`).join("")}</div>`:'<div class="sub" style="margin-bottom:6px">和上周相比没有明显变化。</div>'}
+  <div class="g2"><div><div class="h3" style="margin-top:0">每日流量 <span class="sub">灰=上周 蓝=本周</span></div><div class="cbars"><div class="cbg">${bars(s.prev,s.prev_labels,"rgba(127,127,127,.45)")}</div><div class="cbg">${bars(s.cur,s.cur_labels,"var(--accent)")}</div></div></div>
+  <div><div class="h3" style="margin-top:0">关键指标</div>${kv("总流量",fmt(t.cur.total),fmt(t.prev.total),"",()=>false)}${t.delta_pct!=null?`<div class="sub">变化 ${pctTag(t.delta_pct)}</div>`:""}
+  ${kv("TCP 重传率",j.retrans.cur,j.retrans.prev,"%",(a,b)=>a-b>=1)}${kv("ICMP 丢包",j.wan.cur?j.wan.cur.loss:null,j.wan.prev?j.wan.prev.loss:null,"%",(a,b)=>a-b>=10)}${kv("公网延迟",j.wan.cur?j.wan.cur.rtt:null,j.wan.prev?j.wan.prev.rtt:null," ms",(a,b)=>b&&a>b*1.5)}</div></div>
+  ${j.nodes_worse.length?`<div class="h3">变差的节点</div>${miniTbl(["节点","平均延迟","失败率"],j.nodes_worse.map(n=>`<tr><td class="k">${esc(n.node)}</td><td class="n">${n.avg_prev} → <b>${n.avg}</b> ms</td><td class="n">${n.fail_prev}% → <b>${n.fail}%</b></td></tr>`))}`:""}
+  ${j.devices.length?`<div class="h3">流量变化最大的设备</div>${miniTbl(["设备","本周","上周","变化"],j.devices.map(d=>`<tr><td class="k">${esc(d.name)}</td><td class="n">${fmt(d.cur)}</td><td class="n">${fmt(d.prev)}</td><td class="n ${d.delta>0?"warn":""}">${d.delta>0?"+":"-"}${fmt(Math.abs(d.delta))}</td></tr>`))}`:""}
+  ${j.new_hosts.count?`<div class="h3">本周新出现的域名 <span class="sub">共 ${j.new_hosts.count} 个,流量最多的:</span></div>${miniTbl(["域名","流量"],j.new_hosts.top.map(h=>`<tr><td class="k pv">${esc(h.host)}</td><td class="n">${fmt(h.bytes)}</td></tr>`))}`:""}`})}
+function loadTimeline(){load("tl","/api/timeline",{hours:$("#tlHours").value},j=>{
+  if(!j.has_wan&&!j.has_tcp&&!j.has_nodes){$("#tlBody").innerHTML='<div class="empty">还没有足够的数据(面板需要运行一段时间)</div>';return}
+  const R=j.rows,W=Math.max(320,$("#tlBody").clientWidth||700),L=44,Rr=8,pw=W-L-Rr,n=R.length,bw=pw/n,cx=i=>L+bw*i+bw/2;
+  const lane=(title,key,max,col,fmtv,h)=>{const mxv=Math.max(max,...R.map(r=>r[key]||0),1);
+    let g=`<text x="2" y="12" class="tll">${title}</text>`;
+    R.forEach((r,i)=>{const v=r[key];if(v==null)return;const bh=Math.max(1,(h-18)*v/mxv),hot=r.flags.length>=1&&((key==="loss"&&r.flags.includes("loss"))||(key==="retrans"&&r.flags.includes("retrans"))||(key==="node_fail"&&r.flags.includes("node")));
+      g+=`<rect x="${L+bw*i+1}" y="${h-bh}" width="${Math.max(1,bw-2)}" height="${bh}" rx="1.5" fill="${hot?"#ff9500":col}" opacity="${hot?1:.55}"><title>${r.hour}:00 ${title} ${fmtv(v)}</title></rect>`});
+    return{svg:g,h}};
+  const lanes=[lane("ICMP 丢包 %","loss",30,"#0a84ff",v=>v+"%",46),lane("TCP 重传 %","retrans",5,"#af52de",v=>v+"%",46),lane("节点测速失败 %","node_fail",40,"#34c759",v=>v+"%",46),lane("流量","bytes",1,"#8e8e93",fmt,46)];
+  let y=0,svg="";lanes.forEach(l=>{svg+=`<g transform="translate(0 ${y})">${l.svg}</g>`;y+=l.h+10});
+  const every=Math.ceil(n/Math.max(2,Math.floor(pw/56)));R.forEach((r,i)=>{if(i%every===0)svg+=`<text x="${cx(i)}" y="${y+10}" text-anchor="middle" class="tll">${r.hour.slice(5,10)==="" ?"":r.hour.slice(8,10)+"日"+r.hour.slice(11)+"时"}</text>`});
+  $("#tlBody").innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${y+16}" class="tlsvg">${svg}</svg>
+  ${j.marks.length?`<div class="h3">同时异常的时段与倾向</div>`+j.marks.slice().reverse().map(m=>`<div class="find" style="cursor:default"><span class="lv ${m.flags.length>=2?"warn":"info"}">${m.flags.length>=2?"关联":"单项"}</span><div class="t"><b>${m.from.slice(5)}:00${m.to!==m.from?" ~ "+m.to.slice(5)+":59":""}</b><div class="sub">${esc(m.verdict)}</div></div></div>`).join(""):'<div class="sub" style="margin-top:6px">这段时间没有明显的异常时段 ✓</div>'}
+  ${j.events.length?`<div class="h3">同期的警告 / 严重告警</div>`+miniTbl(["时间","内容"],j.events.slice(0,8).map(e=>`<tr><td class="k"><span class="sub">${fmtTs(e.ts)}</span></td><td>${esc(e.title)}</td></tr>`)):""}`})}
+$("#tlHours").onchange=loadTimeline;
+function loadWifi(){load("wf","/api/wifi",{hours:24},j=>{
+  if(!j.available){$("#wfBody").innerHTML=`<div class="empty">${esc(j.hint||"没有无线事件")}</div>`;return}
+  $("#wfNote").textContent=`近 ${j.hours} 小时 · ${j.lines} 行日志`;
+  $("#wfBody").innerHTML=(j.flap&&j.flap.length?`<div class="msg warn">频繁掉线:${j.flap.map(esc).join("、")}(一天内断开 6 次以上且反复重连,多半是信号弱 / 漫游不稳 / 省电休眠)</div>`:"")+
+  miniTbl(["设备","连接","断开","其中闲置踢出","最近"],j.devices.map(d=>`<tr><td class="k">${esc(d.name)}${d.iface?` <span class="sub">${esc(d.iface)}</span>`:""}</td><td class="n">${d.connects}</td><td class="n ${d.flap?"warn":""}">${d.drops}</td><td class="n">${d.inactive}</td><td class="n sub">${fmtTs(d.last)}</td></tr>`))})}
+function loadSecurity(){loadSecTab();loadAgh();loadDns();loadLeaks();loadCompare();loadTimeline();loadWifi();loadGeo();loadHeat();loadQuality()}
+function areaSpark(vals,col,id){const w=260,h=64,v=(vals||[]).filter(x=>x!=null);if(v.length<2)return`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="0" x2="${w}" y1="${h-6}" y2="${h-6}" stroke="${col}" stroke-opacity=".5" stroke-width="2"/></svg>`;
+  const mx=Math.max(...v,1),pts=v.map((x,i)=>[i*w/(v.length-1),h-6-(h-14)*x/mx]),d=mcPath(pts);
+  return`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".30"/><stop offset="1" stop-color="${col}" stop-opacity=".02"/></linearGradient></defs><path d="${d}L${w} ${h}L0 ${h}Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`}
+function aghTopH(j){const rk=(j.top_blocked||[]).slice(0,4),mx=Math.max(1,...rk.map(r=>r.n));
+  return`<div class="agc"><div class="al">平均解析耗时</div><div class="av g">${j.avg_ms}<small> ms</small></div><div class="asp">${areaSpark(j.avg_series,"#34c759","aga")}</div></div>
+  <div class="agc"><div class="al">DNS 查询量</div><div class="av b">${j.total.toLocaleString()}</div><div class="asp">${areaSpark(j.series,"#0a84ff","agb")}</div></div>
+  <div class="agc"><div class="al">已拦截<span class="ar">${j.rate}%</span></div><div class="av o">${j.blocked.toLocaleString()}</div><div class="asp">${areaSpark(j.series_blocked,"#ff9500","agc2")}</div></div>
+  <div class="agc"><div class="al">被拦截域名排行</div>${rk.length?rk.map(r=>`<div class="rk"><div class="rt"><span class="pv">${esc(r.d)}</span><b>${r.n.toLocaleString()}</b></div><div class="rb"><i style="width:${Math.max(4,r.n*100/mx)}%"></i></div></div>`).join(""):'<div class="sub" style="margin-top:8px">暂无</div>'}</div>`}
 function loadAgh(){load("agh","/api/agh",{},j=>{
-  const el=$("#aghBody");
+  const el=$("#aghBody"),top=$("#aghTop");top.style.display=j.configured&&j.ok?"":"none";if(j.configured&&j.ok)top.innerHTML=aghTopH(j);
   if(!j.configured){$("#aghNote").textContent="";el.innerHTML='<div class="empty">还没接入 AdGuard Home。<a href="#" id="aghSet">去设置</a>(在面板里填账号密码,不要发到聊天里)</div>';const a=$("#aghSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("dns")};return}
   if(!j.ok){$("#aghNote").textContent=j.url;el.innerHTML=`<div class="msg err">${esc(j.error||"读取失败")}</div>`;return}
   $("#aghNote").textContent=j.url+" · 近 "+(j.unit==="days"?"天":"24 小时");
   const t=(l,v,s)=>`<div class="tile"><div class="l">${l}</div><div class="v">${uv(v)}</div><div class="s">${s||"&nbsp;"}</div></div>`;
-  el.innerHTML=`<div class="tiles" style="position:static;margin-bottom:10px">${t("DNS 查询",j.total.toLocaleString(),"平均 "+j.avg_ms+" ms")}${t("已拦截",j.blocked.toLocaleString(),"拦截率 "+j.rate+"%")}${t("安全浏览 / 家长控制",(j.safebrowsing+j.parental).toLocaleString(),"")}</div>
+  el.innerHTML=`<div class="tiles" style="position:static;margin-bottom:10px">${t("安全浏览 / 家长控制",(j.safebrowsing+j.parental).toLocaleString(),"")}</div>
   <div class="g2"><div><div class="h3" style="margin-top:0">被拦截最多的域名</div>${miniTbl(["域名","次数"],j.top_blocked.map(r=>`<tr><td class="k pv">${esc(r.d)}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div>
   <div><div class="h3" style="margin-top:0">查询最多的设备</div>${miniTbl(["设备","查询"],j.top_clients.map(r=>`<tr><td class="k">${esc(r.name||r.ip)}${r.name&&r.name!==r.ip?` <span class="sub">${esc(r.ip)}</span>`:""}</td><td class="n">${r.n}</td></tr>`))||'<div class="empty">无</div>'}</div></div>
   <div class="h3">最近被拦截的查询${j.log_error?` <span class="sub">(${esc(j.log_error)})</span>`:""}</div>${miniTbl(["时间 / 设备 / 域名","规则"],(j.recent||[]).slice(0,12).map(r=>`<tr><td class="k"><span class="sub">${esc(r.t.slice(5))}</span> ${esc(r.name||r.ip)} → <span class="pv">${esc(r.d)}</span></td><td class="n sub" style="text-align:right">${esc(r.rule||r.reason)}</td></tr>`))||'<div class="empty">最近没有被拦截的查询</div>'}`})}
@@ -2387,6 +2479,7 @@ function refresh(){
   else if(S.tab==="rules")loadRules();
   else if(S.tab==="settings")loadSettings();
 }
+$("#hostQ").addEventListener("keydown",e=>{const v=e.target.value.trim();if(e.key==="Enter"&&/^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$/i.test(v)){S.tab="domains";showTab();refresh();lookupHost(v)}});
 $("#hostQ").oninput=(()=>{let t;return e=>{clearTimeout(t);t=setTimeout(()=>{S.q=e.target.value.trim();autoHide();S.hostOpen.clear();S.dtOpen.clear();renderChrome();refresh()},300)}})();
 $("#d1").onchange=$("#d2").onchange=refresh;
 window.addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>S.tab==="overview"&&(drawTrend(),loadRealtime()),200)}})());

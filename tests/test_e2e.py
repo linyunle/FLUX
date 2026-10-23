@@ -32,6 +32,13 @@ def get(p):
     return json.load(urllib.request.urlopen(B + p, timeout=5))
 
 
+def req_code(p):
+    try:
+        return urllib.request.urlopen(B + p, timeout=5).status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
 def post(p, body, origin=None):
     h = {"Content-Type": "application/json"}
     if origin: h["Origin"] = origin
@@ -202,7 +209,8 @@ try:
     rsrv = http.server.ThreadingHTTPServer(("127.0.0.1", 19377), Rcv); threading.Thread(target=rsrv.serve_forever, daemon=True).start()
     ac = get("/api/alerts/config")
     ok(ac["channels"] == [] and ac["rules"]["node_down"]["fails"] == 3 and "new_device" in ac["kinds"], "告警:默认配置")
-    ok(post("/api/alerts/config", {"channels": [{"id": "w1", "type": "webhook", "name": "测试hook", "url": "ftp://x"}]})[0] == 400, "告警:渠道地址必须 http(s)")
+    _r = post("/api/alerts/config", {"channels": [{"id": "w1", "type": "webhook", "name": "测试hook", "url": "ftp://x"}]})
+    ok(_r[0] == 400, f"告警:渠道地址必须 http(s) {_r}")
     c, r = post("/api/alerts/config", {"rules": {"traffic_spike": {"on": True, "min_mb": 0.1, "factor": 5, "cool_min": 60}, "node_down": {"on": True, "fails": 3, "cool_min": 1}},
                                        "channels": [{"id": "w1", "type": "webhook", "name": "测试hook", "url": "http://127.0.0.1:19377/hook?key=SECRETKEY"}],
                                        "quiet": {"on": False, "start": "23:00", "end": "07:00"}})
@@ -253,6 +261,13 @@ try:
     ok(any(x["host"] == "www.bilibili.com" for x in lk["cn_proxy"]) and any(x["host"] == "www.google.com" for x in lk["fo_direct"]), f"分流检查:国内走代理 / 境外直连 {lk['cn_proxy'][:1]} {lk['fo_direct'][:1]}")
     ok(lk["dns_local"], "分流检查:本地解析的代理域名")
     ok(all("devs" in x and isinstance(x["devs"]["names"], list) for x in lk["cn_proxy"] + lk["fo_direct"] + lk["dns_local"]) and any(x["devs"]["names"] for x in lk["cn_proxy"] + lk["fo_direct"]), f"分流检查:带来源设备 {lk['cn_proxy'][:1]}")
+    lp = get("/api/lookup?host=www.bilibili.com")
+    ok(lp["host"] == "www.bilibili.com" and len(lp["calc"]["steps"]) == 4 and len(lp["real"]["steps"]) >= 4 and lp["history"]["rows"], f"域名查询:推算 + 实际 {[x['main'] for x in lp['real']['steps']][-2:]}")
+    ok(get("/api/lookup?host=https://www.google.com/x")["host"] == "www.google.com", "域名查询:URL 自动取域名")
+    ok(req_code("/api/lookup?host=%20") == 400, "域名查询:空输入 400")
+    cp = get("/api/compare"); ok(len(cp["series"]["cur"]) == 7 and "traffic" in cp and "notes" in cp, "周对比:结构完整")
+    tl = get("/api/timeline?hours=24"); ok(len(tl["rows"]) == 24 and "marks" in tl, "故障时间线:24 小时")
+    wf = get("/api/wifi"); ok(wf["available"] is False and "hint" in wf, "无线事件:没有日志时给出开启办法")
     c, r = post("/api/alerts/config", {"disks": {"/mnt/x": {"ign": True}, "/mnt/y": {"pct": 97}}})
     ok(c == 200 and r["disks"] == {"/mnt/x": {"ign": True, "pct": None}, "/mnt/y": {"ign": False, "pct": 97.0}} and "disk_list" in r, f"告警:磁盘忽略 / 单独阈值保存 {r.get('disks')}")
     c, r = post("/api/alerts/config", {"disks": {}}); ok(c == 200 and r["disks"] == {}, "告警:磁盘设置可清空")

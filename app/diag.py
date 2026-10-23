@@ -336,6 +336,16 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["sub_update_log"] = [f"{time.strftime('%m-%d %H:%M:%S', time.localtime(t))} {m(x)[:240]}" for t, x in _nk.provider_errors(con, "", 30)]
     except Exception as e:
         out["sub_update_log"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 关联分析(本周对比 / 故障时间线 / 无线事件)
+    try:
+        from . import analysis
+        cp = analysis.compare(con)
+        tl = analysis.timeline(con, 72)
+        wf = analysis.wifi(con, 24)
+        out["analysis"] = {"compare_notes": [x["text"] for x in cp["notes"]], "traffic_delta_pct": cp["traffic"]["delta_pct"], "retrans": cp["retrans"], "wan": cp["wan"],
+                           "nodes_worse": cp["nodes_worse"], "timeline_marks": tl["marks"], "wifi": {"available": wf["available"], "flap": wf.get("flap", []), "lines": wf["lines"]}}
+    except Exception as e:
+        out["analysis"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- 更新检查(为什么没提示新版本:看 error / latest / 仓库是否绑定)
     try:
         from . import update

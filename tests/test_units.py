@@ -657,6 +657,31 @@ def test_v030():
     alerts._cool.clear()
 
 
+def test_v031():
+    import sqlite3, tempfile
+    from app import analysis, lookup, config, db
+    # 规则推算
+    R = lambda t, p: {"type": t, "payload": p}
+    assert lookup._match(R("DomainSuffix", "github.com"), "gist.github.com") is True and lookup._match(R("DomainSuffix", "github.com"), "notgithub.com") is False
+    assert lookup._match(R("Domain", "a.com"), "b.a.com") is False and lookup._match(R("DomainKeyword", "face"), "m.facebook.com") is True
+    assert lookup._match(R("RuleSet", "x"), "a.com") is None and lookup._match(R("GeoIP", "CN"), "a.com") is False and lookup._match(R("Match", ""), "a.com") is True
+    assert lookup.clean("HTTPS://GitHub.com:443/x") == "github.com"
+    try: lookup.clean("a b"); assert False
+    except ValueError: pass
+    # 无线事件解析
+    d3 = tempfile.mkdtemp(); config.DATA_DIR = d3; config.DB_PATH = os.path.join(d3, "t.db")
+    db.init_db(); con = db.open_db(); now = int(time.time())
+    for i in range(7):
+        con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now - i * 60, "r", 6, "hostapd", "phy0-ap0: AP-STA-DISCONNECTED aa:bb:cc:dd:ee:01"))
+        con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now - i * 60, "r", 6, "hostapd", "phy0-ap0: AP-STA-CONNECTED aa:bb:cc:dd:ee:01"))
+    con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now, "r", 6, "hostapd", "phy0-ap0: STA aa:bb:cc:dd:ee:02 IEEE 802.11: deauthenticated due to inactivity (timer DEAUTH/REMOVE)"))
+    con.commit()
+    w = analysis.wifi(con, 24)
+    d = {x["mac"]: x for x in w["devices"]}
+    assert w["available"] and d["aa:bb:cc:dd:ee:01"]["drops"] == 7 and d["aa:bb:cc:dd:ee:01"]["flap"] and d["aa:bb:cc:dd:ee:02"]["inactive"] == 1, w
+    assert analysis.compare(con)["series"]["cur"] == [0] * 7 and len(analysis.timeline(con, 12)["rows"]) == 12
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

@@ -78,7 +78,7 @@ DEFAULT_RULES = {
     "dev_offline": {"on": True, "all": 0, "grace_min": 10, "cool_min": 30},
     "wan_down": {"on": True, "cool_min": 30},
     "wan_ip": {"on": True, "cool_min": 60},
-    "wan_loss": {"on": True, "pct": 50, "cool_min": 30},
+    "wan_loss": {"on": True, "pct": 50, "retrans_pct": 2, "cool_min": 30},
     "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
     "syslog_crit": {"on": True, "cool_min": 60},
     "ups_onbatt": {"on": True, "cool_min": 5},
@@ -90,7 +90,7 @@ DEFAULT_RULES = {
     "docker_unhealthy": {"on": True, "cool_min": 120},
 }
 # 阈值范围(防止填出离谱的值)
-LIMITS = {"min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
+LIMITS = {"retrans_pct": (0, 100), "min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
           "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
@@ -546,6 +546,17 @@ def check_presence(con, cfg, now):
     presence.check(con, cfg, now)
 
 
+def _retrans_ok(min_pct, now):
+    """丢包告警的二次确认:ICMP 丢包常是运营商限速,TCP 重传率也达到 min_pct 才算真的影响上网(0 = 不要求;近 5 分钟没有足够流量时无法确认,放行)。"""
+    if not min_pct:
+        return True
+    w = [x for x in list(netstat.SERIES) if x[0] >= now - 300]
+    out, rt = sum(x[1] for x in w), sum(x[2] for x in w)
+    if out < 2000:
+        return True
+    return rt / out * 100 >= min_pct
+
+
 def check_wan(con, cfg, now):
     from . import wan
     s = wan.snapshot()
@@ -575,7 +586,7 @@ def check_wan(con, cfg, now):
     ext = [v for k, v in t.items() if not v["gw"] and v["n"] >= 6 and not v["silent"]]   # 不回应 ICMP 的目标不参与
     pct = cfg["rules"]["wan_loss"]["pct"]
     # 所有「正常回应过」的公共目标都在丢包才算宽带有问题(单个目标丢包常是对方限速/屏蔽 ICMP)
-    if s["up"] and ext and all(v["loss"] >= pct for v in ext) and cfg["rules"]["wan_loss"]["on"]:
+    if s["up"] and ext and all(v["loss"] >= pct for v in ext) and cfg["rules"]["wan_loss"]["on"] and _retrans_ok(cfg["rules"]["wan_loss"].get("retrans_pct", 0), now):
         gw = next((v for v in t.values() if v["gw"]), None)
         where = ("到网关(PPPoE 对端,即运营商接入设备)也在丢包:要么线路真有问题,要么运营商对 ICMP 限速。对照「TCP 重传率」:没有重传提醒就多半只是 ICMP 被限速,不影响上网;有重传提醒再报障" if gw and gw["loss"] >= pct else
                  "到网关正常,说明路由器和光猫没问题,问题在运营商骨干/上游(和机场无关)" if gw else "")

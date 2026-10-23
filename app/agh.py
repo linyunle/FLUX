@@ -4,6 +4,7 @@
 接口不会原样返回密码。只读:面板不会改 AdGuard 的任何设置。
 """
 import base64
+import collections
 import json
 import threading
 import time
@@ -15,6 +16,7 @@ from . import devices
 from .util import is_mac, log
 
 _lock = threading.Lock()
+AVG = collections.deque(maxlen=120)   # (时间戳, 平均处理耗时 ms):AdGuard 只给一个当前值,面板自己攒曲线
 _cache = {"at": 0.0, "key": "", "data": None}
 TTL = 60
 
@@ -120,6 +122,7 @@ def fetch(con, force=False):
         st = _req(cfg, "/control/stats")
         names = _ip_names(con)
         total, blocked = int(st.get("num_dns_queries") or 0), int(st.get("num_blocked_filtering") or 0)
+        AVG.append((int(time.time()), round(float(st.get("avg_processing_time") or 0) * 1000, 1)))
         out.update(ok=True, total=total, blocked=blocked,
                    safebrowsing=int(st.get("num_replaced_safebrowsing") or 0), parental=int(st.get("num_replaced_parental") or 0),
                    rate=round(blocked * 100 / total, 1) if total else 0, avg_ms=round(float(st.get("avg_processing_time") or 0) * 1000, 1),
@@ -128,6 +131,7 @@ def fetch(con, force=False):
                    top_clients=[{"ip": ip, "name": names.get(ip, ""), "n": n} for ip, n in _pairs(st.get("top_clients"))],
                    series=[int(x or 0) for x in (st.get("dns_queries") or [])][-48:],
                    series_blocked=[int(x or 0) for x in (st.get("blocked_filtering") or [])][-48:],
+                   avg_series=[v for _, v in AVG][-60:],
                    unit=str(st.get("time_units") or "hours"))
         try:
             try:
