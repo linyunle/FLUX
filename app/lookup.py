@@ -257,8 +257,22 @@ def probe(body):
     if not node or not c or node not in c.nodes:
         raise ValueError("节点不存在")
     q = urllib.parse.urlencode({"url": f"https://{host}/", "timeout": 6000})
+    from . import airports
+    with airports._lock:
+        prov = airports._prov.get(node, "")
+    qn = urllib.parse.quote(node, safe="")
+    # 订阅(provider)里的节点不在 /proxies 里,直接 /proxies/<节点>/delay 会 404;要走 /providers/proxies/<订阅>/<节点>/healthcheck
+    paths = ([f"/providers/proxies/{urllib.parse.quote(prov, safe='')}/{qn}/healthcheck?{q}"] if prov else []) + [f"/proxies/{qn}/delay?{q}"]
     try:
-        r = api_call(f"/proxies/{urllib.parse.quote(node, safe='')}/delay?{q}", timeout=9) or {}
+        r = {}
+        for i, path in enumerate(paths):
+            try:
+                r = api_call(path, timeout=9) or {}
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 404 and i < len(paths) - 1:
+                    continue
+                raise
         return {"ok": True, "delay": int(r.get("delay") or 0), "node": node}
     except urllib.error.HTTPError as e:
         # nikki 的 delay 接口:504 = 超时,503 = 测试出错(节点连不上目标),400 = 参数不对

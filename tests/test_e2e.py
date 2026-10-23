@@ -279,6 +279,10 @@ try:
     ok(req_code("/api/apps/hosts") == 400, "应用域名明细:缺 app 返回 400")
     c, _r = post("/api/apps/rules", {"text": "\n".join(f"k{i}.example={i}|其他" for i in range(900))}); ok(c == 200, "应用特征库:最多 1000 行")
     post("/api/apps/rules", {"text": ""})
+    c, pr = post("/api/lookup/probe", {"host": "www.baidu.com", "node": "XX-01"})
+    ok(c in (200, 400), f"域名实测:订阅里的节点走 healthcheck 接口 {c} {pr}")
+    if c == 200:
+        ok(pr["ok"] and pr["delay"] == 77, f"域名实测:订阅节点延迟 {pr}")
     cp = get("/api/compare"); ok(len(cp["series"]["cur"]) == 7 and "traffic" in cp and "notes" in cp, "周对比:结构完整")
     tl = get("/api/timeline?hours=24"); ok(len(tl["rows"]) == 24 and "marks" in tl, "故障时间线:24 小时")
     wf = get("/api/wifi"); ok(wf["available"] is False and "hint" in wf, "无线事件:没有日志时给出开启办法")
