@@ -1269,6 +1269,30 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 
 # 只读账号不能读的接口(含敏感配置 / 可能带内网细节的原始数据),以及唯一允许"假装成功"的写接口
 VIEWER_DENY_GET = {"/api/backup", "/api/apps/unknown", "/api/diag", "/api/syslog/export", "/api/nklog/export", "/api/docker/logs", "/api/docker/cfg", "/api/agh/config",
                    "/api/alerts/config", "/api/report/config", "/api/dns/cfg", "/api/listen", "/api/storage", "/api/health", "/api/autobackup/get", "/api/auth/sessions"}
+VIEWER_DENY_GET |= {"/api/panel", "/api/geo/status", "/api/nodes/stale"}   # 面板访问记录 / GeoIP 目录与代理 / 清理建议:管理用,只读账号不需要
+# 只读账号能看的接口里夹带的「配置」要在服务端剥掉(前端藏起来不算):只留 on 开关,不给地址 / 目录 / 域名清单 / URL
+_VIEWER_CFG_KEEP = {"/api/expiry": (), "/api/probe": ("on",), "/api/ups": ("on",), "/api/nklog": ("on",), "/api/syslog": ("on",), "/api/docker": ("on", "control")}
+
+
+def _viewer_scrub(path, data):
+    if not isinstance(data, dict):
+        return data
+    if path in _VIEWER_CFG_KEEP and isinstance(data.get("cfg"), dict):
+        data = dict(data)
+        data["cfg"] = {k: v for k, v in data["cfg"].items() if k in _VIEWER_CFG_KEEP[path]}
+        if path == "/api/nklog":
+            data.pop("err", None)    # 里面带内核日志文件路径
+            data.pop("mode", None)
+        if path == "/api/expiry":    # 到期监控的目标(域名 / 证书主机)也是配置
+            data["certs"] = [{**{k: v for k, v in r.items() if k != "target"}, "target": "(已隐藏)"} for r in data.get("certs") or []]
+            data["domains"] = [{**{k: v for k, v in r.items() if k != "target"}, "target": "(已隐藏)"} for r in data.get("domains") or []]
+    if path == "/api/status":
+        data = dict(data)
+        data["config"] = {"api": "", "has_secret": False, "source": ""}
+        data["nikki_ui"] = {"host": "", "port": "", "path": ""}
+    return data
+
+
 VIEWER_POST_OK = {"/api/logout", "/api/clienterr"}
 VIEWER_EDIT_POST = {"/api/device", "/api/groups/set", "/api/presence/watch"}   # 管理员给只读账号开了「修改设备别名 / 分组 / 关注」才放行
 VIEWER_POST_NOOP = {"/api/ui", "/api/alerts/seen"}     # 外观 / 已读标记:只读账号改了也不写到服务器(否则会覆盖管理员的布局),但不报错
@@ -1447,6 +1471,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             log("接口出错", u.path, e)
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
+        if role == "v":
+            data = _viewer_scrub(u.path, data)
         self._send(code, data)
 
     def _syslog_export(self, params):

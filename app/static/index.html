@@ -301,7 +301,8 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .cbars{display:flex;gap:16px;align-items:flex-end;height:110px}.cbg{display:flex;gap:4px;flex:1;height:100%;align-items:flex-end}.cb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:10px;color:var(--muted)}.cb i{width:100%;border-radius:3px 3px 0 0;display:block}
 .kv{display:flex;gap:10px;align-items:baseline;padding:3px 0}.kv b{font-size:18px}.tlsvg text.tll{font-size:10px;fill:var(--muted)}.cmpnotes{margin-bottom:8px;display:flex;flex-wrap:wrap}
 #ghTop{display:inline-flex;align-items:center;margin-right:6px}#ghTop .ghl{margin:0}
-html[data-role=v] #rtGo,html[data-role=v] #lkpLive{display:none}
+html[data-role=v] #btnArr,html[data-role=v] #viewSeg{display:none!important}
+html[data-role=v] #rtGo,html[data-role=v] #lkpLive,html[data-role=v] #nsPurge{display:none}
 #kvm h3,#unk h3{display:flex;gap:8px;align-items:center}#kvm h3 .sp,#unk h3 .sp{flex:1}
 .pgbar{display:flex;align-items:center;gap:6px;padding:6px 2px 0;font-size:12px;color:var(--muted)}.pgbar button{padding:2px 9px;font-size:12px}.pgbar .sp{flex:1}
 .pgt tr.click{cursor:pointer}.pgt tr.click:hover td{background:var(--hover)}
@@ -475,11 +476,11 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <div id="dataTop">
 <div class="bar" id="filters">
+  <div class="seg" id="viewSeg" role="group" aria-label="状态" title="状态:显示全部卡片(包括路由器状态 / 内存 / 实时速度等全局内容)"></div>
   <div class="seg" id="range" role="group" aria-label="时间范围"></div>
   <span id="custom" style="display:none"><input type="date" id="d1"> – <input type="date" id="d2"></span>
   <div class="seg" id="mode" role="group" aria-label="流向"></div>
   <input id="hostQ" placeholder="全局搜索:设备 / 域名 / 节点 / 规则" style="width:230px;max-width:100%">
-  <div class="seg" id="viewSeg" role="group" aria-label="概览视图" title="一键切换概览里显示哪些卡片"></div>
   <button id="btnArr" class="arrbtn" aria-pressed="false" title="整理布局:打开后可以用鼠标拖动概览卡片和左侧小卡片来调整位置(电脑端)">⠿ 整理</button>
   <button id="btnPriv" aria-pressed="false" title="隐私模式:模糊显示域名 / 目标 IP(悬停或点按显示)">隐私</button>
 </div>
@@ -633,7 +634,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
       <div class="card sec" id="sec-look"><h2>界面外观</h2>
   <div class="row2"><span class="lb">模式</span><div class="seg" id="lkMode"></div></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">主题</span><div class="sw" id="lkPreset"></div></div>
-  <div class="row2"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
+  <div class="row2" style="display:none"><span class="lb">视图预设</span><div class="seg" id="lkView"></div><span class="sub">一键决定概览显示哪些卡片</span></div>
   <div class="row2" style="align-items:flex-start"><span class="lb">概览卡片</span><div style="flex:1;min-width:260px"><div class="sub" style="margin-bottom:6px">每张卡片都可设置宽度(占一行的几分之几)和高度(矮/中/高),并选择是否显示、用 ↑↓ 调顺序。同一行的卡片会自动拉到一样高;想整齐,就把同一行的卡片设成同样的高度。「设备」「访问目标」卡片里可切换「此刻 / 时段」两种视图;「设备」「节点」「访问目标」的高度选项是每页 5 / 8 / 12 行,内容多时翻页(没有滚动条),高度固定,可点「暂停」冻结内容、点一行看详情。访问目标的「时段」视图另可设置显示行数(5~100 行)。卡片太窄时会自动收起次要的列。</div><div id="lkCards"></div><div class="sub" id="lkCardMsg" style="margin:6px 0"></div>
     <label class="ord" style="cursor:pointer"><input type="checkbox" id="lkTiles"> <span>显示顶部统计卡片(滚动时固定在顶部)</span></label>
   </div></div>
@@ -985,7 +986,7 @@ function renderChrome(){
   seg($("#grain"),GRAINS,S.grain,k=>{S.grain=k;renderChrome();loadTrend()});
   seg($("#tStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;saveTheme();renderChrome();drawTrend()});
   seg($("#tDim"),TDIMS,S.tDim,k=>{S.tDim=k;renderChrome();loadTrend()});
-  seg($("#rtSrc"),[["all","总"],["direct","直连"],["proxy","代理"]],TH.rtSrc,k=>{TH.rtSrc=k;saveTheme();renderChrome();if(S.rt)paintRt(S.rt)});
+  seg($("#rtSrc"),[["all","总"],["direct","直连"],["proxy","代理"]],rtSrcEff(),k=>{if(S.mode)return;TH.rtSrc=k;saveTheme();renderChrome();if(S.rt)paintRt(S.rt)});
   seg($("#viewSeg"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));
   $("#viewSeg").style.display=S.tab==="overview"?"":"none";$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   $("#nav").innerHTML=TABS.map(([k,l])=>`<button class="navi ${k==="settings"?"sep":""}" role="tab" title="${l}" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}<span class="nl">${l}</span>${k==="alerts"&&S.unread>0?`<i class="nb">${S.unread>99?"99+":S.unread}</i>`:""}</button>`).join("");
@@ -1312,13 +1313,14 @@ function paintDevTop(){const j=S.dtJ;if(!j)return;const per=rowsOf("devtop"),st=
     r=>trace(base({mode:S.dtMode,dev:r.key}),["host","node","group","rule"],15));
   $("#dtPager").innerHTML=j.rows.length>per?pagerBar("devtop",j.rows.length,per):""}
 /* 此刻最活跃的设备 / 节点:固定行数、翻页、可暂停、点一行看详情 */
-const hostView=()=>S.q?"period":TH.views.host;
+const hostView=()=>S.q||S.mode?"period":TH.views.host;
+const devPeriod=()=>!!S.mode||TH.views.dev==="period";
 function applyViews(){
-  const dp=TH.views.dev==="period",hp=hostView()==="period";
-  seg($("#devView"),[["live","此刻"],["period","时段"]],TH.views.dev,k=>{TH.views.dev=k;saveTheme();applyViews();if(k==="period")loadDevTop()});
+  const dp=devPeriod(),hp=hostView()==="period";
+  seg($("#devView"),[["live","此刻"],["period","时段"]],devPeriod()?"period":"live",k=>{if(S.mode)return;TH.views.dev=k;saveTheme();applyViews();if(k==="period")loadDevTop()});
   $("#rtDev").style.display=dp?"none":"";$("#dtBox").style.display=dp?"":"none";$("#dtMode").style.display=dp?"":"none";
   $("#devHint").textContent=dp?"点一行看它访问的域名去向":"点一行看详情 · 可暂停";
-  seg($("#hostView"),[["live","此刻"],["period","时段"]],hostView(),k=>{if(S.q)return;TH.views.host=k;saveTheme();applyViews();if(k==="period")loadHosts()});
+  seg($("#hostView"),[["live","此刻"],["period","时段"]],hostView(),k=>{if(S.q||S.mode)return;TH.views.host=k;saveTheme();applyViews();if(k==="period")loadHosts()});
   $("#rtHost").style.display=hp?"none":"";$("#hostsBox").style.display=hp?"":"none";
   $("#hostHint").textContent=hp?(S.q?"搜索结果 · 点一行看 设备 / 规则 / 节点 / DNS":"点一行看 设备 / 规则 / 节点 / DNS"):"点一行看详情 · 可暂停"}
 const PGCFG={rtdev:["#rtDev",r=>r.name||r.key],rtnode:["#rtNode",r=>r.node],rthost:["#rtHost",r=>r.host]};
@@ -1544,7 +1546,7 @@ function paintRt(j){
   const D=j.direct,P=j.proxy,msg=j.ok?"":"实时速度暂时读不到(会自动重试)";
   document.querySelectorAll("[data-vz]").forEach(b=>b.textContent=TH.viz.style==="wave"?"曲线":"水波");
   $("#rtNote").textContent=msg;
-  const src=TH.rtSrc||"all";
+  const src=rtSrcEff();
   if(src==="direct")fillRt("rt",D,D.series,`直连 ${D.conns} 个连接`);
   else if(src==="proxy")fillRt("rt",P,P.series,`代理 ${P.conns} 个连接`);
   else fillRt("rt",{up:D.up+P.up,down:D.down+P.down},D.series.map((r,i)=>{const p=P.series[i]||[0,0,0];return [r[0],r[1]+p[1],r[2]+p[2]]}),`${j.conns.total} 个连接(直连 ${D.conns} + 代理 ${P.conns})`);
@@ -1636,19 +1638,19 @@ const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:D
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
-const VIEWS={all:["全部",null],ov:["总览",["rt","rtdev","rthost","alertc","trend"]],ts:["诊断",["sys","mem","rt","rtnode","rthost","alertc","apps","qoe"]],sec:["安全",["rtdev","rthost","alertc","apps"]]};
+const VIEWS={all:["状态",null]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
 const normOrder=o=>{const ord=(Array.isArray(o)?o:[]).filter(k=>CARDS[k]);for(const k in CARDS)if(!ord.includes(k)){let ti=ord.indexOf({mem:"rt",alertc:"trend"}[k]||"trend");if(ti<0)ti=ord.indexOf("trend");if(ti>=0)ord.splice(ti,0,k);else ord.push(k)}return ord};
 let THEME_RAW=null;
 let TH=loadTheme();
-function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}catch(e){}THEME_RAW=raw;try{const t=JSON.parse(raw||"{}"),d=themeDefault();
+function loadTheme(over){let raw=null;if(over!==undefined)raw=over;else try{raw=localStorage.getItem("nt.theme.v1")}catch(e){}THEME_RAW=raw;try{const t=JSON.parse(raw||"{}"),d=themeDefault();
   if(!(t.v>=4)){const hr=((t.cards||{}).hosts||{}).rows;delete t.order;delete t.hide;delete t.cards;if(hr)t.cards={rthost:{rows:hr}}} /* v0.9.0 合并了一批卡片,旧排版重置一次 */
   const r={...d,...t,custom:{...(t.custom||{})},trend:{...d.trend,...(t.trend||{})},viz:{...d.viz,...(t.viz||{})},views:{...d.views,...(t.views||{})},cards:{}};
   if(!(t.v>=5)&&t.cards){for(const k of ["sys","mem","rt","alertc","apps","qoe"])if(t.cards[k]&&t.cards[k].h==="m")t.cards[k]={...t.cards[k],h:"s"}} /* v0.15 统一了高度,旧的默认「中」改成新的默认「矮」 */
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","ov","ts","sec","custom"].includes(r.view))r.view="all";if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
+  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1659,12 +1661,15 @@ function loadTheme(){let raw=null;try{raw=localStorage.getItem("nt.theme.v1")}ca
    vl[r.view]={order:[...r.order],cards:JSON.parse(JSON.stringify(r.cards))};r.vl=vl}
   return r}catch(e){console.error("读取外观设置失败,先用默认值(原内容已另存):",e);try{if(raw)localStorage.setItem("nt.theme.bad",raw)}catch(_){}return themeDefault()}}
 let uiTimer=0;
-/* 每个视图预设(全部/总览/排障/安全)各自记住自己的卡片大小和顺序 */
+/* 卡片大小和顺序按视图记住(现在只有「状态」一个预设,其余是自定义) */
 function stashLayout(){TH.vl=TH.vl||{};TH.vl[TH.view]={order:[...TH.order],cards:JSON.parse(JSON.stringify(TH.cards))}}
-function saveTheme(){stashLayout();try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}
+function saveTheme(){stashLayout();if(S.role==="v")return;try{localStorage.setItem("nt.theme.v1",JSON.stringify(TH))}catch(e){}
   clearTimeout(uiTimer);uiTimer=setTimeout(()=>{post("/api/ui",{theme:TH}).catch(()=>{})},1200)}
 /* 外观设置同步到服务器:浏览器里没有(换浏览器/清缓存)就从服务器取回;服务器还没有就推一份上去 */
-async function syncUi(){try{const j=await get("/api/ui");
+/* 只读账号:外观一律跟管理员保存在服务器上的那份走(不读也不写自己浏览器里的),管理员改了之后下一次状态刷新(15 秒内)就同步过来 */
+let VIEW_THEME="";
+async function syncViewerUi(){try{const j=await get("/api/ui");if(!j.theme)return;const raw=JSON.stringify(j.theme);if(raw===VIEW_THEME)return;VIEW_THEME=raw;TH=loadTheme(raw);themeChanged(true);renderChrome()}catch(e){console.warn("viewer ui sync",e)}}
+async function syncUi(){if(S.role==="v")return syncViewerUi();try{const j=await get("/api/ui");
   if(THEME_RAW===null&&j.theme){try{localStorage.setItem("nt.theme.v1",JSON.stringify(j.theme))}catch(e){}TH=loadTheme();themeChanged(true);renderChrome()}
   else if(!j.theme)post("/api/ui",{theme:TH}).catch(()=>{})}catch(e){console.warn("ui sync",e)}}
 const mq=matchMedia("(prefers-color-scheme:dark)");
@@ -1706,10 +1711,14 @@ function applyTheme(){
   $("#tiles").classList.toggle("gone",!TH.tiles);$("#btnMode").textContent=MODE_LBL[TH.mode]||MODE_LBL.auto;
 }
 /* 概览里只筛了设备时,隐藏和该设备无关的全局内容,改显示「所选设备此刻」 */
-function autoHide(){const one=S.devs.size>0,q=!!S.q;
-  for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
-    if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.remove("autohide")}
-    else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
+/* 选了「代理 / 直连 / 拒绝」时:只留会按这个去向筛选的卡片(趋势、设备 / 访问目标的时段榜、应用),
+   路由器状态 / 内存 / 节点 / 网络质量 / 最近告警这些全局内容不出现;实时速度只在 代理 / 直连 下出现,并跟着切到对应的来源 */
+const MODE_KEEP=["trend","apps","rtdev","rthost","rt"];
+const rtSrcEff=()=>S.mode==="proxy"||S.mode==="direct"?S.mode:(TH.rtSrc||"all");
+function autoHide(){const one=S.devs.size>0,q=!!S.q,md=!!S.mode;
+  for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;const mh=md&&(!MODE_KEEP.includes(k)||(k==="rt"&&S.mode==="reject"));
+    if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.toggle("autohide",mh)}
+    else el.classList.toggle("autohide",q||mh||(one&&AUTOHIDE.includes(k)))}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
@@ -2057,7 +2066,7 @@ async function loadHealth(){
   $("#stSum").textContent=`数据库 ${hb(st.db)}`+(st.disk&&st.disk.total?`;磁盘剩余 ${hb(st.disk.free)} / ${hb(st.disk.total)}`:"")+`;明细保留 ${st.keep_days} 天、小时数据 ${st.hour_keep_days} 天(环境变量 KEEP_DAYS / HOUR_KEEP_DAYS)`;
   $("#stTbl").innerHTML="<tr><th>表</th><th>行数</th><th>占用</th><th></th></tr>"+st.tables.slice(0,14).map(t=>`<tr><td>${esc(t.name)}</td><td>${t.rows==null?"-":t.rows.toLocaleString()}</td><td>${hb(t.bytes)}</td><td>${t.trim?`<button class="stTrim" data-t="${esc(t.name)}">清理 7 天前</button>`:""}</td></tr>`).join("");
   $("#hlBk").innerHTML=h.backups.length?h.backups.map(b=>`<div class="sub" style="padding:3px 0"><a href="/api/autobackup/get?name=${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${hb(b.size)} · ${new Date(b.at*1000).toLocaleString()}</div>`).join(""):'<div class="sub">还没有(升级到新版本后第一次启动会生成)</div>'}
-function openSettings(sec){S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
+function openSettings(sec){if(S.role==="v")return;S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
 async function loadSettings(){
   S.set=S.set||"look";
   $("#setNav").innerHTML=SETGROUPS.map(([g,its])=>`<div class="sgh">${g}</div>`+its.map(([k,l])=>`<button role="tab" data-k="${k}" aria-selected="${k===S.set}">${l}</button>`).join("")).join("");
@@ -2580,7 +2589,7 @@ async function status(){try{const s=await get("/api/status");
   const c=s.conn;S.connOk=!!c.ok;{const vd=$("#verDot");vd.className="dot "+(c.ok?"ok":"bad");vd.title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→内核连接修改)")}$("#scStatus").style.cursor=c.ok?"":"pointer";$("#scStatus").title=c.ok?"已连接 nikki":((c.error||"未连接")+"(点击去设置→内核连接修改)");$("#conn").innerHTML=`<span class="dot ${c.ok?"ok":"bad"}"></span>${c.ok?"已连接 nikki":esc(c.error||"未连接")}`;
   {const dk=!!s.docker;if(dk!==!!S.dockerOn){S.dockerOn=dk;TABS=tabsFor();if(!dk&&S.tab==="docker")S.tab="overview";renderChrome();showTab()}}
   {const u=s.alerts_unread||0;if(u!==S.unread){S.unread=u;renderChrome()}document.title=(u?`(${u}) `:"")+"FLUX"}
-  {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}}updAcct(s.auth);
+  {const r=(s.auth&&s.auth.role)||"a";if(r!==S.role){S.role=r;document.documentElement.dataset.role=r;TABS=tabsFor();if(r==="v"&&S.tab==="settings")S.tab="overview";renderChrome();showTab()}if(r==="v")syncViewerUi()}updAcct(s.auth);
   try{NKAPI=(s.config&&s.config.api)||NKAPI;NKUI=s.nikki_ui||NKUI}catch(e){}
   {let bn=$("#noPwBar");const need=s.auth&&!s.auth.enabled;let hid="";try{hid=sessionStorage.getItem("flux.nopw.hide")||""}catch(e){}
     if(need&&!hid){if(!bn){bn=document.createElement("div");bn.id="noPwBar";bn.innerHTML='<b>⚠ 没有设置访问密码</b><span>局域网里任何人打开页面,都能看到每台设备访问过的域名。</span><span class="sp"></span><button id="noPwGo">现在设置</button><button id="noPwX" title="本次不再提示">×</button>';$(".main .inner").insertBefore(bn,$(".main .inner").firstChild);
@@ -2593,7 +2602,7 @@ async function status(){try{const s=await get("/api/status");
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
-  if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(TH.views.dev==="period")loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
+  if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(devPeriod())loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
   else if(S.tab==="nodes"){loadNodes();loadQuota();loadProv()}
   else if(S.tab==="alerts")loadAlerts();
   else if(S.tab==="security")loadSecurity();

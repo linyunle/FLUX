@@ -28,21 +28,21 @@ try:
         assert pg.inner_text("#sysTiles").strip(), "路由器状态卡片为空"
         assert "宽带" in pg.inner_text("#sysTiles"), "路由器状态卡片没有宽带质量"
         # 外观设置:刷新后要还在;浏览器清空后要从服务器取回
-        pg.evaluate("applyView('ts');TH.vh.ts=['trend'];TH.hide=['trend'];themeChanged(true)"); pg.wait_for_timeout(2500)
+        pg.evaluate("applyView('all');TH.vh.all=['trend'];TH.hide=['trend'];themeChanged(true)"); pg.wait_for_timeout(2500)
         pg.reload(); pg.wait_for_timeout(2500)
-        assert pg.evaluate("TH.view")=="ts" and pg.evaluate("TH.vh.ts&&TH.vh.ts.includes('trend')"), "刷新后外观设置丢了"
+        assert pg.evaluate("TH.view")=="all" and pg.evaluate("TH.vh.all&&TH.vh.all.includes('trend')"), "刷新后外观设置丢了"
         pg.evaluate("localStorage.removeItem('nt.theme.v1')"); pg.reload(); pg.wait_for_timeout(3500)
-        assert pg.evaluate("TH.view")=="ts", "浏览器清空后没有从服务器取回外观设置"
+        assert pg.evaluate("TH.view")=="all" and pg.evaluate("TH.vh.all&&TH.vh.all.includes('trend')"), "浏览器清空后没有从服务器取回外观设置"
         pg.evaluate("S.set='backup';openSettings('backup')"); pg.wait_for_timeout(1200)
         with pg.expect_download() as dl: pg.click("#bkDl")
-        import json as _j; bk=_j.load(open(dl.value.path())); assert bk["flux_backup"]==1 and bk["ui"]["view"]=="ts", "备份下载内容不对"
+        import json as _j; bk=_j.load(open(dl.value.path())); assert bk["flux_backup"]==1 and bk["ui"]["view"]=="all", "备份下载内容不对"
         pg.once("dialog", lambda d: d.accept()); pg.set_input_files("#bkFile", dl.value.path()); pg.wait_for_timeout(1000)
         assert "已恢复" in pg.inner_text("#bkMsg"), pg.inner_text("#bkMsg")
         pg.wait_for_timeout(3500)  # 恢复备份后页面会自动刷新
         # 升级兼容:浏览器里已有的外观设置(旧版本写的)加载后必须原样保留
-        pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,mode:'dark',dens:'compact',view:'sec',hide:['apps','qoe'],vh:{sec:['apps','qoe']},order:['trend','mem','rt'],cards:{apps:{w:6,h:'m',rows:10}}}))")
+        pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,mode:'dark',dens:'compact',view:'custom',hide:['apps','qoe'],order:['trend','mem','rt'],cards:{apps:{w:6,h:'m',rows:10}}}))")
         pg.reload(); pg.wait_for_timeout(2500)
-        assert pg.evaluate("[TH.mode,TH.dens,TH.view,TH.hide.join(),TH.vh.sec.join(),(TH.order.indexOf('trend')<TH.order.indexOf('mem')&&TH.order.indexOf('mem')<TH.order.indexOf('rt')),TH.cards.apps.rows,TH.cards.apps.w].join('|')")=="dark|compact|sec|apps,qoe|apps,qoe|true|10|6", "旧外观设置升级后没有原样保留"
+        assert pg.evaluate("[TH.mode,TH.dens,TH.view,TH.hide.join(),(TH.order.indexOf('trend')<TH.order.indexOf('mem')&&TH.order.indexOf('mem')<TH.order.indexOf('rt')),TH.cards.apps.rows,TH.cards.apps.w].join('|')")=="dark|compact|custom|apps,qoe|true|10|6", "旧外观设置升级后没有原样保留"
         pg.evaluate("S.tab='nodes';S.nd='';showTab();refresh()"); pg.wait_for_timeout(2500)
         assert pg.inner_text("#nsBody").strip(), "节点评分卡片为空"
         # 设备分组、白名单设置、时间线
@@ -69,10 +69,10 @@ try:
         pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(600)
         assert pg.evaluate("getComputedStyle(document.querySelector('#alertCard')).display")!="none", "重新勾选后卡片没出现"
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
-        pg.locator('#lkView button').nth(1).click(); pg.wait_for_timeout(400)
-        assert pg.evaluate("TH.hide.includes('apps')"), "预设「总览」没生效"
-        pg.locator('#lkView button').nth(0).click(); pg.wait_for_timeout(400)
-        assert pg.evaluate("TH.hide.length")==0, "预设「全部」没生效"
+        # 旧版本存过已删除的预设(总览 / 诊断 / 安全):升级后回到「状态」,并显示全部卡片
+        pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,view:'sec',hide:['apps','qoe']}))"); pg.reload(); pg.wait_for_timeout(2500)
+        assert pg.evaluate("[TH.view,TH.hide.length].join()")=="all,0", "旧预设没有迁移到「状态」"
+        pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
         # 手机尺寸:访问目标卡片附近,页面高度/滚动位置不应随实时刷新变化
         pg.set_viewport_size({"width":390,"height":800}); pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)
         pg.evaluate("document.querySelector('#rthostCard').scrollIntoView()"); pg.wait_for_timeout(500)
@@ -81,12 +81,6 @@ try:
             pg.wait_for_timeout(1000); assert pg.evaluate("[scrollY,document.documentElement.scrollHeight]")==y0, "手机上页面在实时刷新时跳动"
         # 预设里的勾选要记在该预设里;三张卡片有行数设置
         pg.set_viewport_size({"width":1200,"height":1000}); pg.evaluate("openSettings('look')"); pg.wait_for_timeout(800)
-        pg.locator('#lkView button').nth(2).click(); pg.wait_for_timeout(400)   # 排障
-        pg.locator('#lkCards input[data-k=trend]').click(); pg.wait_for_timeout(300)
-        pg.locator('#lkView button').nth(1).click(); pg.wait_for_timeout(300)   # 总览
-        pg.locator('#lkView button').nth(2).click(); pg.wait_for_timeout(300)   # 回到排障
-        assert pg.evaluate("TH.view")=="ts" and not pg.evaluate("TH.hide.includes('trend')"), "预设里的修改没有被记住"
-        pg.locator('#lkView button').nth(0).click(); pg.wait_for_timeout(300)
         assert pg.evaluate("TH.hide.length")==0, "「全部」应显示所有卡片"
         for k in ("alertc","apps","qoe"):
             assert pg.locator(f'#lkCards select[data-k={k}][data-f=rows]').count()==1, "缺少行数设置:"+k
@@ -95,8 +89,6 @@ try:
         # 各预设的大小/顺序互相独立;卡片等高
         pg.evaluate("applyView('all')"); pg.wait_for_timeout(200)
         pg.evaluate("TH.cards.trend.w=3;TH.order=TH.order.filter(k=>k!=='trend');TH.order.unshift('trend');saveTheme();applyTheme()")
-        pg.evaluate("applyView('ov')"); pg.wait_for_timeout(200)
-        assert pg.evaluate("TH.cards.trend.w")!=3 and pg.evaluate("TH.order[0]")!="trend", "预设之间的大小/顺序串了"
         pg.evaluate("applyView('all')"); pg.wait_for_timeout(200)
         assert pg.evaluate("TH.cards.trend.w==3&&TH.order[0]=='trend'"), "切回全部后自己的布局丢了"
         pg.evaluate("location.reload()"); pg.wait_for_timeout(1500)

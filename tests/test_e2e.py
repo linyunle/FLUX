@@ -626,6 +626,14 @@ try:
     ui0 = rq2(adm, "/api/ui")[1]
     c_, j_, _ = rq2(vw, "/api/ui", {"theme": {"mode": "dark-viewer-test"}})
     ok(c_ == 200 and j_.get("readonly") and rq2(adm, "/api/ui")[1] == ui0, "只读账号:改外观不会写到服务器")
+    ups0 = rq2(adm, "/api/ups")[1]["cfg"]; ex0 = rq2(adm, "/api/expiry")[1]["cfg"]; pr0 = rq2(adm, "/api/probe")[1]["cfg"]
+    rq2(adm, "/api/ups", {"on": True, "host": "10.9.8.7", "port": 3493, "name": "ups1"}); rq2(adm, "/api/expiry", {"certs": "cert.secret.example", "domains": "secretdomain.example"})
+    rq2(adm, "/api/probe", {"on": False, "minutes": 10, "top": 3, "url": "http://probe.secret.example/x"})
+    leak_ = [p_ for p_ in ("/api/ups", "/api/expiry", "/api/probe", "/api/docker", "/api/syslog", "/api/nklog?n=1", "/api/status") if any(x in json.dumps(rq2(vw, p_)[1]) for x in ("10.9.8.7", "secretdomain", "cert.secret", "probe.secret", "127.0.0.1:19331", "/host/var/log"))]
+    ok(not leak_ and "10.9.8.7" in json.dumps(rq2(adm, "/api/ups")[1]), f"只读账号:读不到 UPS 地址 / 到期监控域名 / 探测 URL / 容器与日志配置 {leak_}")
+    ok(rq2(vw, "/api/status")[1]["config"]["api"] == "" and rq2(adm, "/api/status")[1]["config"]["api"], "只读账号:状态里没有 nikki API 地址")
+    ok(rq2(vw, "/api/panel")[0] == 403 and rq2(vw, "/api/geo/status")[0] == 403 and rq2(vw, "/api/nodes/stale")[0] == 403, "只读账号:不能看面板访问记录 / GeoIP 目录 / 节点清理")
+    rq2(adm, "/api/ups", ups0); rq2(adm, "/api/expiry", {"certs": "\n".join(ex0["certs"]), "domains": "\n".join(ex0["domains"])}); rq2(adm, "/api/probe", pr0)
     ok(rq2(adm, "/api/backup")[0] == 200 and rq2(adm, "/api/health")[0] == 200, "管理员:能导出备份 / 看健康")
     # 登录失败锁定按 X-Forwarded-For(本机是受信代理)分别计数
     for _ in range(5): rq2(sess(), "/api/login", {"password": "nope"}, {"X-Forwarded-For": "9.9.9.9"})
