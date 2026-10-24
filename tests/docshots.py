@@ -28,7 +28,7 @@ try:
     time.sleep(6)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
-        br = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium", args=["--no-sandbox"])
+        br = pw.chromium.launch(**({"executable_path":os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")} if os.path.exists(os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")) else {}), args=["--no-sandbox"])
         # 登录页(未登录状态)
         pg = br.new_context(viewport={"width": 1280, "height": 760}).new_page()
         pg.goto(B + "/"); pg.wait_for_timeout(1200); pg.screenshot(path=f"{OUT}/login.png")

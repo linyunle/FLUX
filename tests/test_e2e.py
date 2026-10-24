@@ -348,6 +348,7 @@ try:
         time.sleep(0.5)
     sl = get("/api/syslog", ) ; ok(sl["rows"] >= 2 and any("e2e-marker" in x["msg"] for x in sl["rows_data"]), "系统日志:收到并入库")
     ok(len(get("/api/syslog?level=3")["rows_data"]) == 1 and len(get("/api/syslog?q=e2e-marker")["rows_data"]) == 1, "系统日志:按级别和关键词筛选")
+    sg = get("/api/syslog/groups?level=7&hours=24"); ok(sg["total"] >= 2 and all(k in sg["rows"][0] for k in ("pattern", "sample", "count", "last")) and sg["rows"][0]["count"] >= 1, "系统日志:按内容归并")
     c, r = post("/api/syslog/cfg", {"on": True, "port": sp, "days": 2, "max_rows": 2000, "ignore": "e2e-skip"}); ok(c == 200 and r["cfg"]["ignore"] == ["e2e-skip"] and r["purged"] == 0, "系统日志:忽略名单保存")
     time.sleep(6)
     _c.sendto("<30>Oct 17 19:58:02 OpenWrt crond[1]: e2e-skip noise".encode(), ("127.0.0.1", sp)); _c.sendto("<30>Oct 17 19:58:03 OpenWrt app[1]: e2e-keep".encode(), ("127.0.0.1", sp))
@@ -587,6 +588,7 @@ try:
     c, r = post("/api/geo/proxy", {"proxy": "http://nikki:pw999@127.0.0.1:7890"})
     ok(c == 200 and r["proxy"] == "http://***@127.0.0.1:7890" and "pw999" not in json.dumps(r) and "pw999" not in json.dumps(get("/api/geo/status")), "GeoIP:下载代理保存,密码不回显")
     ok(oct(os.stat(os.path.join(data, "geo_proxy.txt")).st_mode & 0o777) == "0o600", "GeoIP:代理文件 0600")
+    post("/api/geo/proxy", {"proxy": "http://u:pw999@127.0.0.1:7890"}); ok("geo_proxy" not in get("/api/backup?secrets=0") and get("/api/backup?secrets=1").get("geo_proxy") == "http://u:pw999@127.0.0.1:7890", "备份:下载代理只在含密钥时带上")
     post("/api/geo/proxy", {"proxy": ""}); ok(not get("/api/geo/status")["proxy"] or "环境" in get("/api/geo/status")["proxy"], "GeoIP:清除代理")
     # 旧库迁移
     ok(sqlite3.connect(os.path.join(data, "traffic.db")).execute("PRAGMA user_version").fetchone()[0] == 3, "数据库升到 v3,旧数据保留")
@@ -632,7 +634,7 @@ try:
     leak_ = [p_ for p_ in ("/api/ups", "/api/expiry", "/api/probe", "/api/docker", "/api/syslog", "/api/nklog?n=1", "/api/status") if any(x in json.dumps(rq2(vw, p_)[1]) for x in ("10.9.8.7", "secretdomain", "cert.secret", "probe.secret", "127.0.0.1:19331", "/host/var/log"))]
     ok(not leak_ and "10.9.8.7" in json.dumps(rq2(adm, "/api/ups")[1]), f"只读账号:读不到 UPS 地址 / 到期监控域名 / 探测 URL / 容器与日志配置 {leak_}")
     ok(rq2(vw, "/api/status")[1]["config"]["api"] == "" and rq2(adm, "/api/status")[1]["config"]["api"], "只读账号:状态里没有 nikki API 地址")
-    ok(rq2(vw, "/api/panel")[0] == 403 and rq2(vw, "/api/geo/status")[0] == 403 and rq2(vw, "/api/nodes/stale")[0] == 403, "只读账号:不能看面板访问记录 / GeoIP 目录 / 节点清理")
+    ok(rq2(vw, "/api/panel")[0] == 403 and rq2(vw, "/api/geo/status")[0] == 403 and rq2(vw, "/api/nodes/stale")[0] == 403 and rq2(vw, "/api/syslog/groups")[0] == 403, "只读账号:不能看面板访问记录 / GeoIP 目录 / 节点清理")
     rq2(adm, "/api/ups", ups0); rq2(adm, "/api/expiry", {"certs": "\n".join(ex0["certs"]), "domains": "\n".join(ex0["domains"])}); rq2(adm, "/api/probe", pr0)
     ok(rq2(adm, "/api/backup")[0] == 200 and rq2(adm, "/api/health")[0] == 200, "管理员:能导出备份 / 看健康")
     # 登录失败锁定按 X-Forwarded-For(本机是受信代理)分别计数

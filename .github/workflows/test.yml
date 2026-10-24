@@ -1,0 +1,26 @@
+name: test
+# 单元测试 + 端到端测试 + 浏览器冒烟测试。发版(release.yml)之前会先跑这一套,不通过就不构建镜像。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 单元测试
+        run: python3 tests/test_units.py
+      - name: 端到端测试(模拟 nikki / AdGuard / Docker)
+        run: python3 tests/test_e2e.py
+      - name: 浏览器冒烟测试
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+          python3 tests/smoke_ui.py

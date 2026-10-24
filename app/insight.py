@@ -649,7 +649,14 @@ def secsum(con, force=False):
             tile("dns", "DNS 过滤", "读取失败", a.get("error", ""), "warn", "set:dns")
             find("warn", "读不到 AdGuard Home", a.get("error", ""), "set:dns")
     except Exception as e:
-        log("安全概览(DNS)", e)
+        log("安全概览(AdGuard)", e)
+    try:
+        from . import syslog
+        sl = syslog.silence(con)
+        if sl:
+            find(sl["level"], sl["title"], sl["detail"], "set:syslog")
+    except Exception as e:
+        log("安全概览(系统日志)", e)
     try:
         lk = leaks(con, 7)
         n = len(lk["cn_proxy"]) + len(lk["fo_direct"])

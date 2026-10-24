@@ -17,7 +17,7 @@ try:
     from playwright.sync_api import sync_playwright
     out = os.path.join(HERE, "shots"); os.makedirs(out, exist_ok=True)
     with sync_playwright() as pw:
-        br = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium", args=["--no-sandbox"])
+        br = pw.chromium.launch(**({"executable_path":os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")} if os.path.exists(os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")) else {}), args=["--no-sandbox"])
         for scheme, w, h in (("light", 1100, 900), ("dark", 1100, 900), ("light", 390, 800)):
             pg = br.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
             errs = []

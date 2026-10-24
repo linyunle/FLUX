@@ -246,7 +246,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 details.adv{margin-top:6px}details.adv>summary{cursor:pointer;color:var(--ink2);padding:6px 0;font-size:13px}details.adv[open]>summary{margin-bottom:8px}
 body.priv .pv{filter:blur(6px);transition:filter .15s}body.priv .pv:hover{filter:none}
 #btnPriv[aria-pressed=true]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
-@media(max-width:820px){#viewSeg{display:none!important}}
+@media(max-width:820px){#filters #viewSeg{order:-2}#filters #btnPriv{order:-1}}
 /* 手机:所有会实时变化的块高度固定,内容变化不再把页面顶来顶去 */
 .tile .v,.tile .s,.tile .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #rtDev tr,#rtNode tr,#rtHost tr{height:34px}#rtDev td,#rtNode td,#rtHost td{white-space:nowrap}.pager{height:36px;box-sizing:border-box;flex:none}
@@ -477,7 +477,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <div id="dataTop">
 <div class="bar" id="filters">
-  <div class="seg" id="viewSeg" role="group" aria-label="状态" title="状态:显示全部卡片(包括路由器状态 / 内存 / 实时速度等全局内容)"></div>
+  <div class="seg" id="viewSeg" role="group" aria-label="状态" title="状态:显示 / 隐藏路由器状态、内存、实时速度这几张全局卡片(页面太长时可以收起)"></div>
   <div class="seg" id="range" role="group" aria-label="时间范围"></div>
   <span id="custom" style="display:none"><input type="date" id="d1"> – <input type="date" id="d2"></span>
   <input id="hostQ" placeholder="全局搜索:设备 / 域名 / 节点 / 规则" style="width:230px;max-width:100%">
@@ -624,8 +624,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card" id="rtTestCard"><h2>实时规则测试 <span class="sub">让 nikki 现在真发一次连接(只建立隧道,不传数据),看这个域名实际命中哪条规则、走哪个节点;规则集 / GEOSITE 也能测准</span></h2>
     <div class="lkprow"><input id="rtIn" placeholder="例如 github.com" autocomplete="off" spellcheck="false"><button class="pri" id="rtGo">实时测试</button><button id="rtLk">推算 + 历史记录</button></div>
     <div id="rtOut"></div></div>
-  <div class="card"><h2>策略组 <span class="sub">点一行 = 只看这个策略组</span></h2><div class="scroll" id="grpTbl"></div></div>
-  <div class="card"><h2>命中规则 <span class="sub">点一行 = 只看这条规则</span></h2><div class="scroll" id="ruleTbl"></div></div>
+  <div class="card"><h2>策略组<span class="seg" id="grpMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub">点一行 = 只看这个策略组</span></h2><div class="scroll" id="grpTbl"></div></div>
+  <div class="card"><h2>命中规则<span class="seg" id="ruleMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub">点一行 = 只看这条规则</span></h2><div class="scroll" id="ruleTbl"></div></div>
   <div class="card"><h2>规则健康 <span class="sub" id="rhNote"></span></h2><div id="rhBody"></div></div>
 </section>
 
@@ -713,7 +713,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <textarea id="appTxt" rows="10" placeholder="mycdn.example.com=公司内网|办公 / 开发"></textarea>
   <div class="sub" id="appCats" style="margin-top:6px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button id="appImp">导入规则文件…</button><input type="file" id="appFile" accept=".txt,.csv,.json,text/plain" style="display:none"><button id="appExp">导出当前规则</button><span class="sub">没识别出来的域名:在概览「应用分布」里点开「未识别」→「导出未识别明细」,发给 AI 分类后把回复存成文件,在这里导入</span></div>
-  <div class="msg" id="appMsg"></div>
+  <div id="appPrev"></div><div class="msg" id="appMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="appSave" class="pri">保存</button></div></div>
       <div class="card sec" id="sec-alerts"><h2>告警通知</h2>
   <div class="sub" id="alLearn" style="margin-bottom:6px"></div>
@@ -763,7 +763,7 @@ uci commit dhcp
   <div style="display:flex;gap:8px;justify-content:flex-end"><button id="quotaAdd">+ 添加机场</button><button id="quotaSave" class="pri">保存</button></div></div>
       <div class="card sec" id="sec-backup"><h2>备份恢复</h2>
   <div class="sub" style="margin-bottom:10px;line-height:1.7">外观(卡片显示 / 顺序 / 主题)会自动同步一份到服务器,换浏览器或清缓存后会自动取回。下面可以把全部设置导出成一个文件存着,设置丢了就导入它。备份包含:外观、告警规则与推送渠道、AdGuard、订阅额度、周报、订阅归类规则、应用特征库规则、设备别名。流量统计数据不在其中(它们存在 data 目录里,更新容器不会丢)。</div>
-  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="bkSec"> 包含密钥(推送地址 / Token、AdGuard 密码)——备份文件会含明文密钥,请自己妥善保管。每次升级后面板还会自动在服务器的 data/backups/ 里留一份(含密钥,权限 600,只留最近 3 份),在「健康与存储」里下载</label>
+  <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="bkSec"> 包含密钥(推送地址 / Token、AdGuard 密码、下载代理地址里的账号密码)——备份文件会含明文密钥,请自己妥善保管。每次升级后面板还会自动在服务器的 data/backups/ 里留一份(含密钥,权限 600,只留最近 3 份),在「健康与存储」里下载</label>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button id="bkDl" class="pri">下载备份文件</button><button id="bkUp">从文件恢复…</button><input type="file" id="bkFile" accept=".json,application/json" style="display:none"></div>
   <div class="msg" id="bkMsg"></div>
   <div class="sub" id="bkInfo"></div>
@@ -828,7 +828,7 @@ uci commit dhcp
   <div class="h3">在路由器上要做的设置(SSH 里执行,只改这一条转发)</div>
   <pre id="slCmd" style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0"></pre>
   <div class="h3">日志</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><button id="slGo">刷新</button><button id="slClear">清空</button><button id="slCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="slExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="slMask" checked> 打码 IP / MAC</label></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><select id="slLv"><option value="7">全部</option><option value="5">注意及以上</option><option value="4">警告及以上</option><option value="3">错误及以上</option><option value="2">严重及以上</option></select><input id="slQ" placeholder="搜索关键词" style="flex:1;min-width:120px"><select id="slView"><option value="d">明细</option><option value="g">按内容归并</option></select><select id="slHrs" style="display:none"><option value="6">6 小时</option><option value="24" selected>24 小时</option><option value="72">3 天</option><option value="168">7 天</option></select><button id="slGo">刷新</button><button id="slClear">清空</button><button id="slCopy" title="复制当前筛选条件下最近的日志(最多 1000 条)">复制</button><button id="slExp" title="导出成 .txt 文件(最多 5000 条)">导出</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="slMask" checked> 打码 IP / MAC</label></div>
   <div class="scroll" id="slRows"></div></div>
       <div class="card sec" id="sec-health"><h2>健康与存储</h2>
   <div class="sub" style="margin-bottom:8px">面板自己和它依赖的东西现在是否正常:nikki 接口、磁盘、后台任务、日志挂载、访问密码。出问题时先看这里。</div>
@@ -982,7 +982,7 @@ function base(extra={}){const d=dates();return {from:d.from,to:d.to,dev:[...S.de
 // 防止旧请求覆盖新结果;请求期间保留上一次的渲染
 async function load(name,path,o,render){const id=(S.seq[name]=(S.seq[name]||0)+1);try{const j=await get(path,o);if(S.seq[name]===id)render(j)}catch(e){if(S.seq[name]===id){console.warn(path,e);if(!/fetch|Load failed|NetworkError|aborted/i.test(String(e.message))&&/Error$/.test(e.name||""))reportErr(path+" 渲染出错 "+e.name+": "+e.message)}}}
 
-S.cm={trend:"",host:"",apps:"",dom:"",dev:""};
+S.cm={trend:"",host:"",apps:"",dom:"",dev:"",grp:"",rule:""};
 const CMODES=[["","全部"],["proxy","代理"],["direct","直连"],["reject","拒绝"]];
 function cmSeg(id,key,cb){seg($(id),CMODES,S.cm[key],k=>{S.cm[key]=k;cb(k)})}
 function renderChrome(){
@@ -992,7 +992,7 @@ function renderChrome(){
   cmSeg("#tMode","trend",()=>loadTrend());
   seg($("#tDim"),TDIMS,S.tDim,k=>{S.tDim=k;renderChrome();loadTrend()});
   seg($("#rtSrc"),[["all","总"],["direct","直连"],["proxy","代理"]],TH.rtSrc,k=>{TH.rtSrc=k;saveTheme();renderChrome();if(S.rt)paintRt(S.rt)});
-  seg($("#viewSeg"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));
+  $("#viewSeg").innerHTML=`<button aria-pressed="${TH.gl}">状态</button>`;$("#viewSeg").onclick=()=>glToggle();
   $("#viewSeg").style.display=S.tab==="overview"?"":"none";$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   $("#nav").innerHTML=TABS.map(([k,l])=>`<button class="navi ${k==="settings"?"sep":""}" role="tab" title="${l}" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}<span class="nl">${l}</span>${k==="alerts"&&S.unread>0?`<i class="nb">${S.unread>99?"99+":S.unread}</i>`:""}</button>`).join("");
   $("#nav").onclick=e=>{const b=e.target.closest(".navi");if(b){S.tab=b.dataset.k;if(S.tab==="devices")S.dd="";if(S.tab==="nodes")S.nd="";showTab();refresh()}};
@@ -1428,7 +1428,12 @@ function liveH(r){if(!r.ok)return`<div class="msg err">${esc(r.error||"测试失
   ${lkpStep({n:2,title:"最终出口",tag:r.kind||"?",main:ch,sub:"链路由策略组 → … → 节点",level:kc})}
   ${lkpStep({n:3,title:"入口 / DNS",tag:r.type||"?",main:"DNS 方式:"+(r.dns||"?"),sub:r.remote?"远端 "+r.remote:""})}</div>`}
 async function runLive(host,out){host=(host||"").trim();if(!host)return;out.innerHTML='<div class="sub">测试中(约 1~3 秒)…</div>';
-  try{out.innerHTML=liveH(await post("/api/lookup/test",{host}))}catch(e){out.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+  try{const j=await post("/api/lookup/test",{host});out.innerHTML=liveH(j);
+    if(j.auth_needed&&document.documentElement.dataset.vro!=="1"&&S.role!=="v"){const f=document.createElement("div");f.className="fld";f.style.marginTop="8px";
+      f.innerHTML=`<label>nikki 代理端口的账号密码(只存在你自己的 data 目录,不会出现在诊断包里)</label><div class="lkprow"><input type="password" autocomplete="off" placeholder="${esc(j.proxy_hint)}" spellcheck="false"><button class="pri">保存并重测</button></div><div class="msg"></div>`;out.appendChild(f);
+      const inp=f.querySelector("input"),mg=f.querySelector(".msg"),go=async()=>{if(!inp.value.trim())return;mg.className="msg";mg.textContent="保存中…";try{await post("/api/geo/proxy",{proxy:inp.value.trim()});inp.value="";await runLive(host,out)}catch(e){mg.className="msg err";mg.textContent=e.message}};
+      f.querySelector("button").onclick=go;inp.onkeydown=e=>{if(e.key==="Enter")go()}}
+  }catch(e){out.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
 $("#rtGo").onclick=()=>runLive($("#rtIn").value,$("#rtOut"));$("#rtIn").onkeydown=e=>{if(e.key==="Enter")runLive($("#rtIn").value,$("#rtOut"))};
 $("#rtLk").onclick=()=>{const v=$("#rtIn").value.trim();if(!v)return;S.tab="domains";showTab();refresh();lookupHost(v)};
 const lkpStep=st=>`<div class="lstep ${st.level||""}"><div class="num">${st.n}</div><div class="body"><div class="hd"><span class="tt">${esc(st.title)}</span><span class="chip">${esc(st.tag)}</span></div><div class="mn">${esc(st.main)}</div>${st.sub?`<div class="sub">${esc(st.sub)}</div>`:""}${st.details&&st.details.length?`<details><summary>查看详情</summary>${st.details.map(d=>`<div class="sub">${esc(d)}</div>`).join("")}</details>`:""}</div></div>`;
@@ -1603,8 +1608,9 @@ setInterval(loadRealtime,2000);
 const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r.nodes.map(n=>`${esc(n.node)} <span class="sub">${Math.round(n.bytes/Math.max(1,r.up+r.down)*100)}%</span>`).join("<br>")};
 function loadRules(){
   loadRuleHealth();
-  load("grp","/api/summary",{...base(),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
-  load("rule","/api/summary",{...base(),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
+  cmSeg("#grpMode","grp",()=>loadRules());cmSeg("#ruleMode","rule",()=>loadRules());
+  load("grp","/api/summary",{...base({mode:S.cm.grp}),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
+  load("rule","/api/summary",{...base({mode:S.cm.rule}),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
 
 /* ---------- 外观:主题 / 颜色 / 排版(只存在这个浏览器里) ---------- */
 const PRESETS={
@@ -1644,7 +1650,7 @@ const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDir
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",gl:true,priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 const VIEWS={all:["状态",null]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
@@ -1658,7 +1664,7 @@ function loadTheme(over){let raw=null;if(over!==undefined)raw=over;else try{raw=
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;
+  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.gl=t.gl!==false;
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1722,10 +1728,11 @@ function applyTheme(){
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
     if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.remove("autohide")}
-    else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k)))}
+    else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||(!TH.gl&&AUTOHIDE.includes(k)))}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
+function glToggle(){TH.gl=!TH.gl;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()}
 function applyView(k){stashLayout();TH.view=k;{const L=TH.vl[k];if(L){TH.order=normOrder(L.order);TH.cards=normCards(L.cards)}}TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
   const mode=effMode(),sg=(el,items,cur,fn)=>seg($(el),items,cur,fn);
@@ -1761,7 +1768,7 @@ function renderLook(){
   seg($("#lkViz"),[["line","曲线"],["wave","水波"]],TH.viz.style,k=>{TH.viz.style=k;themeChanged(true)});
   {const css=getComputedStyle(document.documentElement);for(const [id,k,v] of [["#cVzA","a","--down"],["#cVzB","b","--up"]]){const col=hexOk(TH.viz[k])?TH.viz[k]:css.getPropertyValue(v).trim();if(hexOk(col)&&document.activeElement!==$(id))$(id).value=col}}
   $("#lkTiles").checked=TH.tiles;
-  seg($("#lkView"),Object.entries(VIEWS).map(([k,v])=>[k,v[0]]),TH.view,k=>applyView(k));$("#lkPriv").checked=!!TH.priv;
+  $("#lkView").innerHTML=`<button aria-pressed="${TH.gl}">${TH.gl?"已显示":"已隐藏"}</button>`;$("#lkView").onclick=()=>glToggle();$("#lkPriv").checked=!!TH.priv;
 }
 function paintWp(j){const c=(j&&j.cfg)||{},b=c.source==="bing";$("#wpSrc").value=c.source||"upload";$("#wpBing").style.display=b?"flex":"none";$("#wpFile").style.display=b?"none":"";if(c.mode){$("#wpMode").value=c.mode;$("#wpEvery").value=c.every;$("#wpMkt").value=c.mkt}
   const bg=(j&&j.bing)||{};$("#wpInfo").textContent=b?(bg.err?"上次更换失败:"+bg.err+"(用的是 设置 → GeoIP 数据库 里 GeoIP 下载的那个代理,国内直连必应一般可以)":bg.at?"上次更换:"+new Date(bg.at*1000).toLocaleString()+(bg.title?" · "+bg.title:""):"启用后约半分钟内会自动换第一张"):"";
@@ -2170,9 +2177,15 @@ $("#appImp").onclick=()=>$("#appFile").click();
 $("#appFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";const m=$("#appMsg");m.className="msg";if(!f)return;if(f.size>2e6){m.className="msg err";m.textContent="文件太大(超过 2 MB)";return}
   try{const j=await get("/api/apprules"),r=parseAppImport(await f.text(),j.cats);if(!r.out.length){m.className="msg err";m.textContent="没有解析出规则。每行写成 域名关键字=应用名|类别,或用 CSV(域名,应用,类别)/ JSON";return}
     const cur=new Map();for(const l of $("#appTxt").value.split("\n")){const t=l.trim();if(!t||t[0]==="#"||!t.includes("="))continue;cur.set(t.slice(0,t.indexOf("=")).trim().toLowerCase(),t)}
-    let add=0,upd=0;for(const [k,a,c] of r.out){if(cur.has(k))upd++;else add++;cur.set(k,`${k}=${a}|${c}`)}
-    if(cur.size>1000){m.className="msg err";m.textContent="合并后超过 1000 条,请先精简";return}
-    $("#appTxt").value=[...cur.values()].join("\n");m.className="msg ok";m.textContent=`解析出 ${r.out.length} 条:新增 ${add}、覆盖 ${upd}${r.bad.length?`,跳过 ${r.bad.length} 行格式不对的`:""}。还没保存,检查后点「保存」生效`}catch(x){m.className="msg err";m.textContent=x.message}};
+    const seen=new Map();for(const [k,a,c] of r.out)seen.set(k,`${k}=${a}|${c}`);   // 文件里重复的域名,后面的算数
+    let add=0,upd=0,same=0;const rows=[];for(const [k,line] of seen){const o=cur.get(k);let st;if(!o){add++;st='<span class="lv note">新增</span>'}else if(o.replace(/\s+/g,"")===line.replace(/\s+/g,"")){same++;st='<span class="lv info">相同</span>'}else{upd++;st='<span class="lv warn">覆盖</span>'}
+      const [a2,c2]=line.slice(k.length+1).split("|");rows.push({c:[st,esc(k),esc(a2),esc(c2||""),o?esc(o.slice(o.indexOf("=")+1)):"–"]})}
+    rows.sort((x,y)=>(x.c[0].includes("相同")?1:0)-(y.c[0].includes("相同")?1:0));
+    if(cur.size+add>1000){m.className="msg err";m.textContent="合并后超过 1000 条,请先精简";return}
+    $("#appPrev").innerHTML=`<div class="sub" style="margin:8px 0 4px">导入预览:解析出 ${seen.size} 条 — 新增 ${add}、覆盖 ${upd}、相同 ${same}${r.bad.length?`、跳过 ${r.bad.length} 行格式不对的`:""}。确认后才会合并进上面的编辑框(合并后还要点「保存」才生效)。</div>`+pgTbl("appPrev",["动作","域名关键字","应用","类别","原来"],rows,{size:10})+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button id="appPrevNo">取消</button><button class="pri" id="appPrevOk">合并到编辑框</button></div>`;
+    $("#appPrevNo").onclick=()=>{$("#appPrev").innerHTML="";m.textContent=""};
+    $("#appPrevOk").onclick=()=>{for(const [k,line] of seen)cur.set(k,line);$("#appTxt").value=[...cur.values()].join("\n");$("#appPrev").innerHTML="";m.className="msg ok";m.textContent=`已合并:新增 ${add}、覆盖 ${upd}。还没保存,检查后点「保存」生效`};
+    m.className="msg";m.textContent=""}catch(x){m.className="msg err";m.textContent=x.message}};
 $("#appExp").onclick=()=>{const b=new Blob([$("#appTxt").value+"\n"],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="flux-app-rules.txt";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 $("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authSave").onclick=async()=>{const m=$("#authMsg");m.className="msg";try{const j=await post("/api/auth/set",{old:$("#authOld").value,new:$("#authNew").value});
@@ -2211,10 +2224,12 @@ const PGT={};
 function pgTbl(id,head,rows,o={}){const prev=PGT[id];PGT[id]={head,rows,size:o.size||10,p:prev&&prev.p*(o.size||10)<rows.length?prev.p:0,tsv:o.tsv!==false};return `<div class="pgt" data-pg="${id}">${pgIn(id)}</div>`}
 function pgIn(id){const t=PGT[id];if(!t||!t.rows.length)return"";const n=t.rows.length,pages=Math.ceil(n/t.size),a=t.p*t.size,page=t.rows.slice(a,a+t.size);
   return `<div class="scroll"><table><thead><tr>${t.head.map((h,i)=>`<th class="${i?"n":""}">${h}</th>`).join("")}</tr></thead><tbody>${page.map((r,i)=>`<tr${r.dt?` class="click" data-pgi="${a+i}"`:""}>${r.c.map((c,j)=>`<td class="${j?"n":"k"}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`+
-  `<div class="pgbar"><span>共 ${n} 条${pages>1?` · 第 ${t.p+1}/${pages} 页`:""}</span><span class="sp"></span>${pages>1?`<button data-pgp="prev" ${t.p?"":"disabled"}>上一页</button><button data-pgp="next" ${t.p<pages-1?"":"disabled"}>下一页</button>`:""}<button data-pgc="1">复制本表</button></div>`}
+  `<div class="pgbar"><span>共 ${n} 条${pages>1?` · 第 ${t.p+1}/${pages} 页`:""}</span><span class="sp"></span>${pages>1?`<button data-pgp="prev" ${t.p?"":"disabled"}>上一页</button><button data-pgp="next" ${t.p<pages-1?"":"disabled"}>下一页</button>`:""}<button data-pgc="1">复制本表</button><button data-pgv="1">导出 CSV</button></div>`}
+function pgCsv(id){const t=PGT[id];if(!t)return"";const q=x=>'"'+String(x).replace(/"/g,'""')+'"';return"\ufeff"+[t.head.map(htmlTxt),...t.rows.map(r=>r.c.map(htmlTxt))].map(r=>r.map(q).join(",")).join("\r\n")}
 function pgText(id){const t=PGT[id];return t?[t.head.map(htmlTxt).join("\t"),...t.rows.map(r=>r.c.map(htmlTxt).join("\t"))].join("\n"):""}
 document.addEventListener("click",e=>{const w=e.target.closest(".pgt");if(!w)return;const id=w.dataset.pg,t=PGT[id];if(!t)return;
   const pb=e.target.closest("[data-pgp]");if(pb){t.p+=pb.dataset.pgp==="next"?1:-1;w.innerHTML=pgIn(id);return}
+  const vb=e.target.closest("[data-pgv]");if(vb){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([pgCsv(id)],{type:"text/csv;charset=utf-8"}));a.download="flux-"+id+"-"+ymd(new Date())+".csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);return}
   const cb=e.target.closest("[data-pgc]");if(cb){copyBtn(cb,()=>pgText(id));return}
   const tr=e.target.closest("tr[data-pgi]");if(tr){const r=t.rows[+tr.dataset.pgi];if(r&&r.dt)openKV(r.dt.title,r.dt.lines,r.dt.note)}});
 /* 卡片文字:表格按行、分页表取全部行,用于「复制」按钮 */
@@ -2513,6 +2528,8 @@ async function slRefresh(fill){const j=await get("/api/syslog",{level:$("#slLv")
   $("#slCmd").textContent=`uci set system.@system[0].log_ip='127.0.0.1'\nuci set system.@system[0].log_port='${c.port}'\nuci set system.@system[0].log_proto='udp'\nuci commit system\n/etc/init.d/log restart\n\n# 测试(面板里应该很快出现这条):\nlogger -t flux-test "hello from router"\n\n# 想撤销:\nuci delete system.@system[0].log_ip; uci commit system; /etc/init.d/log restart`;
   const mb=(j.bytes/1048576).toFixed(1);
   $("#slInfo").innerHTML=(!c.on?"未开启。":j.err?`<span class="warn">${esc(j.err)}</span>`:j.bound?`正在监听 UDP ${j.bound}。`:"正在启动…")+`<br>库里 ${j.rows} 条(约 ${mb} MB)${j.oldest?`,最早 ${fmtTs(j.oldest)}`:""}。本次启动后收到 ${j.rx} 条${j.last_rx?`,最近一条 ${fmtTs(j.last_rx)}`:""}${j.ignored?`,按忽略名单跳过 ${j.ignored} 条`:""}${j.drop?`,因太多丢弃 ${j.drop} 条`:""}${j.bad?`,拒绝非内网来源 ${j.bad} 条`:""}${j.pruned?`,已自动清理 ${j.pruned} 条`:""}。`+(Object.keys(j.by_sev_24h).length?`<br>近 24 小时:${Object.entries(j.by_sev_24h).map(([k,v])=>`${k} ${v}`).join(" · ")}`:"");
+  if($("#slView").value==="g"){const g=await get("/api/syslog/groups",{level:$("#slLv").value,hours:$("#slHrs").value,q:$("#slQ").value});
+    $("#slRows").innerHTML=g.rows.length?`<div class="sub" style="margin-bottom:6px">近 ${g.hours} 小时共 ${g.total} 条,归并成 ${g.rows.length} 类(数字、MAC、IP 视为同一类)${g.capped?",日志太多只统计了最近的一部分":""}。点一行看样例。</div>`+pgTbl("slG",["次数","级别","程序","内容(已归并)","最近"],g.rows.map(r=>({c:[r.count,`<span class="lv ${SLCLS(r.sev)}">${esc(r.lv)}</span>`,esc(r.tag),`<span style="white-space:normal;word-break:break-all;font-size:12px">${esc(r.pattern)}</span>`,fmtTs(r.last)],dt:{title:"归并日志 · "+r.tag,lines:[["次数",r.count],["级别",r.lv],["程序",r.tag],["首次",fmtTs(r.first)],["最近",fmtTs(r.last)],["来源",(r.hosts||[]).join(", ")],["归并后",r.pattern],["样例",r.sample]]}})),{size:15}):'<div class="sub">没有符合条件的日志。</div>';return}
   $("#slRows").innerHTML=j.rows_data.length?`<table><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>程序</th><th>内容</th></tr></thead><tbody>${j.rows_data.map(r=>`<tr><td style="white-space:nowrap">${fmtTs(r.ts)}</td><td><span class="lv ${SLCLS(r.sev)}">${esc(r.lv)}</span></td><td class="hide-s">${esc(r.host)}</td><td class="hide-s">${esc(r.tag)}</td><td style="white-space:normal;word-break:break-all;font-size:12px">${esc(r.msg)}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">没有符合条件的日志。</div>'}
 async function loadSyslogSet(){await slRefresh(true)}
 function copyText(t){return new Promise((res,rej)=>{try{if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t).then(res,rej)}catch(e){}
@@ -2521,7 +2538,7 @@ function copyText(t){return new Promise((res,rej)=>{try{if(navigator.clipboard&&
 const slQs=(n,dl)=>new URLSearchParams({level:$("#slLv").value,q:$("#slQ").value,n,mask:$("#slMask").checked?"1":"0",...(dl?{dl:1}:{})}).toString()+(TOKEN?"&t="+encodeURIComponent(TOKEN):"");
 $("#slCopy").onclick=async()=>{const m=$("#slMsg");m.className="msg";try{const r=await fetch("/api/syslog/export?"+slQs(1000));if(!r.ok)throw new Error("读取失败 "+r.status);const t=await r.text();await copyText(t);m.className="msg ok";m.textContent=`已复制 ${t.split("\n").length-1} 行(按当前筛选条件)`}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#slExp").onclick=()=>{const a=document.createElement("a");a.href="/api/syslog/export?"+slQs(5000,true);document.body.appendChild(a);a.click();a.remove()};
-$("#slGo").onclick=()=>slRefresh(false);$("#slLv").onchange=()=>slRefresh(false);$("#slQ").onkeydown=e=>{if(e.key==="Enter")slRefresh(false)};
+$("#slView").onchange=()=>{$("#slHrs").style.display=$("#slView").value==="g"?"":"none";slRefresh(false)};$("#slHrs").onchange=()=>slRefresh(false);$("#slGo").onclick=()=>slRefresh(false);$("#slLv").onchange=()=>slRefresh(false);$("#slQ").onkeydown=e=>{if(e.key==="Enter")slRefresh(false)};
 $("#slSave").onclick=async()=>{const m=$("#slMsg");m.className="msg";try{const r=await post("/api/syslog/cfg",{on:$("#slOn").checked,port:+$("#slPort").value,days:+$("#slDays").value,max_rows:+$("#slMax").value,ignore:$("#slIgn").value});m.className="msg ok";m.textContent="已保存(几秒内生效)"+(r.purged?`,已删掉库里 ${r.purged} 条匹配的日志`:"");setTimeout(()=>slRefresh(false),6000);await slRefresh(false)}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#slClear").onclick=async()=>{if(!confirm("清空面板里存的全部路由器系统日志?(路由器自己的日志不受影响)"))return;try{await post("/api/syslog/clear",{});await slRefresh(false)}catch(e){$("#slMsg").className="msg err";$("#slMsg").textContent=e.message}};
 /* 设置:nikki 日志 */

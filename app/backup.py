@@ -7,7 +7,7 @@ import json
 import re
 import time
 
-from . import agh, dnsx, nikkilog, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi
+from . import agh, dnsx, nikkilog, airports, alerts, appsig, config, devices, groups, insight, presence, probe, syslog, ups, expiry, dockerapi, geo
 
 MAX_THEME = 64 * 1024
 
@@ -98,6 +98,10 @@ def export(con, secrets=False):
     out["docker"] = dockerapi.load_cfg(con)
     out["nklog"] = nikkilog.load_cfg(con)
     out["nikki_ui"] = nikki_ui(con)
+    if secrets:
+        px = geo.proxy_get()
+        if px:
+            out["geo_proxy"] = px   # 可能带账号密码,所以只在勾选「包含密钥」时才放进去
     return out
 
 
@@ -131,6 +135,8 @@ def restore(con, d):
             body["channels"] = keep
             alerts.save_cfg(con, body)
         step("告警规则与渠道", f)
+    if isinstance(d.get("geo_proxy"), str) and d["geo_proxy"].strip():
+        step("下载代理地址", lambda: geo.proxy_set(d["geo_proxy"]))
     if isinstance(d.get("agh"), dict):
         step("AdGuard", lambda: agh.save_cfg(con, d["agh"]))
     if isinstance(d.get("dns"), dict):

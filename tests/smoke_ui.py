@@ -14,7 +14,7 @@ try:
     time.sleep(25)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
-        br=pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",args=["--no-sandbox"])
+        br=pw.chromium.launch(**({"executable_path":os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")} if os.path.exists(os.environ.get("CHROMIUM_PATH","/opt/pw-browsers/chromium")) else {}),args=["--no-sandbox"])
         pg=br.new_page(viewport={"width":1200,"height":1000}); msgs=[]
         pg.on("pageerror",lambda e: msgs.append("ERR "+str(e))); pg.on("console",lambda m: msgs.append(m.type+" "+m.text) if m.type in("warning","error") else None)
         pg.goto("http://127.0.0.1:18101/"); pg.wait_for_timeout(2000)
@@ -72,6 +72,14 @@ try:
         # 旧版本存过已删除的预设(总览 / 诊断 / 安全):升级后回到「状态」,并显示全部卡片
         pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,view:'sec',hide:['apps','qoe']}))"); pg.reload(); pg.wait_for_timeout(2500)
         assert pg.evaluate("[TH.view,TH.hide.length].join()")=="all,0", "旧预设没有迁移到「状态」"
+        # 「状态」开关:隐藏 / 显示路由器状、内存、实时速度这类全局卡片
+        pg.evaluate("S.tab='overview';showTab()"); pg.wait_for_timeout(500)
+        pg.click("#viewSeg button"); pg.wait_for_timeout(600)
+        assert pg.evaluate("TH.gl")==False and pg.evaluate("getComputedStyle(document.querySelector('#memCard')||document.body).display")!=None
+        assert pg.evaluate("['sys','mem','rt','rtdev','rtnode'].every(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "关掉「状态」后全局卡片没有隐藏"
+        assert pg.evaluate("!document.querySelector(CARDS.trend[0]).classList.contains('autohide')"), "趋势卡片不应被「状态」隐藏"
+        pg.click("#viewSeg button"); pg.wait_for_timeout(600)
+        assert pg.evaluate("TH.gl")==True and pg.evaluate("!['sys','mem','rt','rtdev','rtnode'].some(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "再点一次没有恢复"
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
         # 手机尺寸:访问目标卡片附近,页面高度/滚动位置不应随实时刷新变化
         pg.set_viewport_size({"width":390,"height":800}); pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)

@@ -1,7 +1,7 @@
 import signal
 import threading
 
-from . import airports, alerts, appsig, auth, collector, config, db, geo, health, dnsx, nikkilog, realtime, syslog, wallpaper, wan, web
+from . import agh, airports, alerts, appsig, auth, collector, config, db, geo, health, dnsx, nikkilog, realtime, syslog, wallpaper, wan, web
 from .util import log, stop
 
 
@@ -25,6 +25,7 @@ def main():
     threading.Thread(target=realtime.run, name="realtime", daemon=True).start()
     threading.Thread(target=alerts.run, name="alerts", daemon=True).start()
     threading.Thread(target=wan.run, name="wanq", daemon=True).start()
+    threading.Thread(target=agh.run, name="aghsample", daemon=True).start()
     threading.Thread(target=syslog.run, name="syslog", daemon=True).start()
     threading.Thread(target=nikkilog.run, name="nklog", daemon=True).start()
     threading.Thread(target=dnsx.run, name="dnsprobe", daemon=True).start()

@@ -79,8 +79,10 @@ def selfcheck(con, now=None):
         sc = syslog.load_cfg(con)
         if sc["on"] and syslog._state["err"]:
             out.append(_f("warn", "系统日志接收没起来", syslog._state["err"] + "。换一个端口,或看看是不是被别的程序占用了。"))
-        elif sc["on"] and not syslog._state["last_rx"]:
-            out.append(_f("info", "系统日志还没收到任何日志", "面板在等路由器转发过来:到路由器上设置日志转发(设置页「系统日志」里有命令),并确认端口一致。"))
+        else:
+            sl = syslog.silence(con)
+            if sl:
+                out.append(_f(sl["level"], sl["title"], sl["detail"]))
         if syslog._state["drop"]:
             out.append(_f("info", f"系统日志已丢弃 {syslog._state['drop']} 条", "短时间内日志太多(每秒超过 300 条),超出的被丢弃了。多半是某个服务在狂刷日志,值得去看看是谁。"))
         if dockerapi.load_cfg(con)["on"] and dockerapi.STATE["ok"] is False:

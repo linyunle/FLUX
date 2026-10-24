@@ -122,7 +122,9 @@ def fetch(con, force=False):
         st = _req(cfg, "/control/stats")
         names = _ip_names(con)
         total, blocked = int(st.get("num_dns_queries") or 0), int(st.get("num_blocked_filtering") or 0)
-        AVG.append((int(time.time()), round(float(st.get("avg_processing_time") or 0) * 1000, 1)))
+        now = int(time.time())
+        if not AVG or now - AVG[-1][0] >= 50:   # 页面刷新和后台采样都会进来,避免同一分钟记两点
+            AVG.append((now, round(float(st.get("avg_processing_time") or 0) * 1000, 1)))
         out.update(ok=True, total=total, blocked=blocked,
                    safebrowsing=int(st.get("num_replaced_safebrowsing") or 0), parental=int(st.get("num_replaced_parental") or 0),
                    rate=round(blocked * 100 / total, 1) if total else 0, avg_ms=round(float(st.get("avg_processing_time") or 0) * 1000, 1),
@@ -213,3 +215,18 @@ def diag_info(con, n=100):
     except Exception as e:
         out["querylog_error"] = _err(e)
     return out
+
+
+SAMPLE_EVERY = 120
+
+
+def run():
+    """后台每 2 分钟取一次 AdGuard 的平均耗时,没人开页面时曲线也不断档。"""
+    from . import db
+    from .util import stop
+    con = db.open_db()
+    while not stop.wait(SAMPLE_EVERY):
+        try:
+            fetch(con, force=True)
+        except Exception as e:
+            log("AdGuard 后台采样出错", e)

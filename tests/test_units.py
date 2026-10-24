@@ -682,6 +682,38 @@ def test_v031():
     assert analysis.compare(con)["series"]["cur"] == [0] * 7 and len(analysis.timeline(con, 12)["rows"]) == 12
 
 
+def test_v036():
+    import tempfile, time, os
+    from app import config, db, syslog, backup, geo
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db(); now = int(time.time())
+    # 归并:数字/MAC/IP 视为同一类
+    for i in range(5):
+        con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now - i, "r", 3, "kernel", f"phy0: STA aa:bb:cc:dd:ee:0{i} err 0x{i}f at 10.0.0.{i}:22 sector {i}00"))
+    con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now, "r", 3, "dnsmasq", "failed to read /etc/hosts"))
+    con.commit()
+    g = syslog.groups(con, level=3, hours=24)
+    assert g["total"] == 6 and len(g["rows"]) == 2 and g["rows"][0]["count"] == 5 and g["rows"][0]["tag"] == "kernel", g
+    # 收不到日志的提示:关着不提示;开着但从没收到 → 提示并带 uci 命令
+    assert syslog.silence(con) is None
+    syslog.save_cfg(con, {"on": True, "port": 5514, "days": 2, "max_rows": 2000})
+    con.execute("DELETE FROM syslog"); con.commit()
+    syslog._state["last_rx"] = 0; syslog._state["err"] = ""
+    t0 = syslog._T0; syslog._T0 = time.time() - 3600
+    try:
+        sl = syslog.silence(con)
+        assert sl and "uci set system" in sl["detail"] and "5514" in sl["detail"], sl
+    finally:
+        syslog._T0 = t0
+    # 备份:代理地址只在「含密钥」时带上
+    geo.proxy_set("http://u:p@127.0.0.1:7890")
+    assert "geo_proxy" not in backup.export(con, secrets=False)
+    b = backup.export(con, secrets=True); assert b["geo_proxy"] == "http://u:p@127.0.0.1:7890"
+    geo.proxy_set(""); assert geo.proxy_get() == ""
+    backup.restore(con, b); assert geo.proxy_get() == "http://u:p@127.0.0.1:7890"
+    geo.proxy_set("")
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

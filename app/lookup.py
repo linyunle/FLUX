@@ -333,7 +333,7 @@ def live_test(body):
             first = f"(无响应:{type(e).__name__})"
         ms = int((time.time() - t0) * 1000)
         if " 407 " in first:
-            return {"ok": False, "host": host, "error": ("nikki 的代理端口要求认证,已保存的账号密码不对,请在「设置 → GeoIP 数据库 → 下载代理」里改成 http://用户:密码@127.0.0.1:%d" % pport) if auth else
+            return {"ok": False, "host": host, "auth_needed": True, "proxy_hint": "http://用户:密码@127.0.0.1:%d" % pport, "had_auth": bool(auth), "error": ("nikki 的代理端口要求认证,已保存的账号密码不对,请在「设置 → GeoIP 数据库 → 下载代理」里改成 http://用户:密码@127.0.0.1:%d" % pport) if auth else
                     ("nikki 的代理端口要求认证。到「设置 → GeoIP 数据库 → 下载代理」填 http://用户:密码@127.0.0.1:%d(只存在你自己的 data 目录),实时测试就能用;现在请先看历史记录" % pport)}
         found = None
         for _ in range(6):

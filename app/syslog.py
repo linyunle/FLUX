@@ -20,6 +20,7 @@ from .util import log, stop
 DEFAULT = {"on": False, "port": 5514, "days": 7, "max_rows": 100000, "ignore": []}
 SEV = ["紧急", "警报", "严重", "错误", "警告", "注意", "信息", "调试"]
 RATE = 300
+_T0 = time.time()
 _state = {"bound": 0, "last_rx": 0, "rx": 0, "ignored": 0, "drop": 0, "bad": 0, "err": "", "pruned": 0, "last_prune": 0, "sys_last": None}
 _lock = threading.Lock()
 
@@ -294,3 +295,67 @@ def check(con, cfg, now):
         alerts.fire(con, cfg, "syslog_crit", "warn", "syslog", title, detail, now)
     else:
         alerts.note(con, "syslog_crit", "syslog", title, detail, level="warn", now=now)
+
+
+def silence(con, now=None):
+    """接收已开启但路由器没在转发日志时,给一条能照着做的提示(面板启动不足 10 分钟不判断)。返回 None = 正常 / 没开启。"""
+    now = now or time.time()
+    sc = load_cfg(con)
+    if not sc["on"] or now - _T0 < 600:
+        return None
+    if _state["err"]:
+        return {"level": "warn", "title": "路由器日志接收没起来", "detail": _state["err"] + "。换一个端口,或看看是不是被别的程序占用了。"}
+    newest = max(_state["last_rx"] or 0, con.execute("SELECT COALESCE(MAX(ts),0) FROM syslog").fetchone()[0] or 0)
+    cmd = (f"uci set system.@system[0].log_ip='127.0.0.1'; uci set system.@system[0].log_port='{sc['port']}'; "
+           "uci set system.@system[0].log_proto='udp'; uci commit system; /etc/init.d/log restart")
+    if not newest:
+        return {"level": "info", "title": "路由器日志已开启接收,但一条都没收到过",
+                "detail": f"面板在监听 UDP {sc['port']},路由器还没把日志转发过来。在路由器 SSH 里执行:{cmd}"}
+    quiet = int((now - newest) // 60)
+    if quiet >= 30:
+        return {"level": "warn", "title": f"路由器日志已经 {quiet} 分钟没有收到新内容",
+                "detail": f"路由器正常运行时日志几乎不会停。可能是 log 服务重启后转发配置丢了,或端口 {sc['port']} 改过。在路由器 SSH 里重新执行:{cmd}"}
+    return None
+
+
+_NORM = [(re.compile(r"[0-9a-f]{2}(?::[0-9a-f]{2}){5}", re.I), "<MAC>"), (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<IP>"),
+         (re.compile(r"0x[0-9a-f]+", re.I), "<HEX>"), (re.compile(r"\[\s*\d+\.\d+\]"), ""), (re.compile(r"\d+"), "#")]
+
+
+def norm(msg):
+    """把消息里会变的部分(MAC / IP / 数字 / 十六进制 / 内核时间戳)换成占位符,相同「句式」的日志就能归并到一起。"""
+    t = msg or ""
+    for rx, to in _NORM:
+        t = rx.sub(to, t)
+    return t.strip()[:300]
+
+
+def groups(con, level=3, hours=24, q="", n=40):
+    """把最近 N 小时的日志按「程序 + 归一化后的内容」归并,按出现次数排序:一眼看出是哪几种错误在刷屏。"""
+    hours = max(1, min(720, int(hours)))
+    n = max(1, min(100, int(n)))
+    sql, args = "SELECT ts,host,sev,tag,msg FROM syslog WHERE sev<=? AND ts>=?", [max(0, min(7, int(level))), int(time.time()) - hours * 3600]
+    q = (q or "").strip()[:60]
+    if q:
+        sql += " AND (msg LIKE ? ESCAPE '\\' OR tag LIKE ? ESCAPE '\\')"
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        args += [like, like]
+    sql += " ORDER BY id DESC LIMIT 20000"
+    g = {}
+    total = 0
+    for ts, host, sev, tag, msg in con.execute(sql, args):
+        total += 1
+        k = (tag or "", norm(msg))
+        x = g.get(k)
+        if not x:
+            g[k] = {"tag": tag or "", "pattern": k[1], "sample": msg, "count": 1, "last": ts, "first": ts, "sev": sev, "lv": SEV[sev], "hosts": {host}}
+        else:
+            x["count"] += 1
+            x["first"] = min(x["first"], ts)
+            x["sev"] = min(x["sev"], sev)
+            x["lv"] = SEV[x["sev"]]
+            x["hosts"].add(host)
+    rows = sorted(g.values(), key=lambda x: (-x["count"], -x["last"]))[:n]
+    for x in rows:
+        x["hosts"] = sorted(h for h in x["hosts"] if h)[:3]
+    return {"rows": rows, "total": total, "kinds": len(g), "hours": hours, "capped": total >= 20000}
