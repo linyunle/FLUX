@@ -312,7 +312,7 @@ def silence(con, now=None):
         return {"level": "info", "title": "路由器日志已开启接收,但一条都没收到过",
                 "detail": f"面板在监听 UDP {sc['port']},路由器还没把日志转发过来。在路由器 SSH 里执行:{cmd}"}
     quiet = int((now - newest) // 60)
-    if quiet >= 30:
+    if quiet >= 360:   # 路由器空闲时(又忽略了 crond)几小时没有日志很正常,6 小时以上才提示
         return {"level": "warn", "title": f"路由器日志已经 {quiet} 分钟没有收到新内容",
                 "detail": f"路由器正常运行时日志几乎不会停。可能是 log 服务重启后转发配置丢了,或端口 {sc['port']} 改过。在路由器 SSH 里重新执行:{cmd}"}
     return None

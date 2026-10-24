@@ -105,7 +105,7 @@ def selfcheck(con, now=None):
     # 日志里重复出现的错误
     seen = {}
     for line in panellog.tail(800):
-        if re.search(r"出错|失败|Traceback|错误|Error", line):
+        if re.search(r"出错|失败|Traceback|错误|Error", line) and not re.search(r"[:,]\s*0 个超时/失败", line):   # 「节点探测完成…0 个超时/失败」是正常日志
             k = NUM.sub("#", line[20:])[:120]
             seen[k] = seen.get(k, 0) + 1
     for k, n in sorted(seen.items(), key=lambda x: -x[1])[:5]:
