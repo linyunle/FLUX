@@ -1640,7 +1640,7 @@ const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
 const DEF_CARDS={sys:{w:12,h:"s"},mem:{w:6,h:"s"},rt:{w:6,h:"s"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"s",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"s",rows:30},qoe:{w:12,h:"s",rows:50}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
-const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["dev","设备筛选",".ddside"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
+const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
@@ -1712,7 +1712,7 @@ function applyTheme(){
   R.style.setProperty("--navop",TH.navOp+"%");
   for(const [k,v] of [["a","--vzd"],["b","--vzu"]]){if(hexOk(TH.viz[k]))R.style.setProperty(v,TH.viz[k]);else R.style.removeProperty(v)}
   $("#sideRt").classList.toggle("gone",!["speed","direct","proxy","conns"].some(k=>TH.sideShow[k]));
-  $(".footrow").classList.toggle("gone",!TH.sideShow.dev&&!TH.sideShow.theme);
+  $(".footrow").classList.toggle("gone",!TH.sideShow.theme&&!TH.sideShow.ver&&!TH.sideShow.status);
   {const bg=getComputedStyle(R).getPropertyValue("--bg").trim();if(hexOk(bg))$("#tc").content=bg}
   document.body.classList.toggle("priv",!!TH.priv);$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   autoHide();
