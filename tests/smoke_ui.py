@@ -21,8 +21,14 @@ try:
         import json
         pg.evaluate("fetch('/api/agh/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:19445',user:'admin',pass:'pw123'})})"); pg.wait_for_timeout(500)
         pg.evaluate("S.tab='security';showTab();refresh()"); pg.wait_for_timeout(3000);         bad = [m for m in msgs if "favicon" not in m and "ERR_" not in m and "Failed to load resource" not in m]
-        for sel in ("#secTiles", "#secFinds", "#aghBody", "#lkBody", "#geoBody", "#hmBody", "#qBody"):
-            assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
+        for tab, sels in (("ov", ("#secTiles", "#secFinds", "#qBody")), ("dns", ("#aghBody", "#lkBody")), ("rv", ("#geoBody", "#hmBody"))):
+            pg.click(f'#secTabs button[data-k="{tab}"]'); pg.wait_for_timeout(500)
+            assert pg.locator(f'.sectab[data-st="{tab}"]').is_visible() and pg.locator('.sectab:visible').count()==1, "安全页页签切换后可见区域不对:" + tab
+            for sel in sels:
+                assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
+        # 其它页面跳到卡片时要自动切到对应页签
+        pg.evaluate("secGo('sec:agh')"); pg.wait_for_timeout(400); assert pg.evaluate("S.secTab")=="dns", "跳转没有切到对应页签"
+        pg.click('#secTabs button[data-k="ov"]')
         assert not bad, bad
         pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(3500)
         assert pg.inner_text("#sysTiles").strip(), "路由器状态卡片为空"

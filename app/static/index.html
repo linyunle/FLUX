@@ -271,6 +271,7 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch{border:1px solid var(--line);border-radius:var(--rs);padding:8px 10px;margin-bottom:8px}
 .alch .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.alch .r2{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .alch .r2 input{flex:1 1 220px;min-width:0}
+.sectabs{margin:0 0 10px;flex-wrap:wrap}
 .stile{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--cardbg,var(--surface));border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--r);padding:calc(var(--cp) - 2px) var(--cp);cursor:pointer;font:inherit;color:inherit;min-width:0}
 .stile:hover,.find:hover{background:var(--hover)}
 .stile .l{font-size:12px;color:var(--muted)}.stile .v{font-size:20px;font-weight:600;line-height:1.25}.stile .s{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -566,18 +567,27 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-security" style="display:none">
   <div class="card" id="secRange"><h2>时间范围 <span class="seg" id="srSeg" role="group" aria-label="时间范围"></span><span class="sp"></span><span id="srCustom" style="display:none;gap:6px;align-items:center"><input type="datetime-local" id="srFrom" aria-label="开始时间"><span class="sub">~</span><input type="datetime-local" id="srTo" aria-label="结束时间"><button id="srGo" class="pri">应用</button></span></h2><div class="sub" id="srNote"></div></div>
-  <div class="card" id="aghCard"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
+  <div class="seg sectabs" id="secTabs" role="tablist" aria-label="安全页分类"></div>
+  <div class="sectab" data-st="ov">
   <div class="tiles secgrid" id="secTiles" style="position:static"></div>
   <div class="card" id="secFindCard"><h2>待处理事项 <span id="secLvl"></span><span class="sp"></span><span class="sub" id="secAt"></span></h2><div id="secFinds"></div></div>
+  <div class="card" id="qCard"><h2>数据质量与自检 <span class="sub">面板自己的运行状况</span></h2><div id="qBody"></div></div>
+  </div>
+  <div class="sectab" data-st="dns" style="display:none">
+  <div class="card" id="aghCard"><h2>DNS 过滤 · AdGuard Home <span class="sp"></span><span class="sub" id="aghNote"></span><button id="aghGo">设置</button></h2><div id="aghBody"></div></div>
   <div class="card" id="dnsCard"><h2>DNS · dnsmasq 与自定义服务器 <span class="sp"></span><span class="sub" id="dnsNote"></span><button id="dnsGo">设置</button></h2><div id="dnsBody"></div></div>
   <div class="card" id="lkCard"><h2>分流检查 <span class="sub">启发式:按内置的常见国内 / 境外域名清单判断,只是排查线索,不是判决</span><span class="sp"></span><span class="sub" id="lkRange">近 7 天</span></h2><div id="lkBody"></div></div>
-  <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
+  </div>
+  <div class="sectab" data-st="diag" style="display:none">
   <div class="card" id="tlCard"><h2>故障时间线 <span class="sub">丢包 / 重传 / 节点测速 / 流量放在同一条时间轴上,标出同时异常的时段</span><span class="sp"></span><span class="sub" id="tlNote"></span></h2><div id="tlBody"></div></div>
   <div class="card" id="wfCard"><h2>无线连接事件 <span class="sub" id="wfNote">来自路由器转发的 hostapd 日志</span></h2><div id="wfBody"></div></div>
-  <div class="card" id="geoCard"><h2>目的地国家 / ASN <span class="sub" id="geoNote"></span></h2><div id="geoBody"></div></div>
+  <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
+  </div>
+  <div class="sectab" data-st="rv" style="display:none">
   <div class="card" id="hmCard"><h2>活跃时段热力图 <span class="sub">近 14 天,周几 × 几点的平均流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div id="hmBody"></div></div>
+  <div class="card" id="geoCard"><h2>目的地国家 / ASN <span class="sub" id="geoNote"></span></h2><div id="geoBody"></div></div>
   <div class="card"><h2>周报 <span class="sp"></span><button id="repOpen" class="pri">查看近 7 天周报</button></h2><div class="sub">汇总流量变化、设备 / 域名 / 应用排行、节点质量和告警。可在「设置 → 周报与指标」里设为每周自动推送。</div></div>
-  <div class="card" id="qCard"><h2>数据质量与自检 <span class="sub">面板自己的运行状况</span></h2><div id="qBody"></div></div>
+  </div>
 </section>
 
 <section id="tab-alerts" style="display:none">
@@ -2252,7 +2262,11 @@ function secGo(go){const [k,v]=String(go||"").split(":");
   if((k==="tab"||k==="set")&&S.tab==="security")BACK="security";
   if(k==="tab"){S.tab=v;showTab();refresh()}
   else if(k==="set")openSettings(v);
-  else if(k==="sec"){const m={agh:"#aghCard",dns:"#dnsCard",lk:"#lkCard",q:"#qCard",geo:"#geoCard"}[v];const el=m&&$(m);if(el)el.scrollIntoView({behavior:"smooth",block:"start"})}}
+  else if(k==="sec"){const m={agh:"#aghCard",dns:"#dnsCard",lk:"#lkCard",q:"#qCard",geo:"#geoCard"}[v];const el=m&&$(m);if(el){const st=el.closest(".sectab");if(st)secTab(st.dataset.st);el.scrollIntoView({behavior:"smooth",block:"start"})}}}
+const SECTABS=[["ov","概览"],["dns","DNS 与过滤"],["diag","排查"],["rv","回看"]];
+function secTab(k,save){if(!SECTABS.some(x=>x[0]===k))k="ov";S.secTab=k;if(save)try{localStorage.setItem("flux.secTab",k)}catch(e){}
+  document.querySelectorAll("#tab-security .sectab").forEach(el=>el.style.display=el.dataset.st===k?"":"none");seg($("#secTabs"),SECTABS,k,x=>secTab(x,true))}
+try{S.secTab=localStorage.getItem("flux.secTab")||"ov"}catch(e){S.secTab="ov"}
 document.addEventListener("click",e=>{const el=e.target.closest("[data-go]");if(el)secGo(el.dataset.go)});
 const secTilesH=j=>j.tiles.map(t=>`<button class="stile ${t.level}" data-go="${esc(t.go)}" title="${esc(t.sub)}"><span class="l">${esc(t.label)}</span><span class="v">${esc(t.value)}</span><span class="s">${esc(t.sub)}</span></button>`).join("");
 const IGN_K="flux.secIgn";
@@ -2319,7 +2333,7 @@ function srPaint(){const c=srCalc();seg($("#srSeg"),SR_P,S.sr.m,k=>{S.sr.m=k;if(
   $("#lkRange").textContent=c.label}
 function srSave(){try{localStorage.setItem(SR_K,JSON.stringify(S.sr))}catch(e){}}
 $("#srGo").onclick=()=>{S.sr.from=$("#srFrom").value;S.sr.to=$("#srTo").value;if(!S.sr.from){$("#srNote").textContent="请先选开始时间";return}srSave();srPaint();loadSecurity()};
-function loadSecurity(){srPaint();loadSecTab();loadAgh();loadDns();loadLeaks();loadCompare();loadTimeline();loadWifi();loadGeo();loadHeat();loadQuality()}
+function loadSecurity(){secTab(S.secTab);srPaint();loadSecTab();loadAgh();loadDns();loadLeaks();loadCompare();loadTimeline();loadWifi();loadGeo();loadHeat();loadQuality()}
 function areaSpark(vals,col,id){const w=260,h=64,v=(vals||[]).filter(x=>x!=null);if(v.length<2)return`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="0" x2="${w}" y1="${h-6}" y2="${h-6}" stroke="${col}" stroke-opacity=".5" stroke-width="2"/></svg>`;
   const mx=Math.max(...v,1),pts=v.map((x,i)=>[i*w/(v.length-1),h-6-(h-14)*x/mx]),d=mcPath(pts);
   return`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".30"/><stop offset="1" stop-color="${col}" stop-opacity=".02"/></linearGradient></defs><path d="${d}L${w} ${h}L0 ${h}Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`}
@@ -2329,7 +2343,7 @@ function aghTopH(j){const rk=(j.top_blocked||[]).slice(0,4),mx=Math.max(1,...rk.
   <div class="agc"><div class="al">已拦截<span class="ar">${j.rate}%</span></div><div class="av o">${j.blocked.toLocaleString()}</div><div class="asp">${areaSpark(j.series_blocked,"#ff9500","agc2")}</div></div>
   <div class="agc"><div class="al">被拦截域名排行</div>${rk.length?rk.map(r=>`<div class="rk"><div class="rt"><span class="pv">${esc(r.d)}</span><b>${r.n.toLocaleString()}</b></div><div class="rb"><i style="width:${Math.max(4,r.n*100/mx)}%"></i></div></div>`).join(""):'<div class="sub" style="margin-top:8px">暂无</div>'}</div>`}
 function loadAgh(){load("agh","/api/agh",{},j=>{
-  const el=$("#aghBody"),card=$("#aghCard");{const dc=$("#dnsCard");if(!j.configured){if(card.nextElementSibling!==dc&&card.previousElementSibling!==$("#secFindCard"))dc.parentNode.insertBefore(card,dc)}else{const t0=$("#secTiles");if(card.nextElementSibling!==t0)t0.parentNode.insertBefore(card,t0)}}
+  const el=$("#aghBody"),card=$("#aghCard");
   if(!j.configured){$("#aghNote").textContent="";el.innerHTML='<div class="empty">还没接入 AdGuard Home。<a href="#" id="aghSet">去设置</a>(在面板里填账号密码,不要发到聊天里)</div>';const a=$("#aghSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("dns")};return}
   if(!j.ok){$("#aghNote").textContent=j.url;el.innerHTML=`<div class="msg err">${esc(j.error||"读取失败")}</div>`;return}
   $("#aghNote").textContent=j.url+" · 近 "+(j.unit==="days"?"天":"24 小时");
