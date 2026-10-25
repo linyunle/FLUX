@@ -362,3 +362,24 @@ def ips_by_dev(con):
     for mac in out:
         out[mac].sort(key=lambda x: (":" in x))  # IPv4 在前
     return out
+
+
+def new_devices(con, days=14):
+    """最近第一次出现的设备(按首次出现时间倒序)。
+    known_dev.first 在面板第一次启动时会把「当时已有的设备」统一记成同一个时间,这批不算新设备;之后才见到的才算。"""
+    days = max(1, min(90, int(days)))
+    seed = con.execute("SELECT MIN(first) FROM known_dev").fetchone()[0]
+    if not seed:
+        return []
+    now = time.time()
+    rows = con.execute("SELECT client, first FROM known_dev WHERE first > ? AND first >= ? ORDER BY first DESC LIMIT 100",
+                       (int(seed) + 30, int(now - days * 86400))).fetchall()
+    macips = ips_by_dev(con)
+    stored = stored_names(con)
+    out = []
+    for k, first in rows:
+        if k in local_ips():
+            continue
+        ips = macips.get(k, [] if is_mac(k) else [k])
+        out.append({"key": k, "name": NAMES.label(k, ips, stored), "named": k in stored, "ips": ips[:8], "first": int(first)})
+    return out

@@ -601,7 +601,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 </section>
 
 <section id="tab-devices" style="display:none">
-  <div id="devListView"><div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="scroll" id="devTbl"></div></div></div>
+  <div id="devListView"><div class="card" id="newDevCard" style="display:none"><h2>新设备 <span class="seg" id="ndDays" role="group" aria-label="范围"></span><span class="sp"></span><span class="sub" id="ndNote"></span></h2><div id="ndBody"></div></div>
+  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="scroll" id="devTbl"></div></div></div>
   <div id="devDetail" style="display:none">
     <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div></div>
     <div class="tiles" id="ddTiles"></div>
@@ -1384,7 +1385,17 @@ $("#dtlX").onclick=()=>closeM("#dtl");
 function loadDevicesTab(){
   $("#devListView").style.display=S.dd?"none":"";$("#devDetail").style.display=S.dd?"":"none";
   if(S.dd)return loadDetail();
-  Promise.all([get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}),get("/api/presence").then(j=>{S.pres={};j.rows.forEach(r=>S.pres[r.key]=r)}).catch(()=>{})]).finally(devTabRows)}
+  Promise.all([get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}),get("/api/presence").then(j=>{S.pres={};j.rows.forEach(r=>S.pres[r.key]=r)}).catch(()=>{}),loadNewDev()]).finally(devTabRows)}
+S.ndDays=14;S.newDev={};
+const agoTs=ts=>{const m=Math.max(0,Math.round((Date.now()/1000-ts)/60));return m<60?m+" 分钟前":m<1440?Math.round(m/60)+" 小时前":Math.round(m/1440)+" 天前"};
+function loadNewDev(){seg($("#ndDays"),[[1,"今天"],[3,"3 天"],[14,"14 天"],[30,"30 天"]],S.ndDays,k=>{S.ndDays=+k;loadNewDev()});
+  return get("/api/devices/new",{days:S.ndDays}).then(j=>{S.newDev={};j.rows.forEach(r=>S.newDev[r.key]=r);const card=$("#newDevCard"),ro=S.role==="v"||document.documentElement.dataset.vro==="1";
+    card.style.display="";$("#ndNote").textContent=j.rows.length?`${j.rows.length} 台 · 点「查看」打开详情`:"";
+    $("#ndBody").innerHTML=j.rows.length?`<div class="scroll"><table><thead><tr><th>设备</th><th>首次出现</th><th>状态</th><th></th></tr></thead><tbody>${j.rows.map(r=>`<tr><td>${r.named?esc(r.name):`<span class="warn">${esc(r.name||"未命名")}</span>`}<div class="sub">${esc(ipTxt(r.ips,""))} ${is17(r.key)?esc(r.key):""}</div></td><td>${agoTs(r.first)}<div class="sub">${fmtTs(r.first)}</div></td><td>${presTag(r.key)||"–"}</td><td style="white-space:nowrap"><button data-nd="open" data-k="${esc(r.key)}">查看</button>${ro?"":` <button data-nd="ren" data-k="${esc(r.key)}" data-n="${esc(r.named?r.name:"")}">命名</button>`}</td></tr>`).join("")}</tbody></table></div>`:`<div class="sub">近 ${S.ndDays===1?"今天":S.ndDays+" 天"}没有新设备出现(面板第一次启动时已经在的设备不算新设备)。</div>`}).catch(()=>{$("#newDevCard").style.display="none"})}
+const is17=k=>k.includes(":")&&k.length===17;
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-nd]");if(!b)return;const k=b.dataset.k;
+  if(b.dataset.nd==="open"){S.dd=k;loadDevicesTab();return}
+  const v=prompt("给这台设备起个名字(留空 = 恢复默认)",b.dataset.n||"");if(v===null)return;const n=v.trim();try{await post("/api/device",{dev:k,name:n});loadDevices();loadDevicesTab()}catch(x){alert(x.message)}});
 function presTag(k){const p=(S.pres||{})[k];if(!p)return "";
   const st=p.on?`<span class="lv ok" title="上线于 ${fmtTs(p.since)}">在线</span>`:`<span class="lv note" title="最后在线 ${fmtTs(p.last)}">离线 · ${fmtTs(p.last)}</span>`;
   return `${st} <button class="wch" data-k="${esc(k)}" aria-pressed="${p.watch}" title="${p.watch?"已关注:上线/离线会记录并提醒(取决于告警规则里的开关)":"关注后,这台设备上线/离线会记录并提醒"}" style="padding:1px 6px;font-size:12px">${p.watch?"🔔 已关注":"🔕 关注"}</button>`}
@@ -1394,7 +1405,7 @@ function devTabRows(){
   cmSeg("#dvMode","dev",()=>loadDevicesTab());
   load("devtab","/api/summary",{...base({mode:S.cm.dev}),by:"client",limit:200},j=>{
   rowsTable($("#devTbl"),j,[
-    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)} ${presTag(r.key)}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
+    {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)} ${presTag(r.key)}${S.newDev[r.key]?` <span class="lv info" title="首次出现 ${fmtTs(S.newDev[r.key].first)}">新 · ${agoTs(S.newDev[r.key].first)}</span>`:""}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
     {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],
     r=>{S.dd=r.key;loadDevicesTab()});
   $("#devTbl").querySelectorAll("select.grp").forEach(sel=>{sel.onclick=e=>e.stopPropagation();sel.onchange=async e=>{e.stopPropagation();let v=sel.value;

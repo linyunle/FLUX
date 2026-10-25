@@ -348,6 +348,7 @@ try:
         time.sleep(0.5)
     sl = get("/api/syslog", ) ; ok(sl["rows"] >= 2 and any("e2e-marker" in x["msg"] for x in sl["rows_data"]), "系统日志:收到并入库")
     ok(len(get("/api/syslog?level=3")["rows_data"]) == 1 and len(get("/api/syslog?q=e2e-marker")["rows_data"]) == 1, "系统日志:按级别和关键词筛选")
+    nd = get("/api/devices/new?days=14"); ok(nd["days"] == 14 and isinstance(nd["rows"], list), "设备:新设备接口")
     sg = get("/api/syslog/groups?level=7&hours=24"); ok(sg["total"] >= 2 and all(k in sg["rows"][0] for k in ("pattern", "sample", "count", "last")) and sg["rows"][0]["count"] >= 1, "系统日志:按内容归并")
     c, r = post("/api/syslog/cfg", {"on": True, "port": sp, "days": 2, "max_rows": 2000, "ignore": "e2e-skip"}); ok(c == 200 and r["cfg"]["ignore"] == ["e2e-skip"] and r["purged"] == 0, "系统日志:忽略名单保存")
     time.sleep(6)

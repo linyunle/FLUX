@@ -157,6 +157,8 @@ try:
         assert "在线" in pg.inner_text("#devTbl"), ("设备页没有显示在线状态", pg.inner_text("#devTbl")[:300])
         pg.locator("#devTbl .wch").first.click(); pg.wait_for_timeout(1500)
         assert "已关注" in pg.inner_text("#devTbl"), "关注按钮没有生效"
+        pg.evaluate("S.dd='';loadDevicesTab()"); pg.wait_for_timeout(2500)
+        assert pg.locator("#newDevCard").is_visible() and "新设备" in pg.inner_text("#newDevCard") and pg.locator("#ndDays button").count()==4, "设备页没有「新设备」卡片"
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

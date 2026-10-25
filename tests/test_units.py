@@ -705,6 +705,17 @@ def test_v036():
         assert sl and "uci set system" in sl["detail"] and "5514" in sl["detail"], sl
     finally:
         syslog._T0 = t0
+    # 新设备:面板首次启动时已有的设备不算,之后才出现的才算
+    from app import devices
+    now2 = int(time.time())
+    con.execute("DELETE FROM known_dev")
+    con.executemany("INSERT INTO known_dev(client, first) VALUES(?,?)", [("aa:bb:cc:00:00:01", now2 - 20 * 86400), ("aa:bb:cc:00:00:02", now2 - 20 * 86400),
+                                                                          ("aa:bb:cc:00:00:03", now2 - 7200), ("aa:bb:cc:00:00:04", now2 - 20 * 86400)])
+    con.commit()
+    nd = devices.new_devices(con, 14)
+    assert [x["key"] for x in nd] == ["aa:bb:cc:00:00:03"] and nd[0]["first"] == now2 - 7200, nd
+    assert devices.new_devices(con, 1)[0]["key"] == "aa:bb:cc:00:00:03" and devices.new_devices(con, 90) and len(devices.new_devices(con, 90)) == 1
+    con.execute("DELETE FROM known_dev"); con.commit(); assert devices.new_devices(con) == []
     # 备份:代理地址只在「含密钥」时带上
     geo.proxy_set("http://u:p@127.0.0.1:7890")
     assert "geo_proxy" not in backup.export(con, secrets=False)
