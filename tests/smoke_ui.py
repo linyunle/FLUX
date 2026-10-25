@@ -85,6 +85,13 @@ try:
         # 旧版本存过已删除的预设(总览 / 诊断 / 安全):升级后回到「状态」,并显示全部卡片
         pg.evaluate("localStorage.setItem('nt.theme.v1',JSON.stringify({v:4,view:'sec',hide:['apps','qoe']}))"); pg.reload(); pg.wait_for_timeout(2500)
         assert pg.evaluate("[TH.view,TH.hide.length].join()")=="all,0", "旧预设没有迁移到「状态」"
+        # 概览顶部统计卡片不跟着固定在顶部;实时速度刻度文字不被切掉;网卡速度可折叠
+        assert pg.evaluate("!document.querySelector('#dataTop #tiles') && getComputedStyle(document.querySelector('#dataTop')).position==='sticky'"), "统计卡片还在固定区里"
+        assert pg.evaluate("[...document.querySelectorAll('#rtChart svg text')].every(t=>t.getBBox().x>=-0.5)"), "实时速度图的刻度文字被切掉"
+        pg.evaluate("drawRt(document.querySelector('#rtChart'),[[Date.now()/1000-60,3.9e6,1e6],[Date.now()/1000,4.2e6,2e6]],150,{})")
+        assert pg.evaluate("[...document.querySelectorAll('#rtChart svg text')].every(t=>t.getBBox().x>=-0.5)"), "大数值(MB/s)的刻度文字被切掉"
+        assert pg.locator("#sysIf").is_visible(); pg.click("#sysIfT"); pg.wait_for_timeout(200); assert not pg.locator("#sysIf").is_visible() and "↓" in pg.inner_text("#sysIfN"), "网卡速度没有折叠"
+        pg.click("#sysIfT"); pg.wait_for_timeout(200); assert pg.locator("#sysIf").is_visible()
         # 「状态」开关:隐藏 / 显示路由器状、内存、实时速度这类全局卡片
         pg.evaluate("S.tab='overview';showTab()"); pg.wait_for_timeout(500)
         pg.click("#viewSeg button"); pg.wait_for_timeout(600)
