@@ -272,6 +272,9 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.alch .r2{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .alch .r2 input{flex:1 1 220px;min-width:0}
 .sectabs{margin:0 0 10px;flex-wrap:wrap}
+#viewSeg{position:relative;overflow:visible}
+.glpop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;min-width:220px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-align:left}
+.glpop .crow{display:flex;gap:6px;align-items:center;padding:4px 0;font-size:13px;cursor:pointer}
 .hmctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .hmday{display:flex;align-items:flex-end;gap:3px;height:150px}.hmcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
 .hmbar{flex:1;width:100%;display:flex;align-items:flex-end}.hmbar i{display:flex;flex-direction:column-reverse;width:100%;background:var(--up,#d9730d);border-radius:3px 3px 0 0;overflow:hidden}.hmbar i b{display:block;background:var(--down,#2a6fdb);width:100%}
@@ -1018,7 +1021,7 @@ function renderChrome(){
   cmSeg("#tMode","trend",()=>loadTrend());
   seg($("#tDim"),TDIMS,S.tDim,k=>{S.tDim=k;renderChrome();loadTrend()});
   seg($("#rtSrc"),[["all","总"],["direct","直连"],["proxy","代理"]],TH.rtSrc,k=>{TH.rtSrc=k;saveTheme();renderChrome();if(S.rt)paintRt(S.rt)});
-  $("#viewSeg").innerHTML=`<button aria-pressed="${TH.gl}">状态</button>`;$("#viewSeg").onclick=()=>glToggle();
+  $("#viewSeg").innerHTML=`<button id="glBtn" aria-pressed="${TH.gl}" title="显示 / 隐藏下拉里勾选的卡片">状态</button><button id="glCfg" aria-label="选择「状态」控制哪些卡片" aria-haspopup="true" title="选择要隐藏哪些卡片">▾</button>`;$("#viewSeg").onclick=e=>{if(e.target.closest("#glCfg")){glPop();return}if(e.target.closest("#glBtn"))glToggle()};
   $("#viewSeg").style.display=S.tab==="overview"?"":"none";$("#btnPriv").setAttribute("aria-pressed",!!TH.priv);
   $("#nav").innerHTML=TABS.map(([k,l])=>`<button class="navi ${k==="settings"?"sep":""}" role="tab" title="${l}" data-k="${k}" aria-selected="${k===S.tab}">${svgI(k)}<span class="nl">${l}</span>${k==="alerts"&&S.unread>0?`<i class="nb">${S.unread>99?"99+":S.unread}</i>`:""}</button>`).join("");
   $("#nav").onclick=e=>{const b=e.target.closest(".navi");if(b){S.tab=b.dataset.k;if(S.tab==="devices")S.dd="";if(S.tab==="nodes")S.nd="";showTab();refresh()}};
@@ -1691,7 +1694,7 @@ const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDir
 const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
-const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",gl:true,priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",gl:true,glSet:["sys","mem","rt","rtdev","rtnode"],priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 const VIEWS={all:["状态",null]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
@@ -1705,7 +1708,7 @@ function loadTheme(over){let raw=null;if(over!==undefined)raw=over;else try{raw=
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.gl=t.gl!==false;
+  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.gl=t.gl!==false;r.glSet=Array.isArray(t.glSet)?t.glSet.filter(k=>CARDS[k]):["sys","mem","rt","rtdev","rtnode"];
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1768,11 +1771,20 @@ function applyTheme(){
 /* 概览里只筛了设备时,隐藏和该设备无关的全局内容,改显示「所选设备此刻」 */
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
-    if(k==="rthost"){el.classList.toggle("gone",TH.hide.includes(k)&&!q);el.classList.remove("autohide")}
-    else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||(!TH.gl&&AUTOHIDE.includes(k)))}
+    const off=!TH.gl&&TH.glSet.includes(k);   /* 「状态」关掉时,隐藏用户在「状态 ▾」里勾选的卡片 */
+    if(k==="rthost"){el.classList.toggle("gone",(TH.hide.includes(k)||off)&&!q);el.classList.remove("autohide")}
+    else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||off)}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
+function glPop(){let p=$("#glPop");if(p){p.remove();return}
+  p=document.createElement("div");p.id="glPop";p.className="glpop";
+  p.innerHTML=`<div class="sub" style="margin-bottom:6px">点「状态」关掉时,隐藏下面勾选的卡片</div>`+Object.keys(CARDS).map(k=>`<label class="crow"><input type="checkbox" data-gk="${k}" ${TH.glSet.includes(k)?"checked":""}> ${esc(CARDS[k][1])}</label>`).join("")+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="glReset">恢复默认</button></div>`;
+  $("#viewSeg").appendChild(p);
+  p.onclick=e=>e.stopPropagation();
+  p.onchange=e=>{const k=e.target.dataset.gk;if(!k)return;TH.glSet=TH.glSet.filter(x=>x!==k);if(e.target.checked)TH.glSet.push(k);saveTheme();applyTheme()};
+  $("#glReset").onclick=()=>{TH.glSet=["sys","mem","rt","rtdev","rtnode"];saveTheme();applyTheme();p.remove();glPop()}}
+document.addEventListener("click",e=>{const p=$("#glPop");if(p&&!e.target.closest("#viewSeg"))p.remove()});
 function glToggle(){TH.gl=!TH.gl;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()}
 function applyView(k){stashLayout();TH.view=k;{const L=TH.vl[k];if(L){TH.order=normOrder(L.order);TH.cards=normCards(L.cards)}}TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){

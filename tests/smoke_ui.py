@@ -91,7 +91,15 @@ try:
         assert pg.evaluate("TH.gl")==False and pg.evaluate("getComputedStyle(document.querySelector('#memCard')||document.body).display")!=None
         assert pg.evaluate("['sys','mem','rt','rtdev','rtnode'].every(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "关掉「状态」后全局卡片没有隐藏"
         assert pg.evaluate("!document.querySelector(CARDS.trend[0]).classList.contains('autohide')"), "趋势卡片不应被「状态」隐藏"
-        pg.click("#viewSeg button"); pg.wait_for_timeout(600)
+        # 「状态 ▾」:选择要隐藏哪些卡片(这里去掉「内存使用」,关掉状态后它应该还在)
+        pg.click("#glCfg"); pg.wait_for_timeout(300); assert pg.locator("#glPop").is_visible() and pg.locator("#glPop input").count()==10, "状态下拉没出来"
+        pg.uncheck('#glPop input[data-gk="mem"]'); pg.wait_for_timeout(500)
+        assert pg.evaluate("TH.gl")==False and pg.evaluate("document.querySelector(CARDS.sys[0]).classList.contains('autohide') && !document.querySelector(CARDS.mem[0]).classList.contains('autohide')"), "取消勾选的卡片仍被隐藏"
+        pg.check('#glPop input[data-gk="trend"]'); pg.wait_for_timeout(300)
+        assert pg.evaluate("document.querySelector(CARDS.trend[0]).classList.contains('autohide')"), "勾选的卡片没有被隐藏"
+        pg.click("#glReset"); pg.wait_for_timeout(300); pg.mouse.click(5,5); pg.wait_for_timeout(200)
+        assert pg.evaluate("TH.glSet.join()")=="sys,mem,rt,rtdev,rtnode"
+        pg.click("#glBtn"); pg.wait_for_timeout(600)
         assert pg.evaluate("TH.gl")==True and pg.evaluate("!['sys','mem','rt','rtdev','rtnode'].some(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "再点一次没有恢复"
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
         # 手机尺寸:访问目标卡片附近,页面高度/滚动位置不应随实时刷新变化
