@@ -19,6 +19,44 @@ PROXY_EVERY = max(2.0, float(os.environ.get("PROXY_SEC", "60")))
 KEEP_DAYS = max(1, int(os.environ.get("KEEP_DAYS", "90")))
 HOUR_KEEP_DAYS = max(2, int(os.environ.get("HOUR_KEEP_DAYS", "14")))
 
+RET_PATH = os.path.join(DATA_DIR, "retention.json")
+HOUR_KEEP_MAX, KEEP_MAX = 90, 365
+
+
+def load_retention():
+    """页面里改过的保留天数(data/retention.json)优先于环境变量。启动时和保存时调用。"""
+    global KEEP_DAYS, HOUR_KEEP_DAYS
+    try:
+        with open(os.path.join(DATA_DIR, "retention.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            if isinstance(d.get("hour_days"), int):
+                HOUR_KEEP_DAYS = max(2, min(HOUR_KEEP_MAX, d["hour_days"]))
+            if isinstance(d.get("days"), int):
+                KEEP_DAYS = max(7, min(KEEP_MAX, d["days"]))
+    except (OSError, ValueError):
+        pass
+
+
+def set_retention(hour_days, days):
+    hour_days, days = int(hour_days), int(days)
+    if not 2 <= hour_days <= HOUR_KEEP_MAX:
+        raise ValueError(f"小时数据保留天数要在 2 到 {HOUR_KEEP_MAX} 之间")
+    if not 7 <= days <= KEEP_MAX:
+        raise ValueError(f"按天明细保留天数要在 7 到 {KEEP_MAX} 之间")
+    if hour_days > days:
+        raise ValueError("小时数据保留的天数不能比按天明细还长")
+    global KEEP_DAYS, HOUR_KEEP_DAYS
+    os.makedirs(DATA_DIR, exist_ok=True)
+    path = os.path.join(DATA_DIR, "retention.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"hour_days": hour_days, "days": days}, f)
+    os.replace(tmp, path)
+    HOUR_KEEP_DAYS, KEEP_DAYS = hour_days, days
+    return {"hour_days": hour_days, "days": days}
+
+
 LISTEN_HOST = os.environ.get("LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8099"))
 METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")  # 非空:/metrics 可用 Bearer / ?t= 这个口令抓取(给 Prometheus)
@@ -42,6 +80,7 @@ def normalize_api(api):
 
 def load():
     """启动时调用:config.json 优先,没有就用环境变量。"""
+    load_retention()
     api, secret, source = os.environ.get("NIKKI_API", "http://127.0.0.1:9090"), os.environ.get("NIKKI_SECRET", ""), "env"
     try:
         with open(CONF_PATH, encoding="utf-8") as f:

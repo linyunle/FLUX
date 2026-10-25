@@ -6,9 +6,10 @@ import datetime
 import json
 import os
 import re
+import statistics
 import time
 
-from . import agh, alerts, collector, config, geo, netstat, realtime
+from . import agh, alerts, collector, config, devices, geo, netstat, realtime
 from .util import api_call, is_mac, log
 
 
@@ -150,25 +151,73 @@ def leaks(con, days=7, until_day=None):
 
 
 # ---------------------------------------------------------------- 热力图
-def heatmap(con, devs=None, days=14):
+def heatmap(con, devs=None, days=14, stat="avg", day=None):
+    """活跃时段热力图。默认:近 N 天的 周几 × 几点 平均(stat=avg)或中位数(stat=median,不被个别大下载带偏)。
+    day=YYYY-MM-DD:只看那一天 24 小时的上 / 下行和各小时流量最大的几台设备。"""
     w = _web()
+    devs = [x.lower() for x in devs] if devs else None
+    if day:
+        try:
+            datetime.date.fromisoformat(day)
+        except ValueError:
+            raise ValueError("日期格式要像 2026-10-25")
+        where, args = "hour >= ? AND hour <= ?", [day + " 00", day + " 23"]
+        if devs:
+            where += f" AND {w.DEVX} IN ({','.join('?' * len(devs))})"
+            args += devs
+        hrs = {h: {"hour": h, "up": 0, "down": 0, "dev": {}} for h in range(24)}
+        for hour, k, up, down in con.execute(f"SELECT hour, {w.DEVX} k, SUM(up), SUM(down) FROM hourly WHERE {where} GROUP BY hour, k", args):
+            try:
+                h = int(str(hour)[11:13])
+            except ValueError:
+                continue
+            if h in hrs:
+                hrs[h]["up"] += up or 0
+                hrs[h]["down"] += down or 0
+                hrs[h]["dev"][k] = (up or 0) + (down or 0)
+        stored = devices.stored_names(con)
+        macips = devices.ips_by_dev(con)
+        out = []
+        for h in range(24):
+            x = hrs[h]
+            top = sorted(x["dev"].items(), key=lambda kv: -kv[1])[:3]
+            out.append({"hour": h, "up": x["up"], "down": x["down"],
+                        "top": [{"name": devices.NAMES.label(k, macips.get(k, [] if is_mac(k) else [k]), stored) or k, "bytes": b} for k, b in top if b]})
+        total = sum(x["up"] + x["down"] for x in out)
+        pk = max(out, key=lambda x: x["up"] + x["down"])
+        return {"day": day, "hours": out, "total": total, "peak": {"hour": pk["hour"], "bytes": pk["up"] + pk["down"]} if total else None,
+                "keep_days": config.HOUR_KEEP_DAYS}
+    days = max(1, min(config.HOUR_KEEP_DAYS, int(days)))
+    stat = "median" if stat == "median" else "avg"
     since = time.strftime("%Y-%m-%d %H", time.localtime(time.time() - days * 86400))
     where, args = "hour >= ?", [since]
     if devs:
         where += f" AND {w.DEVX} IN ({','.join('?' * len(devs))})"
-        args += [x.lower() for x in devs]
-    sums = [[0] * 24 for _ in range(7)]
-    seen = [set() for _ in range(7)]
+        args += devs
+    per = {}                                   # (日期, 小时) -> 流量
+    dates = [set() for _ in range(7)]
     for hour, b in con.execute(f"SELECT hour, SUM(up+down) FROM hourly WHERE {where} GROUP BY hour", args):
         try:
             dt = datetime.datetime.strptime(hour, "%Y-%m-%d %H")
         except ValueError:
             continue
-        sums[dt.weekday()][dt.hour] += b or 0
-        seen[dt.weekday()].add(dt.date())
-    cells = [[round(sums[wd][h] / max(1, len(seen[wd]))) for h in range(24)] for wd in range(7)]
+        per[(dt.date(), dt.hour)] = b or 0
+        dates[dt.weekday()].add(dt.date())
+    cells = []
+    for wd in range(7):
+        row = []
+        for h in range(24):
+            vals = [per.get((d, h), 0) for d in dates[wd]]      # 当天这个小时没有记录 = 0
+            if not vals:
+                row.append(0)
+            elif stat == "median":
+                row.append(round(statistics.median(vals)))
+            else:
+                row.append(round(sum(vals) / len(vals)))
+        cells.append(row)
     peak = max((v, wd, h) for wd in range(7) for h, v in enumerate(cells[wd]))
-    return {"days": days, "cells": cells, "max": peak[0], "peak": {"weekday": peak[1], "hour": peak[2], "bytes": peak[0]} if peak[0] else None}
+    return {"days": days, "stat": stat, "keep_days": config.HOUR_KEEP_DAYS, "samples": [len(d) for d in dates], "cells": cells, "max": peak[0],
+            "peak": {"weekday": peak[1], "hour": peak[2], "bytes": peak[0]} if peak[0] else None}
 
 
 # ---------------------------------------------------------------- 订阅额度

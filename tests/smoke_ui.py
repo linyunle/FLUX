@@ -26,6 +26,11 @@ try:
             assert pg.locator(f'.sectab[data-st="{tab}"]').is_visible() and pg.locator('.sectab:visible').count()==1, "安全页页签切换后可见区域不对:" + tab
             for sel in sels:
                 assert pg.inner_text(sel).strip(), "安全页卡片内容为空:" + sel
+        pg.click('#secTabs button[data-k="rv"]'); pg.wait_for_timeout(800)
+        assert pg.locator("#hmView button").count()==2 and pg.locator("#hmStat button").count()==2 and pg.locator("#hmDays").count()==1, "热力图没有范围 / 平均中位数控件"
+        pg.click('#hmStat button[data-k="median"]'); pg.wait_for_timeout(800); assert "中位数" in pg.inner_text("#hmSub"), pg.inner_text("#hmSub")
+        pg.click('#hmView button[data-k="day"]'); pg.wait_for_timeout(1000); assert pg.locator("#hmDay").count()==1 and "一天里每小时" in pg.inner_text("#hmSub"), "热力图没有切到某一天"
+        pg.click('#hmView button[data-k="week"]'); pg.wait_for_timeout(600)
         # 其它页面跳到卡片时要自动切到对应页签
         pg.evaluate("secGo('sec:agh')"); pg.wait_for_timeout(400); assert pg.evaluate("S.secTab")=="dns", "跳转没有切到对应页签"
         pg.click('#secTabs button[data-k="ov"]')

@@ -1000,7 +1000,7 @@ def _until_ts(p):
 
 
 q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7), _until_day(p)))
-q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, 14)))
+q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, config.HOUR_KEEP_DAYS), one(p, "stat", "avg"), one(p, "day") or None))
 q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.tail(int(one(p, "n") or 400))})
 q_probe = _q(lambda con, p: probe.status(con))
 q_presence = _q(lambda con, p: presence.status(con))
@@ -1052,7 +1052,7 @@ def p_group_policy(body):
 AUDIT = {"/api/alerts/config": "修改告警规则 / 推送渠道", "/api/agh/config": "修改 AdGuard 连接", "/api/quota": "修改订阅额度",
          "/api/report/config": "修改周报设置", "/api/apps/rules": "修改应用特征库规则", "/api/airports/rules": "修改订阅归类规则",
          "/api/groups/policy": "修改分组白名单", "/api/restore": "从备份恢复设置", "/api/config": "修改 nikki 连接",
-         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/probe": "修改节点探测设置"}
+         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/retention": "修改数据保留天数", "/api/probe": "修改节点探测设置"}
 
 
 def _audit(path, body):
@@ -1123,6 +1123,12 @@ GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/grou
 
 
 # ---------------------------------------------------------------- POST
+def p_retention(body):
+    r = config.set_retention(body.get("hour_days"), body.get("days"))
+    log(f"保留天数已修改:小时数据 {r['hour_days']} 天,按天明细 {r['days']} 天")
+    return {"ok": True, **r}
+
+
 def p_config(body):
     import urllib.error
     api = config.normalize_api(str(body.get("api") or ""))
@@ -1197,7 +1203,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

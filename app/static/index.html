@@ -272,6 +272,10 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.alch .r2{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .alch .r2 input{flex:1 1 220px;min-width:0}
 .sectabs{margin:0 0 10px;flex-wrap:wrap}
+.hmctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.hmday{display:flex;align-items:flex-end;gap:3px;height:150px}.hmcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.hmbar{flex:1;width:100%;display:flex;align-items:flex-end}.hmbar i{display:flex;flex-direction:column-reverse;width:100%;background:var(--up,#d9730d);border-radius:3px 3px 0 0;overflow:hidden}.hmbar i b{display:block;background:var(--down,#2a6fdb);width:100%}
+.hmcol span{font-size:10px;color:var(--muted);height:14px}
 .ndrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:10px 2px;border-top:1px solid var(--line)}.ndrow:first-child{border-top:0}
 .ndm{flex:1 1 220px;min-width:0}.ndn{font-weight:600;word-break:break-all}.ndip{word-break:break-all;line-height:1.5}
 .ndt{flex:0 0 auto;min-width:96px}.nds{flex:0 0 auto}.ndb{flex:0 0 auto;display:flex;gap:6px}
@@ -589,7 +593,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
   </div>
   <div class="sectab" data-st="rv" style="display:none">
-  <div class="card" id="hmCard"><h2>活跃时段热力图 <span class="sub">近 14 天,周几 × 几点的平均流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div id="hmBody"></div></div>
+  <div class="card" id="hmCard"><h2>活跃时段热力图 <span class="sub" id="hmSub">周几 × 几点的流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div class="hmctl" id="hmCtl"></div><div id="hmBody"></div></div>
   <div class="card" id="geoCard"><h2>目的地国家 / ASN <span class="sub" id="geoNote"></span></h2><div id="geoBody"></div></div>
   <div class="card"><h2>周报 <span class="sp"></span><button id="repOpen" class="pri">查看近 7 天周报</button></h2><div class="sub">汇总流量变化、设备 / 域名 / 应用排行、节点质量和告警。可在「设置 → 周报与指标」里设为每周自动推送。</div></div>
   </div>
@@ -852,6 +856,12 @@ uci commit dhcp
   <div style="display:flex;gap:8px;justify-content:flex-end;margin:8px 0"><button id="hlRefresh">重新检查</button></div>
   <div class="h3">数据占用</div>
   <div class="sub" id="stSum" style="margin-bottom:6px"></div>
+  <div class="h3">保留天数</div>
+  <div class="row2" style="margin:6px 0;flex-wrap:wrap"><span class="sub">小时数据保留</span><input id="retH" type="number" min="2" max="90" style="width:80px"><span class="sub">天(热力图、故障时间线、设备时段榜用它,最多 90)</span></div>
+  <div class="row2" style="margin:6px 0;flex-wrap:wrap"><span class="sub">按天明细保留</span><input id="retD" type="number" min="7" max="365" style="width:80px"><span class="sub">天(趋势、周对比、套餐用量用它,最多 365)</span></div>
+  <div class="sub" id="retEst" style="margin-bottom:6px"></div>
+  <div class="msg" id="retMsg"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px"><button id="retSave" class="pri">保存保留天数</button></div>
   <div class="scroll"><table id="stTbl"></table></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0"><button id="stVac" title="整理数据库文件、释放删除后留下的空洞;期间写入会短暂等待,需要约 1.2 倍数据库大小的空闲磁盘">压缩数据库</button><span class="sub" id="stMsg"></span></div>
   <div class="h3">升级前自动备份</div>
@@ -2101,11 +2111,20 @@ async function loadSessions(){
 $("#ssTbl").onclick=async e=>{const b=e.target.closest(".ssKick");if(!b)return;if(!confirm(b.dataset.cur?"退出当前这台设备?":"让这台设备退出登录?"))return;
   try{const j=await post("/api/auth/session/revoke",{id:b.dataset.id});if(j.self){location.reload();return}loadSessions()}catch(x){$("#authMsg").className="msg err";$("#authMsg").textContent=x.message}};
 const hb=n=>n==null?"-":n>=1<<30?(n/(1<<30)).toFixed(2)+" GB":n>=1<<20?(n/(1<<20)).toFixed(1)+" MB":Math.round(n/1024)+" KB";
+function retEst(){const st=S.ret;if(!st)return;const per=(n)=>{const t=st.tables.find(x=>x.name===n);return t&&t.rows!=null&&t.bytes!=null?{rows:t.rows,bytes:t.bytes}:null},hh=per("hourly"),dd=per("traffic"),hv=+$("#retH").value||st.hour_keep_days,dv=+$("#retD").value||st.keep_days;
+  let add=0,txt=[];if(hh){const perDay=hh.bytes/Math.max(1,st.hour_keep_days),now=perDay*st.hour_keep_days,nxt=perDay*hv;add+=nxt-now;txt.push(`小时数据约 ${hb(perDay)}/天,按 ${hv} 天约 ${hb(nxt)}`)}
+  if(dd){const perDay=dd.bytes/Math.max(1,Math.min(st.keep_days,60)),nxt=perDay*dv;txt.push(`按天明细约 ${hb(perDay)}/天,按 ${dv} 天约 ${hb(nxt)}`)}
+  $("#retEst").textContent=txt.length?"按现在的数据量估算:"+txt.join(";")+"。缩短天数会在下一次清理时(每 6 小时一次)删掉更早的数据,删掉后不能恢复。":"缩短天数会在下一次清理时删掉更早的数据,删掉后不能恢复。"}
+document.addEventListener("input",e=>{if(e.target.id==="retH"||e.target.id==="retD")retEst()});
+document.addEventListener("click",async e=>{if(e.target.id!=="retSave")return;const m=$("#retMsg");m.className="msg";
+  const h=+$("#retH").value,d=+$("#retD").value;if(S.ret&&(h<S.ret.hour_keep_days||d<S.ret.keep_days)&&!confirm("缩短保留天数后,更早的数据会在下一次清理时被删掉,不能恢复。继续吗?"))return;
+  try{await post("/api/retention",{hour_days:h,days:d});m.className="msg ok";m.textContent="已保存";loadHealth()}catch(x){m.className="msg err";m.textContent=x.message}});
 async function loadHealth(){
   const [h,st]=await Promise.all([get("/api/health"),get("/api/storage")]);
   const ic={ok:"●",warn:"▲",bad:"■",info:"○"},co={ok:"var(--ok,#2e9e5b)",warn:"#d98e04",bad:"#c23a2e",info:"var(--mut)"};
   $("#hlList").innerHTML=h.checks.map(c=>`<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="color:${co[c.level]||"inherit"};flex:none">${ic[c.level]||"●"}</span><div style="min-width:0"><b>${esc(c.name)}</b> <span class="sub">${esc(c.detail)}</span>${c.hint?`<div class="sub" style="color:${co[c.level]}">${esc(c.hint)}</div>`:""}</div></div>`).join("");
-  $("#stSum").textContent=`数据库 ${hb(st.db)}`+(st.disk&&st.disk.total?`;磁盘剩余 ${hb(st.disk.free)} / ${hb(st.disk.total)}`:"")+`;明细保留 ${st.keep_days} 天、小时数据 ${st.hour_keep_days} 天(环境变量 KEEP_DAYS / HOUR_KEEP_DAYS)`;
+  $("#stSum").textContent=`数据库 ${hb(st.db)}`+(st.disk&&st.disk.total?`;磁盘剩余 ${hb(st.disk.free)} / ${hb(st.disk.total)}`:"")+`;明细保留 ${st.keep_days} 天、小时数据 ${st.hour_keep_days} 天`;
+  S.ret=st;if(document.activeElement!==$("#retH")&&document.activeElement!==$("#retD")){$("#retH").value=st.hour_keep_days;$("#retD").value=st.keep_days}retEst();
   $("#stTbl").innerHTML="<tr><th>表</th><th>行数</th><th>占用</th><th></th></tr>"+st.tables.slice(0,14).map(t=>`<tr><td>${esc(t.name)}</td><td>${t.rows==null?"-":t.rows.toLocaleString()}</td><td>${hb(t.bytes)}</td><td>${t.trim?`<button class="stTrim" data-t="${esc(t.name)}">清理 7 天前</button>`:""}</td></tr>`).join("");
   $("#hlBk").innerHTML=h.backups.length?h.backups.map(b=>`<div class="sub" style="padding:3px 0"><a href="/api/autobackup/get?name=${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${hb(b.size)} · ${new Date(b.at*1000).toLocaleString()}</div>`).join(""):'<div class="sub">还没有(升级到新版本后第一次启动会生成)</div>'}
 function openSettings(sec){if(S.role==="v")return;S.tab="settings";S.set=sec||S.set||"look";showTab();refresh()}
@@ -2412,14 +2431,35 @@ function loadGeo(){const sc=srCalc();load("geo","/api/geo",{days:sc.days,until:s
   el.innerHTML=`<div class="g2"><div>${j.by_cc.length?pgTbl("geoC",["国家 / 地区","占比","流量"],j.by_cc.map(r=>({c:[`${flag(r.cc)} ${esc(ccName(r.cc))}`,barR(r.bytes*100/mx),fmt(r.bytes)],dt:{title:"目的地 · "+ccName(r.cc),lines:[["国家 / 地区",ccName(r.cc)+" ("+r.cc+")"],["下行",fmt(r.down||0)],["上行",fmt(r.up||0)],["合计",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):'<div class="empty">暂无</div>'}</div>
   <div>${j.by_asn.length?pgTbl("geoA",["ASN","流量"],j.by_asn.map(r=>({c:[esc(r.asn),fmt(r.bytes)],dt:{title:"ASN · "+r.asn,lines:[["ASN",r.asn],["流量",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):""}</div></div>${nodes}`})}
 
+S.hm={view:"week",stat:"avg",days:14,day:""};
+try{const h=JSON.parse(localStorage.getItem("flux.hm")||"{}");if(h.stat==="median")S.hm.stat="median";if(+h.days>0)S.hm.days=+h.days;if(h.view==="day")S.hm.view="day"}catch(e){}
+const hmSave=()=>{try{localStorage.setItem("flux.hm",JSON.stringify({view:S.hm.view,stat:S.hm.stat,days:S.hm.days}))}catch(e){}};
+const ymdLocal=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+function hmCtl(keep){const c=$("#hmCtl"),dayOpts=[...new Set([3,7,14,21,30,60,90].filter(x=>x<=keep).concat([keep]))].sort((a,b)=>a-b);
+  if(!dayOpts.includes(S.hm.days))S.hm.days=Math.min(S.hm.days,keep);
+  if(!S.hm.day)S.hm.day=ymdLocal(new Date(Date.now()-864e5));
+  c.innerHTML=`<span class="seg" id="hmView"></span>`+(S.hm.view==="week"?`<span class="seg" id="hmStat"></span><select id="hmDays" aria-label="统计范围">${dayOpts.map(v=>`<option value="${v}" ${v===S.hm.days?"selected":""}>近 ${v} 天</option>`).join("")}</select>`
+    :`<button id="hmPrev" aria-label="前一天">‹</button><input type="date" id="hmDay" value="${S.hm.day}" min="${ymdLocal(new Date(Date.now()-keep*864e5))}" max="${ymdLocal(new Date())}"><button id="hmNext" aria-label="后一天">›</button>`);
+  seg($("#hmView"),[["week","周内规律"],["day","某一天"]],S.hm.view,k=>{S.hm.view=k;hmSave();loadHeat()});
+  if(S.hm.view==="week"){seg($("#hmStat"),[["avg","平均"],["median","中位数"]],S.hm.stat,k=>{S.hm.stat=k;hmSave();loadHeat()});$("#hmDays").onchange=e=>{S.hm.days=+e.target.value;hmSave();loadHeat()}}
+  else{const mv=n=>{const d=new Date(S.hm.day+"T12:00:00");d.setDate(d.getDate()+n);const v=ymdLocal(d);if(v>ymdLocal(new Date()))return;S.hm.day=v;loadHeat()};$("#hmPrev").onclick=()=>mv(-1);$("#hmNext").onclick=()=>mv(1);$("#hmDay").onchange=e=>{if(e.target.value){S.hm.day=e.target.value;loadHeat()}}}}
 async function loadHeat(){
   const sel=$("#hmDev");if(!sel.dataset.ok&&S.devices.length){sel.innerHTML='<option value="">全部设备</option>'+S.devices.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))}</option>`).join("");sel.dataset.ok="1"}
-  load("heat","/api/heatmap",{dev:sel.value},j=>{
+  const q=S.hm.view==="day"?{dev:sel.value,day:S.hm.day}:{dev:sel.value,days:S.hm.days,stat:S.hm.stat};
+  load("heat","/api/heatmap",q,j=>{
+    hmCtl(j.keep_days||14);
+    if(j.hours){ /* 某一天:24 根柱子,上 / 下行叠起来,悬停看这个小时流量最大的几台设备 */
+      $("#hmSub").textContent=j.day+" 一天里每小时的流量";
+      const mx=Math.max(1,...j.hours.map(x=>x.up+x.down));
+      if(!j.total){$("#hmBody").innerHTML='<div class="empty">这一天没有小时级数据(只保留最近 '+j.keep_days+' 天,或者那天面板没在运行)</div>';return}
+      $("#hmBody").innerHTML=`<div class="hmday">${j.hours.map(x=>{const t=x.up+x.down,hd=Math.round(t*100/mx);return `<div class="hmcol" title="${pad(x.hour)}:00 共 ${fmt(t)}(↓${fmt(x.down)} ↑${fmt(x.up)})${x.top.length?"\n"+x.top.map(d=>d.name+" "+fmt(d.bytes)).join("\n"):""}"><div class="hmbar"><i style="height:${t?Math.max(2,hd):0}%"><b style="height:${t?Math.round(x.down*100/t):0}%"></b></i></div><span>${x.hour%3===0?x.hour:""}</span></div>`}).join("")}</div>
+      <div class="sub" style="margin-top:6px">这一天共 ${fmt(j.total)};最忙 ${pad(j.peak.hour)}:00,${fmt(j.peak.bytes)}。蓝色是下行、橙色是上行;鼠标悬停(手机长按)看这个小时流量最大的设备。</div>`;return}
+    $("#hmSub").textContent=`近 ${j.days} 天,周几 × 几点的${j.stat==="median"?"中位数":"平均"}流量`;
     /* 颜色比例按「常见流量」(非零格子的第 90 百分位)定,再开平方压缩;个别极端的大下载只用最深色表示,不再把其它格子压成一片淡底色 */
     const nz=j.cells.flat().filter(v=>v>0).sort((x,y)=>x-y),ref=nz.length?nz[Math.min(nz.length-1,Math.floor(nz.length*.9))]:1,mx=j.max||1,lvl=v=>v?Math.round(10+Math.sqrt(Math.min(v,ref)/ref)*88):0;
     let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:2px;width:100%;min-width:520px"><thead><tr><th></th>'+[...Array(24).keys()].map(i=>`<th style="font-weight:400;font-size:10px;color:var(--muted)">${i%3===0?i:""}</th>`).join("")+"</tr></thead><tbody>";
-    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}</td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 平均 ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${lvl(v)}%,var(--hover))${v>=mx&&mx>ref*1.5?";outline:2px solid var(--accent);outline-offset:-2px":""}"></td>`).join("")+"</tr>"});
-    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,平均 ${fmt(j.peak.bytes)}${mx>ref*1.5?`(远高于其它时段,图中用描边标出;颜色深浅按常见流量 ${fmt(ref)} 为满格,超过的都按最深色)`:"(颜色深浅按这一格为满格)"}</div>`:'<div class="empty">还没有足够的小时数据</div>');
+    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}<span style="font-size:10px"> ·${(j.samples||[])[wd]||0}天</span></td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 ${j.stat==="median"?"中位数":"平均"} ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${lvl(v)}%,var(--hover))${v>=mx&&mx>ref*1.5?";outline:2px solid var(--accent);outline-offset:-2px":""}"></td>`).join("")+"</tr>"});
+    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,${j.stat==="median"?"中位数":"平均"} ${fmt(j.peak.bytes)}${mx>ref*1.5?`(远高于其它时段,图中用描边标出;颜色深浅按常见流量 ${fmt(ref)} 为满格,超过的都按最深色)`:"(颜色深浅按这一格为满格)"}。行名里的「·N天」是这一行统计用了几天的数据;每个星期几只有 1~2 天样本时,个别大下载会很显眼,可以切到「中位数」。</div>`:'<div class="empty">还没有足够的小时数据</div>');
     $("#hmBody").innerHTML=h})}
 $("#hmDev").onchange=loadHeat;
 

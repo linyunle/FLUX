@@ -716,6 +716,35 @@ def test_v036():
     assert [x["key"] for x in nd] == ["aa:bb:cc:00:00:03"] and nd[0]["first"] == now2 - 7200, nd
     assert devices.new_devices(con, 1)[0]["key"] == "aa:bb:cc:00:00:03" and devices.new_devices(con, 90) and len(devices.new_devices(con, 90)) == 1
     con.execute("DELETE FROM known_dev"); con.commit(); assert devices.new_devices(con) == []
+    # 热力图:平均 vs 中位数、单日视图、保留天数
+    import datetime
+    from app import insight
+    config.HOUR_KEEP_DAYS = 21
+    con.execute("DELETE FROM hourly"); today = datetime.date.today()
+    cols = [r[1] for r in con.execute("PRAGMA table_info(hourly)")]
+    assert "hour" in cols and "up" in cols and "down" in cols and "client" in cols, cols
+    ins = lambda hour, up, down: con.execute(f"INSERT INTO hourly({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
+                                              [{"hour": hour, "client": "aa:bb:cc:00:00:09", "up": up, "down": down}.get(c, 0 if c in ("up", "down", "conns") else "x") for c in cols])
+    for k in range(1, 22):
+        d = today - datetime.timedelta(days=k)
+        ins(d.strftime("%Y-%m-%d") + " 20", 0, 50e9 if k == 7 else 1e9)
+    con.commit()
+    wd = (today - datetime.timedelta(days=7)).weekday()
+    ha = insight.heatmap(con, None, 21, "avg"); hm = insight.heatmap(con, None, 21, "median")
+    assert ha["cells"][wd][20] > 10e9 and hm["cells"][wd][20] <= 2e9 and hm["stat"] == "median", (ha["cells"][wd][20], hm["cells"][wd][20])
+    assert ha["samples"][wd] == 3 and insight.heatmap(con, None, 99)["days"] == 21
+    dv = insight.heatmap(con, None, 21, "avg", (today - datetime.timedelta(days=7)).isoformat())
+    assert dv["hours"][20]["down"] == 50e9 and dv["peak"]["hour"] == 20 and len(dv["hours"]) == 24 and dv["hours"][20]["top"], dv["peak"]
+    try: insight.heatmap(con, None, 21, "avg", "bad"); assert False
+    except ValueError: pass
+    config.DATA_DIR = tempfile.mkdtemp()
+    try: config.set_retention(1, 30); assert False
+    except ValueError: pass
+    try: config.set_retention(40, 30); assert False
+    except ValueError: pass
+    assert config.set_retention(30, 120) == {"hour_days": 30, "days": 120} and config.HOUR_KEEP_DAYS == 30 and config.KEEP_DAYS == 120
+    config.HOUR_KEEP_DAYS, config.KEEP_DAYS = 2, 7; config.load_retention(); assert (config.HOUR_KEEP_DAYS, config.KEEP_DAYS) == (30, 120)
+    config.HOUR_KEEP_DAYS, config.KEEP_DAYS = 14, 90
     # 备份:代理地址只在「含密钥」时带上
     geo.proxy_set("http://u:p@127.0.0.1:7890")
     assert "geo_proxy" not in backup.export(con, secrets=False)
