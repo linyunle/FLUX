@@ -732,6 +732,8 @@ def test_v036():
     wd = (today - datetime.timedelta(days=7)).weekday()
     ha = insight.heatmap(con, None, 21, "avg"); hm = insight.heatmap(con, None, 21, "median")
     assert ha["cells"][wd][20] > 10e9 and hm["cells"][wd][20] <= 2e9 and hm["stat"] == "median", (ha["cells"][wd][20], hm["cells"][wd][20])
+    hw = insight.heatmap(con, None, 21, "avg", None, "wk")
+    assert len(hw["cells"]) == 2 and hw["labels"] == ["周一到周五", "周六、周日"] and sum(hw["samples"]) == 21 and hw["peak"]["label"] in hw["labels"], hw["samples"]
     assert ha["samples"][wd] == 3 and insight.heatmap(con, None, 99)["days"] == 21
     dv = insight.heatmap(con, None, 21, "avg", (today - datetime.timedelta(days=7)).isoformat())
     assert dv["hours"][20]["down"] == 50e9 and dv["peak"]["hour"] == 20 and len(dv["hours"]) == 24 and dv["hours"][20]["top"], dv["peak"]

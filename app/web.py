@@ -945,7 +945,7 @@ def p_apprules(body):
         n = appsig.save(con, str(body.get("text") or ""))
     finally:
         con.close()
-    return {"ok": True, "rules": n}
+    return {"ok": True, "rules": n, "text": appsig.rules_text(), "dedup": dict(appsig.DEDUP)}
 
 
 def _days_p(p, d=7, mx=90):
@@ -1000,7 +1000,7 @@ def _until_ts(p):
 
 
 q_leaks = _q(lambda con, p: insight.leaks(con, _days_p(p, 7), _until_day(p)))
-q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, config.HOUR_KEEP_DAYS), one(p, "stat", "avg"), one(p, "day") or None))
+q_heatmap = _q(lambda con, p: insight.heatmap(con, csv(p, "dev"), _days_p(p, 14, config.HOUR_KEEP_DAYS), one(p, "stat", "avg"), one(p, "day") or None, one(p, "split", "week")))
 q_panel = _q(lambda con, p: {"clients": panellog.clients(con), "log": panellog.tail(int(one(p, "n") or 400))})
 q_probe = _q(lambda con, p: probe.status(con))
 q_presence = _q(lambda con, p: presence.status(con))

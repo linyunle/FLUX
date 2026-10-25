@@ -732,7 +732,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="sub" style="margin-bottom:8px">面板内置了一份域名 / 端口特征库(流媒体、网盘、P2P、代理隧道等)。这里可以补充自己的规则,优先于内置库。每行一条:<code>域名关键字=应用名|类别</code>,类别可省略。关键字不含点时按「包含」匹配,含点时按域名后缀匹配。<br>例:<code>mycdn.example.com=公司内网|办公 / 开发</code>　<code>quark=夸克网盘|网盘 / 云存储</code></div>
   <textarea id="appTxt" rows="10" placeholder="mycdn.example.com=公司内网|办公 / 开发"></textarea>
   <div class="sub" id="appCats" style="margin-top:6px"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button id="appImp">导入规则文件…</button><input type="file" id="appFile" accept=".txt,.csv,.json,text/plain" style="display:none"><button id="appExp">导出当前规则</button><span class="sub">没识别出来的域名:在概览「应用分布」里点开「未识别」→「导出未识别明细」,发给 AI 分类后把回复存成文件,在这里导入</span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button id="appImp">导入规则文件…</button><input type="file" id="appFile" accept=".txt,.csv,.json,text/plain" style="display:none"><button id="appExp">导出当前规则</button><button id="appDedup" title="删掉重复的规则:同一个域名关键字只留靠前的一条(识别时也是靠前的先命中,不改变结果)">去重整理</button><span class="sub">没识别出来的域名:在概览「应用分布」里点开「未识别」→「导出未识别明细」,发给 AI 分类后把回复存成文件,在这里导入</span></div>
   <div id="appPrev"></div><div class="msg" id="appMsg"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="appSave" class="pri">保存</button></div></div>
       <div class="card sec" id="sec-alerts"><h2>告警通知</h2>
@@ -2224,20 +2224,35 @@ function renderUpd(u){
   ${u.newer?`<div class="msg ok">有新版本。在路由器 compose 目录里执行:</div><pre>docker compose pull &amp;&amp; docker compose up -d</pre><a href="${esc(u.url)}" target="_blank" rel="noopener">查看更新说明</a>`:(u.error?'<div class="msg warn">暂时查不到(路由器访问 GitHub 不通?)</div>':'<div class="sub">已是最新。</div>')}`;
   const b=$("#uChk");if(b)b.onclick=async()=>{b.disabled=true;try{renderUpd(await post("/api/update/check",{}))}catch(e){}}}
 $("#appImp").onclick=()=>$("#appFile").click();
+const appNormK=k=>String(k||"").trim().toLowerCase().replace(/^\*\./,"").replace(/^https?:\/\//,"").replace(/\/.*$/,"");
+function appParseBox(txt){const out=[],bad=[];for(const raw of String(txt||"").split(/\r?\n/)){const l=raw.trim();if(!l||l[0]==="#")continue;const i=l.indexOf("=");if(i<0){bad.push(l);continue}
+  const k=appNormK(l.slice(0,i)),rest=l.slice(i+1),p=rest.search(/[|｜]/),a=(p<0?rest:rest.slice(0,p)).trim(),c=(p<0?"":rest.slice(p+1)).trim()||"其他";if(!k||!a){bad.push(l);continue}out.push([k,a,c])}return{out,bad}}
+function appDedupe(rules){const seen=new Map(),res=[];let same=0,conflict=0;for(const r of rules){const o=seen.get(r[0]);if(o){(o[1]===r[1]&&o[2]===r[2])?same++:conflict++;continue}seen.set(r[0],r);res.push(r)}return{res,same,conflict}}
+const appLine=r=>`${r[0]}=${r[1]}|${r[2]}`;
+const dupTxt=(same,conflict)=>[same?`完全相同的 ${same} 条`:"",conflict?`同关键字但应用 / 类别不同的 ${conflict} 条(保留靠前的)`:""].filter(Boolean).join("、");
 $("#appFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";const m=$("#appMsg");m.className="msg";if(!f)return;if(f.size>2e6){m.className="msg err";m.textContent="文件太大(超过 2 MB)";return}
   try{const j=await get("/api/apprules"),r=parseAppImport(await f.text(),j.cats);if(!r.out.length){m.className="msg err";m.textContent="没有解析出规则。每行写成 域名关键字=应用名|类别,或用 CSV(域名,应用,类别)/ JSON";return}
-    const cur=new Map();for(const l of $("#appTxt").value.split("\n")){const t=l.trim();if(!t||t[0]==="#"||!t.includes("="))continue;cur.set(t.slice(0,t.indexOf("=")).trim().toLowerCase(),t)}
-    const seen=new Map();for(const [k,a,c] of r.out)seen.set(k,`${k}=${a}|${c}`);   // 文件里重复的域名,后面的算数
-    let add=0,upd=0,same=0;const rows=[];for(const [k,line] of seen){const o=cur.get(k);let st;if(!o){add++;st='<span class="lv note">新增</span>'}else if(o.replace(/\s+/g,"")===line.replace(/\s+/g,"")){same++;st='<span class="lv info">相同</span>'}else{upd++;st='<span class="lv warn">覆盖</span>'}
-      const [a2,c2]=line.slice(k.length+1).split("|");rows.push({c:[st,esc(k),esc(a2),esc(c2||""),o?esc(o.slice(o.indexOf("=")+1)):"–"]})}
+    const box=appParseBox($("#appTxt").value);if(box.bad.length){m.className="msg err";m.textContent=`编辑框里有 ${box.bad.length} 行格式不对(例如「${box.bad[0].slice(0,30)}」),先改正再导入`;return}
+    const cs=new Set(j.cats||[]),nc=c=>cs.size&&!cs.has(c)?"其他":c,   // 导入时不认识的类别会按「其他」处理,比较时两边同样处理
+      bd=appDedupe(box.out),cur=new Map(bd.res.map(x=>[x[0],x]));
+    const seen=new Map();for(const x of r.out)seen.set(x[0],x);   // 文件里重复的关键字,后面的算数
+    const fileDup=r.out.length-seen.size;
+    let add=0,upd=0,same=0;const rows=[];for(const [k,x] of seen){const o=cur.get(k);let st;
+      if(!o){add++;st='<span class="lv note">新增</span>'}else if(o[1]===x[1]&&nc(o[2])===nc(x[2])){same++;st='<span class="lv info">相同</span>'}else{upd++;st='<span class="lv warn">覆盖</span>'}
+      rows.push({c:[st,esc(k),esc(x[1]),esc(x[2]),o?esc(o[1]+"|"+o[2]):"–"]})}
     rows.sort((x,y)=>(x.c[0].includes("相同")?1:0)-(y.c[0].includes("相同")?1:0));
     if(cur.size+add>1000){m.className="msg err";m.textContent="合并后超过 1000 条,请先精简";return}
-    $("#appPrev").innerHTML=`<div class="sub" style="margin:8px 0 4px">导入预览:解析出 ${seen.size} 条 — 新增 ${add}、覆盖 ${upd}、相同 ${same}${r.bad.length?`、跳过 ${r.bad.length} 行格式不对的`:""}。确认后才会合并进上面的编辑框(合并后还要点「保存」才生效)。</div>`+pgTbl("appPrev",["动作","域名关键字","应用","类别","原来"],rows,{size:10})+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button id="appPrevNo">取消</button><button class="pri" id="appPrevOk">合并到编辑框</button></div>`;
+    const notes=[fileDup?`文件里重复的 ${fileDup} 条已合并`:"",(bd.same+bd.conflict)?`编辑框里原本重复的 ${dupTxt(bd.same,bd.conflict)}会一起去掉`:""].filter(Boolean).join(";");
+    $("#appPrev").innerHTML=`<div class="sub" style="margin:8px 0 4px">导入预览:解析出 ${seen.size} 条 — 新增 ${add}、覆盖 ${upd}、相同 ${same}${r.bad.length?`、跳过 ${r.bad.length} 行格式不对的`:""}。${notes?notes+"。":""}确认后才会合并进上面的编辑框(合并后还要点「保存」才生效)。</div>`+pgTbl("appPrev",["动作","域名关键字","应用","类别","原来"],rows,{size:10})+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button id="appPrevNo">取消</button><button class="pri" id="appPrevOk">合并到编辑框</button></div>`;
     $("#appPrevNo").onclick=()=>{$("#appPrev").innerHTML="";m.textContent=""};
-    $("#appPrevOk").onclick=()=>{for(const [k,line] of seen)cur.set(k,line);$("#appTxt").value=[...cur.values()].join("\n");$("#appPrev").innerHTML="";m.className="msg ok";m.textContent=`已合并:新增 ${add}、覆盖 ${upd}。还没保存,检查后点「保存」生效`};
+    $("#appPrevOk").onclick=()=>{for(const [k,x] of seen){const o=cur.get(k);if(o&&o[1]===x[1]&&nc(o[2])===nc(x[2]))continue;cur.set(k,x)}$("#appTxt").value=[...cur.values()].map(appLine).join("\n");$("#appPrev").innerHTML="";m.className="msg ok";m.textContent=`已合并:新增 ${add}、覆盖 ${upd}、相同 ${same}${notes?`;${notes}`:""}。现在编辑框里共 ${cur.size} 条,还没保存,检查后点「保存」生效`};
     m.className="msg";m.textContent=""}catch(x){m.className="msg err";m.textContent=x.message}};
+$("#appDedup").onclick=()=>{const m=$("#appMsg"),box=appParseBox($("#appTxt").value);m.className="msg";
+  if(box.bad.length){m.className="msg err";m.textContent=`有 ${box.bad.length} 行格式不对(例如「${box.bad[0].slice(0,30)}」),先改正再去重`;return}
+  const d=appDedupe(box.out);if(!d.same&&!d.conflict){m.className="msg ok";m.textContent=`没有重复,共 ${d.res.length} 条`;return}
+  $("#appTxt").value=d.res.map(appLine).join("\n");m.className="msg ok";m.textContent=`已去重:去掉 ${dupTxt(d.same,d.conflict)},现在共 ${d.res.length} 条。还没保存,检查后点「保存」生效`};
 $("#appExp").onclick=()=>{const b=new Blob([$("#appTxt").value+"\n"],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="flux-app-rules.txt";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
-$("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});if(j.text!==undefined)$("#appTxt").value=j.text;const dd=j.dedup||{},dn=(dd.same||0)+(dd.conflict||0);m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`+(dn?`;自动去重:去掉 ${dupTxt(dd.same||0,dd.conflict||0)}${(dd.examples||[]).length?"。例如 "+dd.examples[0]:""}`:"")}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authSave").onclick=async()=>{const m=$("#authMsg");m.className="msg";try{const j=await post("/api/auth/set",{old:$("#authOld").value,new:$("#authNew").value});
   m.className="msg ok";m.textContent=j.enabled?"访问密码已保存(其他已登录的设备需要重新登录)":"访问密码已关闭";status();loadSettings()}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#hlRefresh").onclick=()=>loadHealth().catch(()=>{});
@@ -2431,21 +2446,21 @@ function loadGeo(){const sc=srCalc();load("geo","/api/geo",{days:sc.days,until:s
   el.innerHTML=`<div class="g2"><div>${j.by_cc.length?pgTbl("geoC",["国家 / 地区","占比","流量"],j.by_cc.map(r=>({c:[`${flag(r.cc)} ${esc(ccName(r.cc))}`,barR(r.bytes*100/mx),fmt(r.bytes)],dt:{title:"目的地 · "+ccName(r.cc),lines:[["国家 / 地区",ccName(r.cc)+" ("+r.cc+")"],["下行",fmt(r.down||0)],["上行",fmt(r.up||0)],["合计",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):'<div class="empty">暂无</div>'}</div>
   <div>${j.by_asn.length?pgTbl("geoA",["ASN","流量"],j.by_asn.map(r=>({c:[esc(r.asn),fmt(r.bytes)],dt:{title:"ASN · "+r.asn,lines:[["ASN",r.asn],["流量",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):""}</div></div>${nodes}`})}
 
-S.hm={view:"week",stat:"avg",days:14,day:""};
-try{const h=JSON.parse(localStorage.getItem("flux.hm")||"{}");if(h.stat==="median")S.hm.stat="median";if(+h.days>0)S.hm.days=+h.days;if(h.view==="day")S.hm.view="day"}catch(e){}
-const hmSave=()=>{try{localStorage.setItem("flux.hm",JSON.stringify({view:S.hm.view,stat:S.hm.stat,days:S.hm.days}))}catch(e){}};
+S.hm={view:"week",stat:"avg",days:14,day:"",split:"week"};
+try{const h=JSON.parse(localStorage.getItem("flux.hm")||"{}");if(h.stat==="median")S.hm.stat="median";if(h.split==="wk")S.hm.split="wk";if(+h.days>0)S.hm.days=+h.days;if(h.view==="day")S.hm.view="day"}catch(e){}
+const hmSave=()=>{try{localStorage.setItem("flux.hm",JSON.stringify({view:S.hm.view,stat:S.hm.stat,days:S.hm.days,split:S.hm.split}))}catch(e){}};
 const ymdLocal=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 function hmCtl(keep){const c=$("#hmCtl"),dayOpts=[...new Set([3,7,14,21,30,60,90].filter(x=>x<=keep).concat([keep]))].sort((a,b)=>a-b);
   if(!dayOpts.includes(S.hm.days))S.hm.days=Math.min(S.hm.days,keep);
   if(!S.hm.day)S.hm.day=ymdLocal(new Date(Date.now()-864e5));
-  c.innerHTML=`<span class="seg" id="hmView"></span>`+(S.hm.view==="week"?`<span class="seg" id="hmStat"></span><select id="hmDays" aria-label="统计范围">${dayOpts.map(v=>`<option value="${v}" ${v===S.hm.days?"selected":""}>近 ${v} 天</option>`).join("")}</select>`
+  c.innerHTML=`<span class="seg" id="hmView"></span>`+(S.hm.view==="week"?`<span class="seg" id="hmSplit"></span><span class="seg" id="hmStat"></span><select id="hmDays" aria-label="统计范围">${dayOpts.map(v=>`<option value="${v}" ${v===S.hm.days?"selected":""}>近 ${v} 天</option>`).join("")}</select>`
     :`<button id="hmPrev" aria-label="前一天">‹</button><input type="date" id="hmDay" value="${S.hm.day}" min="${ymdLocal(new Date(Date.now()-keep*864e5))}" max="${ymdLocal(new Date())}"><button id="hmNext" aria-label="后一天">›</button>`);
   seg($("#hmView"),[["week","周内规律"],["day","某一天"]],S.hm.view,k=>{S.hm.view=k;hmSave();loadHeat()});
-  if(S.hm.view==="week"){seg($("#hmStat"),[["avg","平均"],["median","中位数"]],S.hm.stat,k=>{S.hm.stat=k;hmSave();loadHeat()});$("#hmDays").onchange=e=>{S.hm.days=+e.target.value;hmSave();loadHeat()}}
+  if(S.hm.view==="week"){seg($("#hmSplit"),[["week","按星期"],["wk","工作日 / 周末"]],S.hm.split,k=>{S.hm.split=k;hmSave();loadHeat()});seg($("#hmStat"),[["avg","平均"],["median","中位数"]],S.hm.stat,k=>{S.hm.stat=k;hmSave();loadHeat()});$("#hmDays").onchange=e=>{S.hm.days=+e.target.value;hmSave();loadHeat()}}
   else{const mv=n=>{const d=new Date(S.hm.day+"T12:00:00");d.setDate(d.getDate()+n);const v=ymdLocal(d);if(v>ymdLocal(new Date()))return;S.hm.day=v;loadHeat()};$("#hmPrev").onclick=()=>mv(-1);$("#hmNext").onclick=()=>mv(1);$("#hmDay").onchange=e=>{if(e.target.value){S.hm.day=e.target.value;loadHeat()}}}}
 async function loadHeat(){
   const sel=$("#hmDev");if(!sel.dataset.ok&&S.devices.length){sel.innerHTML='<option value="">全部设备</option>'+S.devices.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))}</option>`).join("");sel.dataset.ok="1"}
-  const q=S.hm.view==="day"?{dev:sel.value,day:S.hm.day}:{dev:sel.value,days:S.hm.days,stat:S.hm.stat};
+  const q=S.hm.view==="day"?{dev:sel.value,day:S.hm.day}:{dev:sel.value,days:S.hm.days,stat:S.hm.stat,split:S.hm.split};
   load("heat","/api/heatmap",q,j=>{
     hmCtl(j.keep_days||14);
     if(j.hours){ /* 某一天:24 根柱子,上 / 下行叠起来,悬停看这个小时流量最大的几台设备 */
@@ -2458,8 +2473,8 @@ async function loadHeat(){
     /* 颜色比例按「常见流量」(非零格子的第 90 百分位)定,再开平方压缩;个别极端的大下载只用最深色表示,不再把其它格子压成一片淡底色 */
     const nz=j.cells.flat().filter(v=>v>0).sort((x,y)=>x-y),ref=nz.length?nz[Math.min(nz.length-1,Math.floor(nz.length*.9))]:1,mx=j.max||1,lvl=v=>v?Math.round(10+Math.sqrt(Math.min(v,ref)/ref)*88):0;
     let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:2px;width:100%;min-width:520px"><thead><tr><th></th>'+[...Array(24).keys()].map(i=>`<th style="font-weight:400;font-size:10px;color:var(--muted)">${i%3===0?i:""}</th>`).join("")+"</tr></thead><tbody>";
-    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}<span style="font-size:10px"> ·${(j.samples||[])[wd]||0}天</span></td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 ${j.stat==="median"?"中位数":"平均"} ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${lvl(v)}%,var(--hover))${v>=mx&&mx>ref*1.5?";outline:2px solid var(--accent);outline-offset:-2px":""}"></td>`).join("")+"</tr>"});
-    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,${j.stat==="median"?"中位数":"平均"} ${fmt(j.peak.bytes)}${mx>ref*1.5?`(远高于其它时段,图中用描边标出;颜色深浅按常见流量 ${fmt(ref)} 为满格,超过的都按最深色)`:"(颜色深浅按这一格为满格)"}。行名里的「·N天」是这一行统计用了几天的数据;每个星期几只有 1~2 天样本时,个别大下载会很显眼,可以切到「中位数」。</div>`:'<div class="empty">还没有足够的小时数据</div>');
+    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px;line-height:1.2">${esc((j.labels||WD)[wd])}<span style="font-size:10px"> ·${(j.samples||[])[wd]||0}天</span></td>`+row.map((v,hr)=>`<td title="${(j.labels||WD)[wd]} ${pad(hr)}:00 ${j.stat==="median"?"中位数":"平均"} ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${lvl(v)}%,var(--hover))${v>=mx&&mx>ref*1.5?";outline:2px solid var(--accent);outline-offset:-2px":""}"></td>`).join("")+"</tr>"});
+    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${j.peak.label||WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,${j.stat==="median"?"中位数":"平均"} ${fmt(j.peak.bytes)}${mx>ref*1.5?`(远高于其它时段,图中用描边标出;颜色深浅按常见流量 ${fmt(ref)} 为满格,超过的都按最深色)`:"(颜色深浅按这一格为满格)"}。行名里的「·N天」是这一行统计用了几天的数据;每行样本只有 1~2 天时,个别大下载会很显眼,可以切到「中位数」。</div>`:'<div class="empty">还没有足够的小时数据</div>');
     $("#hmBody").innerHTML=h})}
 $("#hmDev").onchange=loadHeat;
 

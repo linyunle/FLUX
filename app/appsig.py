@@ -4,6 +4,7 @@
 所以这里只能按 mihomo 给出的域名 / 端口 / TCP-UDP 来认。能认出 YouTube、网盘、WireGuard 这类
 有明显特征的东西,认不出的归为「未识别」。你可以在 设置 → 应用特征库 里加自己的规则。
 """
+import re
 import threading
 
 # 类别 → [(应用名, [域名后缀 或 ~关键字, ...]), ...]
@@ -188,6 +189,7 @@ def parse_rules(text):
         if "=" not in line:
             raise ValueError(f"第 {i} 行格式不对,要写成 域名关键字=应用名 或 域名关键字=应用名|类别")
         kw, rest = (x.strip() for x in line.split("=", 1))
+        kw = re.sub(r"/.*$", "", re.sub(r"^https?://", "", re.sub(r"^\*\.", "", kw.lower())))   # 和导入时的规整一致:去掉 *. / http:// / 路径
         app, _, cat = rest.partition("|")
         app, cat = app.strip(), cat.strip() or "其他"
         if not kw or not app:
@@ -198,9 +200,31 @@ def parse_rules(text):
     return out
 
 
+DEDUP = {"same": 0, "conflict": 0, "examples": []}
+
+
+def dedupe(rules):
+    """同一个关键字只留第一条(分类时也是靠前的先命中,所以不改变识别结果)。
+    返回 (去重后的规则, 完全相同的条数, 同关键字但应用 / 类别不同的条数, 例子)。"""
+    seen, out, same, conflict, ex = {}, [], 0, 0, []
+    for kw, app, cat in rules:
+        if kw in seen:
+            if seen[kw] == (app, cat):
+                same += 1
+            else:
+                conflict += 1
+                if len(ex) < 5:
+                    ex.append(f"{kw}:保留 {seen[kw][0]}|{seen[kw][1]},去掉 {app}|{cat}")
+            continue
+        seen[kw] = (app, cat)
+        out.append((kw, app, cat))
+    return out, same, conflict, ex
+
+
 def set_rules(text):
     global _custom, _text
-    rules = parse_rules(text)
+    rules, same, conflict, ex = dedupe(parse_rules(text))
+    DEDUP.update(same=same, conflict=conflict, examples=ex)
     with _lock:
         _custom = rules
         _text = "\n".join(f"{k}={a}|{c}" for k, a, c in rules)

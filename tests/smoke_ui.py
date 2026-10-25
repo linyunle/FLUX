@@ -29,6 +29,8 @@ try:
         pg.click('#secTabs button[data-k="rv"]'); pg.wait_for_timeout(800)
         assert pg.locator("#hmView button").count()==2 and pg.locator("#hmStat button").count()==2 and pg.locator("#hmDays").count()==1, "热力图没有范围 / 平均中位数控件"
         pg.click('#hmStat button[data-k="median"]'); pg.wait_for_timeout(800); assert "中位数" in pg.inner_text("#hmSub"), pg.inner_text("#hmSub")
+        pg.click('#hmSplit button[data-k="wk"]'); pg.wait_for_timeout(800); assert "周一到周五" in pg.inner_text("#hmBody") and "周六、周日" in pg.inner_text("#hmBody"), "热力图没有切到工作日 / 周末"
+        pg.click('#hmSplit button[data-k="week"]'); pg.wait_for_timeout(600)
         pg.click('#hmView button[data-k="day"]'); pg.wait_for_timeout(1000); assert pg.locator("#hmDay").count()==1 and "一天里每小时" in pg.inner_text("#hmSub"), "热力图没有切到某一天"
         pg.click('#hmView button[data-k="week"]'); pg.wait_for_timeout(600)
         # 其它页面跳到卡片时要自动切到对应页签
@@ -167,6 +169,18 @@ try:
         assert pg.locator("#hideOff").count()==1, "设备页没有「隐藏离线」选项"
         pg.select_option("#hideOff","7"); pg.wait_for_timeout(800); assert pg.evaluate("S.hideOff")==7 and pg.locator("#devTbl").count()==1
         pg.select_option("#hideOff","0"); pg.wait_for_timeout(500)
+        # 应用特征库:去重整理 + 导入预览(新增 / 覆盖 / 相同)+ 合并时去重
+        pg.evaluate("S.tab='settings';S.set='apps';showTab();refresh()"); pg.wait_for_timeout(1500)
+        pg.fill("#appTxt","a.example=甲|办公 / 开发\nA.example=甲|办公 / 开发\n*.b.example=乙|办公 / 开发\nb.example=丙|其他")
+        pg.click("#appDedup"); pg.wait_for_timeout(300)
+        assert pg.input_value("#appTxt").split("\n")==["a.example=甲|办公 / 开发","b.example=乙|办公 / 开发"] and "已去重" in pg.inner_text("#appMsg"), (pg.input_value("#appTxt"), pg.inner_text("#appMsg"))
+        import tempfile as _tf, os as _os
+        _f=_os.path.join(_tf.mkdtemp(),"imp.txt"); open(_f,"w",encoding="utf-8").write("a.example=甲|办公 / 开发\nb.example=丙|其他\nc.example=丁|办公 / 开发\nc.example=丁|办公 / 开发\n")
+        pg.set_input_files("#appFile",_f); pg.wait_for_timeout(1200)
+        pv=pg.inner_text("#appPrev"); assert "新增 1" in pv and "覆盖 1" in pv and "相同 1" in pv and "重复的 1 条" in pv, pv
+        assert pg.input_value("#appTxt").count("c.example")==0, "预览阶段不该改编辑框"
+        pg.click("#appPrevOk"); pg.wait_for_timeout(300)
+        assert pg.input_value("#appTxt").split("\n")==["a.example=甲|办公 / 开发","b.example=丙|其他","c.example=丁|办公 / 开发"], pg.input_value("#appTxt")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

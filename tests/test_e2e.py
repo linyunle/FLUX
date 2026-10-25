@@ -156,6 +156,7 @@ try:
     ok("tcp" in qo and "ok" in qo["tcp"], "QoE:TCP 重传字段")
     ok(qo["summary"]["avg"] and qo["summary"]["basis"] in ("流量加权", "简单平均") and "bytes" in qo["nodes"][0], f"QoE:汇总口径 {qo['summary']}")
     ok(post("/api/apps/rules", {"text": "mytest.example=我的应用|办公 / 开发"})[1]["rules"] == 1 and "我的应用" in get("/api/apprules")["rules"], "自定义识别规则保存")
+    c, r = post("/api/apps/rules", {"text": "a.example=甲|视频\nA.example=甲|视频\n*.b.example=乙|购物\nb.example=丙|其他"}); ok(c == 200 and r["rules"] == 2 and r["dedup"]["same"] == 1 and r["dedup"]["conflict"] == 1 and "A.example" not in r["text"], "应用特征库:保存时自动去重")
     ok(post("/api/apps/rules", {"text": "乱写"})[0] in (200, 400), "自定义规则容错")
     post("/api/apps/rules", {"text": ""})
     # 机场

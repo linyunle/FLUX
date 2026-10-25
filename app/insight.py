@@ -151,7 +151,7 @@ def leaks(con, days=7, until_day=None):
 
 
 # ---------------------------------------------------------------- 热力图
-def heatmap(con, devs=None, days=14, stat="avg", day=None):
+def heatmap(con, devs=None, days=14, stat="avg", day=None, split="week"):
     """活跃时段热力图。默认:近 N 天的 周几 × 几点 平均(stat=avg)或中位数(stat=median,不被个别大下载带偏)。
     day=YYYY-MM-DD:只看那一天 24 小时的上 / 下行和各小时流量最大的几台设备。"""
     w = _web()
@@ -203,11 +203,16 @@ def heatmap(con, devs=None, days=14, stat="avg", day=None):
             continue
         per[(dt.date(), dt.hour)] = b or 0
         dates[dt.weekday()].add(dt.date())
-    cells = []
-    for wd in range(7):
+    split = "wk" if split in ("wk", "weekend") else "week"
+    groups = [[0, 1, 2, 3, 4], [5, 6]] if split == "wk" else [[i] for i in range(7)]
+    labels = ["周一到周五", "周六、周日"] if split == "wk" else ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    cells, samples = [], []
+    for g in groups:
+        gd = set().union(*(dates[wd] for wd in g))
+        samples.append(len(gd))
         row = []
         for h in range(24):
-            vals = [per.get((d, h), 0) for d in dates[wd]]      # 当天这个小时没有记录 = 0
+            vals = [per.get((d, h), 0) for d in gd]      # 当天这个小时没有记录 = 0
             if not vals:
                 row.append(0)
             elif stat == "median":
@@ -215,9 +220,9 @@ def heatmap(con, devs=None, days=14, stat="avg", day=None):
             else:
                 row.append(round(sum(vals) / len(vals)))
         cells.append(row)
-    peak = max((v, wd, h) for wd in range(7) for h, v in enumerate(cells[wd]))
-    return {"days": days, "stat": stat, "keep_days": config.HOUR_KEEP_DAYS, "samples": [len(d) for d in dates], "cells": cells, "max": peak[0],
-            "peak": {"weekday": peak[1], "hour": peak[2], "bytes": peak[0]} if peak[0] else None}
+    peak = max((v, i, h) for i in range(len(cells)) for h, v in enumerate(cells[i]))
+    return {"days": days, "stat": stat, "split": split, "labels": labels, "keep_days": config.HOUR_KEEP_DAYS, "samples": samples, "cells": cells, "max": peak[0],
+            "peak": {"weekday": peak[1], "label": labels[peak[1]], "hour": peak[2], "bytes": peak[0]} if peak[0] else None}
 
 
 # ---------------------------------------------------------------- 订阅额度
