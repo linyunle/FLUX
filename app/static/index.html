@@ -272,6 +272,11 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch .r1{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.alch .r2{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .alch .r2 input{flex:1 1 220px;min-width:0}
 .sectabs{margin:0 0 10px;flex-wrap:wrap}
+.ndrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:10px 2px;border-top:1px solid var(--line)}.ndrow:first-child{border-top:0}
+.ndm{flex:1 1 220px;min-width:0}.ndn{font-weight:600;word-break:break-all}.ndip{word-break:break-all;line-height:1.5}
+.ndt{flex:0 0 auto;min-width:96px}.nds{flex:0 0 auto}.ndb{flex:0 0 auto;display:flex;gap:6px}
+@media(max-width:820px){.ndrow{gap:4px 12px}.ndm{flex:1 1 100%}.ndt{flex:1 1 auto}.ndb{flex:1 1 100%;justify-content:flex-end}}
+.hideoff{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:0 0 8px}
 .stile{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--cardbg,var(--surface));border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--r);padding:calc(var(--cp) - 2px) var(--cp);cursor:pointer;font:inherit;color:inherit;min-width:0}
 .stile:hover,.find:hover{background:var(--hover)}
 .stile .l{font-size:12px;color:var(--muted)}.stile .v{font-size:20px;font-weight:600;line-height:1.25}.stile .s{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -602,7 +607,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-devices" style="display:none">
   <div id="devListView"><div class="card" id="newDevCard" style="display:none"><h2>新设备 <span class="seg" id="ndDays" role="group" aria-label="范围"></span><span class="sp"></span><span class="sub" id="ndNote"></span></h2><div id="ndBody"></div></div>
-  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="scroll" id="devTbl"></div></div></div>
+  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
   <div id="devDetail" style="display:none">
     <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div></div>
     <div class="tiles" id="ddTiles"></div>
@@ -1386,14 +1391,15 @@ function loadDevicesTab(){
   $("#devListView").style.display=S.dd?"none":"";$("#devDetail").style.display=S.dd?"":"none";
   if(S.dd)return loadDetail();
   Promise.all([get("/api/groups").then(j=>{S.grp=j}).catch(()=>{}),get("/api/presence").then(j=>{S.pres={};j.rows.forEach(r=>S.pres[r.key]=r)}).catch(()=>{}),loadNewDev()]).finally(devTabRows)}
-S.ndDays=14;S.newDev={};
+S.ndDays=14;S.newDev={};S.ndAll=false;try{S.hideOff=+localStorage.getItem("flux.hideOff")||0}catch(e){S.hideOff=0}
 const agoTs=ts=>{const m=Math.max(0,Math.round((Date.now()/1000-ts)/60));return m<60?m+" 分钟前":m<1440?Math.round(m/60)+" 小时前":Math.round(m/1440)+" 天前"};
 function loadNewDev(){seg($("#ndDays"),[[1,"今天"],[3,"3 天"],[14,"14 天"],[30,"30 天"]],S.ndDays,k=>{S.ndDays=+k;loadNewDev()});
   return get("/api/devices/new",{days:S.ndDays}).then(j=>{S.newDev={};j.rows.forEach(r=>S.newDev[r.key]=r);const card=$("#newDevCard"),ro=S.role==="v"||document.documentElement.dataset.vro==="1";
     card.style.display="";$("#ndNote").textContent=j.rows.length?`${j.rows.length} 台 · 点「查看」打开详情`:"";
-    $("#ndBody").innerHTML=j.rows.length?`<div class="scroll"><table><thead><tr><th>设备</th><th>首次出现</th><th>状态</th><th></th></tr></thead><tbody>${j.rows.map(r=>`<tr><td>${r.named?esc(r.name):`<span class="warn">${esc(r.name||"未命名")}</span>`}<div class="sub">${esc(ipTxt(r.ips,""))} ${is17(r.key)?esc(r.key):""}</div></td><td>${agoTs(r.first)}<div class="sub">${fmtTs(r.first)}</div></td><td>${presTag(r.key)||"–"}</td><td style="white-space:nowrap"><button data-nd="open" data-k="${esc(r.key)}">查看</button>${ro?"":` <button data-nd="ren" data-k="${esc(r.key)}" data-n="${esc(r.named?r.name:"")}">命名</button>`}</td></tr>`).join("")}</tbody></table></div>`:`<div class="sub">近 ${S.ndDays===1?"今天":S.ndDays+" 天"}没有新设备出现(面板第一次启动时已经在的设备不算新设备)。</div>`}).catch(()=>{$("#newDevCard").style.display="none"})}
+    const rowsH=(S.ndAll?j.rows:j.rows.slice(0,5)).map(r=>`<div class="ndrow"><div class="ndm"><div class="ndn">${r.named?esc(r.name):`<span class="warn">${esc(r.name||"未命名")}</span>`}</div><div class="sub ndip">${esc(ipTxt(r.ips,""))} ${is17(r.key)?esc(r.key):""}</div></div><div class="ndt"><b>${agoTs(r.first)}</b><div class="sub">${fmtTs(r.first)}</div></div><div class="nds">${presTag(r.key)||'<span class="sub">无在线记录</span>'}</div><div class="ndb"><button data-nd="open" data-k="${esc(r.key)}">查看</button>${ro?"":`<button data-nd="ren" data-k="${esc(r.key)}" data-n="${esc(r.named?r.name:"")}">命名</button>`}</div></div>`).join("");
+    $("#ndBody").innerHTML=j.rows.length?rowsH+(j.rows.length>5?`<div class="sub" style="margin-top:6px"><a href="#" id="ndMore">${S.ndAll?"收起":`显示全部 ${j.rows.length} 台`}</a></div>`:""):`<div class="sub">近 ${S.ndDays===1?"今天":S.ndDays+" 天"}没有新设备出现(面板第一次启动时已经在的设备不算新设备)。</div>`}).catch(()=>{$("#newDevCard").style.display="none"})}
 const is17=k=>k.includes(":")&&k.length===17;
-document.addEventListener("click",async e=>{const b=e.target.closest("[data-nd]");if(!b)return;const k=b.dataset.k;
+document.addEventListener("click",async e=>{if(e.target.id==="ndMore"){e.preventDefault();S.ndAll=!S.ndAll;loadNewDev();return}const b=e.target.closest("[data-nd]");if(!b)return;const k=b.dataset.k;
   if(b.dataset.nd==="open"){S.dd=k;loadDevicesTab();return}
   const v=prompt("给这台设备起个名字(留空 = 恢复默认)",b.dataset.n||"");if(v===null)return;const n=v.trim();try{await post("/api/device",{dev:k,name:n});loadDevices();loadDevicesTab()}catch(x){alert(x.message)}});
 function presTag(k){const p=(S.pres||{})[k];if(!p)return "";
@@ -1403,7 +1409,11 @@ function grpSel(k){const g=(S.grp&&S.grp.groups[k])||"",names=(S.grp&&S.grp.name
   return `<select class="grp" data-k="${esc(k)}" aria-label="分组" title="设备分组" style="padding:1px 4px;font-size:12px"><option value="">未分组</option>${names.map(n=>`<option ${n===g?"selected":""}>${esc(n)}</option>`).join("")}${g&&!names.includes(g)?`<option selected>${esc(g)}</option>`:""}<option value="__new__">新建分组…</option></select>`}
 function devTabRows(){
   cmSeg("#dvMode","dev",()=>loadDevicesTab());
-  load("devtab","/api/summary",{...base({mode:S.cm.dev}),by:"client",limit:200},j=>{
+  {const hs=$("#hideOff");hs.value=String(S.hideOff);hs.onchange=()=>{S.hideOff=+hs.value;try{localStorage.setItem("flux.hideOff",String(S.hideOff))}catch(e){}devTabRows()}}
+  load("devtab","/api/summary",{...base({mode:S.cm.dev}),by:"client",limit:200},j0=>{
+  const cut=S.hideOff?Date.now()/1000-S.hideOff*86400:0,gone=r=>{if(!cut)return false;const p=(S.pres||{})[r.key];return !!p&&!p.on&&p.last<cut&&!(r.live&&r.live.conns)},hid=j0.rows.filter(gone).length,j=hid?{...j0,rows:j0.rows.filter(r=>!gone(r))}:j0;
+  $("#hideOffN").textContent=hid?`已隐藏 ${hid} 台`:"";
+
   rowsTable($("#devTbl"),j,[
     {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)} ${presTag(r.key)}${S.newDev[r.key]?` <span class="lv info" title="首次出现 ${fmtTs(S.newDev[r.key].first)}">新 · ${agoTs(S.newDev[r.key].first)}</span>`:""}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
     {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],

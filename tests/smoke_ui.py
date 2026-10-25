@@ -159,6 +159,9 @@ try:
         assert "已关注" in pg.inner_text("#devTbl"), "关注按钮没有生效"
         pg.evaluate("S.dd='';loadDevicesTab()"); pg.wait_for_timeout(2500)
         assert pg.locator("#newDevCard").is_visible() and "新设备" in pg.inner_text("#newDevCard") and pg.locator("#ndDays button").count()==4, "设备页没有「新设备」卡片"
+        assert pg.locator("#hideOff").count()==1, "设备页没有「隐藏离线」选项"
+        pg.select_option("#hideOff","7"); pg.wait_for_timeout(800); assert pg.evaluate("S.hideOff")==7 and pg.locator("#devTbl").count()==1
+        pg.select_option("#hideOff","0"); pg.wait_for_timeout(500)
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

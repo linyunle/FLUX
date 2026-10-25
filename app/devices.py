@@ -378,7 +378,7 @@ def new_devices(con, days=14):
     stored = stored_names(con)
     out = []
     for k, first in rows:
-        if k in local_ips():
+        if k in local_ips() or (":" in k and not is_mac(k)):   # 查不到 MAC 的 IPv6 隐私临时地址会不停变,不算设备
             continue
         ips = macips.get(k, [] if is_mac(k) else [k])
         out.append({"key": k, "name": NAMES.label(k, ips, stored), "named": k in stored, "ips": ips[:8], "first": int(first)})

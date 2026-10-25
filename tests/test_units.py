@@ -710,7 +710,7 @@ def test_v036():
     now2 = int(time.time())
     con.execute("DELETE FROM known_dev")
     con.executemany("INSERT INTO known_dev(client, first) VALUES(?,?)", [("aa:bb:cc:00:00:01", now2 - 20 * 86400), ("aa:bb:cc:00:00:02", now2 - 20 * 86400),
-                                                                          ("aa:bb:cc:00:00:03", now2 - 7200), ("aa:bb:cc:00:00:04", now2 - 20 * 86400)])
+                                                                          ("aa:bb:cc:00:00:03", now2 - 7200), ("aa:bb:cc:00:00:04", now2 - 20 * 86400), ("2409:8a55:e2d4:8480:b077:e2fb:f2f3:466e", now2 - 600)])
     con.commit()
     nd = devices.new_devices(con, 14)
     assert [x["key"] for x in nd] == ["aa:bb:cc:00:00:03"] and nd[0]["first"] == now2 - 7200, nd
