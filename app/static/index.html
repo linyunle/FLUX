@@ -273,7 +273,7 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .alch .r2 input{flex:1 1 220px;min-width:0}
 .sectabs{margin:0 0 10px;flex-wrap:wrap}
 #viewSeg{position:relative;overflow:visible}
-.glpop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;min-width:220px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-align:left}
+.glpop{position:fixed;z-index:2000;min-width:220px;max-width:calc(100vw - 16px);overflow-y:auto;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-align:left}
 .glpop .crow{display:flex;gap:6px;align-items:center;padding:4px 0;font-size:13px;cursor:pointer}
 .hmctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .hmday{display:flex;align-items:flex-end;gap:3px;height:150px}.hmcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
@@ -1777,14 +1777,17 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
+function glPlace(){const q=$("#glPop"),b=$("#viewSeg");if(!q||!b)return;const r=b.getBoundingClientRect(),w=q.offsetWidth||240;q.style.top=Math.round(r.bottom+6)+"px";q.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";q.style.maxHeight=Math.max(160,innerHeight-r.bottom-20)+"px"}
+addEventListener("scroll",glPlace,{passive:true});addEventListener("resize",glPlace);
 function glPop(){let p=$("#glPop");if(p){p.remove();return}
   p=document.createElement("div");p.id="glPop";p.className="glpop";
   p.innerHTML=`<div class="sub" style="margin-bottom:6px">点「状态」关掉时,隐藏下面勾选的卡片</div>`+Object.keys(CARDS).map(k=>`<label class="crow"><input type="checkbox" data-gk="${k}" ${TH.glSet.includes(k)?"checked":""}> ${esc(CARDS[k][1])}</label>`).join("")+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="glReset">恢复默认</button></div>`;
-  $("#viewSeg").appendChild(p);
+  document.body.appendChild(p);   /* 挂在 body 上、position:fixed:不被顶部栏的模糊 / 层叠上下文压住,永远在最上层 */
+  glPlace();
   p.onclick=e=>e.stopPropagation();
   p.onchange=e=>{const k=e.target.dataset.gk;if(!k)return;TH.glSet=TH.glSet.filter(x=>x!==k);if(e.target.checked)TH.glSet.push(k);saveTheme();applyTheme()};
   $("#glReset").onclick=()=>{TH.glSet=["sys","mem","rt","rtdev","rtnode"];saveTheme();applyTheme();p.remove();glPop()}}
-document.addEventListener("click",e=>{const p=$("#glPop");if(p&&!e.target.closest("#viewSeg"))p.remove()});
+document.addEventListener("click",e=>{const p=$("#glPop");if(p&&!e.target.closest("#viewSeg,#glPop"))p.remove()});
 function glToggle(){TH.gl=!TH.gl;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()}
 function applyView(k){stashLayout();TH.view=k;{const L=TH.vl[k];if(L){TH.order=normOrder(L.order);TH.cards=normCards(L.cards)}}TH.hide=TH.vh[k]?[...TH.vh[k]]:viewDef(k);themeChanged(true);renderChrome()}
 function renderLook(){
