@@ -2415,10 +2415,11 @@ function loadGeo(){const sc=srCalc();load("geo","/api/geo",{days:sc.days,until:s
 async function loadHeat(){
   const sel=$("#hmDev");if(!sel.dataset.ok&&S.devices.length){sel.innerHTML='<option value="">全部设备</option>'+S.devices.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))}</option>`).join("");sel.dataset.ok="1"}
   load("heat","/api/heatmap",{dev:sel.value},j=>{
-    const mx=j.max||1;
+    /* 颜色比例按「常见流量」(非零格子的第 90 百分位)定,再开平方压缩;个别极端的大下载只用最深色表示,不再把其它格子压成一片淡底色 */
+    const nz=j.cells.flat().filter(v=>v>0).sort((x,y)=>x-y),ref=nz.length?nz[Math.min(nz.length-1,Math.floor(nz.length*.9))]:1,mx=j.max||1,lvl=v=>v?Math.round(10+Math.sqrt(Math.min(v,ref)/ref)*88):0;
     let h='<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:2px;width:100%;min-width:520px"><thead><tr><th></th>'+[...Array(24).keys()].map(i=>`<th style="font-weight:400;font-size:10px;color:var(--muted)">${i%3===0?i:""}</th>`).join("")+"</tr></thead><tbody>";
-    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}</td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 平均 ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${v?Math.round(8+v*92/mx):0}%,var(--hover))"></td>`).join("")+"</tr>"});
-    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,平均 ${fmt(j.peak.bytes)}</div>`:'<div class="empty">还没有足够的小时数据</div>');
+    j.cells.forEach((row,wd)=>{h+=`<tr><td style="font-size:11px;color:var(--muted);white-space:nowrap;padding-right:6px">${WD[wd]}</td>`+row.map((v,hr)=>`<td title="${WD[wd]} ${pad(hr)}:00 平均 ${fmt(v)}" style="height:20px;border-radius:3px;background:color-mix(in srgb,var(--accent) ${lvl(v)}%,var(--hover))${v>=mx&&mx>ref*1.5?";outline:2px solid var(--accent);outline-offset:-2px":""}"></td>`).join("")+"</tr>"});
+    h+="</tbody></table></div>"+(j.peak?`<div class="sub" style="margin-top:6px">最忙:${WD[j.peak.weekday]} ${pad(j.peak.hour)}:00,平均 ${fmt(j.peak.bytes)}${mx>ref*1.5?`(远高于其它时段,图中用描边标出;颜色深浅按常见流量 ${fmt(ref)} 为满格,超过的都按最深色)`:"(颜色深浅按这一格为满格)"}</div>`:'<div class="empty">还没有足够的小时数据</div>');
     $("#hmBody").innerHTML=h})}
 $("#hmDev").onchange=loadHeat;
 
