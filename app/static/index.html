@@ -514,7 +514,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <h2>路由器状态<span class="sp"></span><span class="sub" id="sysNote"></span></h2>
     <div class="qstat" id="sysTiles"></div>
     <div class="chartbox" id="sysChart"></div>
-    <div class="sysifh"><button id="sysIfT" aria-expanded="true">网卡速度 ▾</button><span class="sub" id="sysIfN"></span></div>
+    <div class="sysifh"><button id="sysIfT" aria-expanded="true" aria-label="网卡速度" title="展开 / 收起网卡速度">▾</button><span class="sub" id="sysIfN"></span></div>
     <div id="sysIf"></div>
   </div>
   <div class="card gcard" id="rtCard">
@@ -1648,7 +1648,7 @@ function paintSys(j){
   for(let i=rows.length;i<4;i++)h+='<tr class="ph"><td class="k">&nbsp;</td><td class="n">&nbsp;</td><td class="n hide-s">&nbsp;</td><td class="n hide-s">&nbsp;</td></tr>';
   setH($("#sysIf"),`<table><tbody>${h}</tbody></table>`);sysIfPaint(rows)}
 function sysIfPaint(rows){let c=false;try{c=localStorage.getItem("flux.sysIfC")==="1"}catch(e){}if(rows)S.sysIfRows=rows;
-  $("#sysIf").style.display=c?"none":"";const b=$("#sysIfT");b.textContent=c?"网卡速度 ▸":"网卡速度 ▾";b.setAttribute("aria-expanded",!c);
+  $("#sysIf").style.display=c?"none":"";const b=$("#sysIfT");b.textContent=c?"▸":"▾";b.setAttribute("aria-expanded",!c);
   $("#sysIfN").textContent=c&&S.sysIfRows?S.sysIfRows.map(r=>`${r.name} ↓${rate(r.down)} ↑${rate(r.up)}`).join(" · "):""}
 $("#sysIfT").onclick=()=>{let c=false;try{c=localStorage.getItem("flux.sysIfC")==="1";localStorage.setItem("flux.sysIfC",c?"0":"1")}catch(e){}sysIfPaint()};
 function loadSys(){const el=$("#sysCard");if(!el||el.offsetParent===null)return;load("sys","/api/sys",{seconds:120},paintSys)}
