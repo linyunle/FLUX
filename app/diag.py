@@ -181,6 +181,21 @@ def selfcheck(con, now=None):
     except Exception:
         pass
     try:
+        rb = con.execute("SELECT COUNT(*) FROM alerts WHERE kind='router_reboot' AND ts>=?", (int(now) - 86400,)).fetchone()[0]
+        if rb >= 2:
+            hint = ""
+            try:
+                r = con.execute("SELECT msg FROM syslog WHERE ts>=? AND sev<=3 AND tag='kernel' AND (msg LIKE '%I/O error, dev %' OR msg LIKE '%EXT4-fs error%') ORDER BY ts DESC LIMIT 1", (int(now) - 86400,)).fetchone()
+                m = re.search(r"dev (sd[a-z]+)|device (sd[a-z]+)", r[0]) if r else None
+                n = con.execute("SELECT COUNT(*) FROM syslog WHERE ts>=? AND tag='kernel' AND (msg LIKE '%I/O error, dev %' OR msg LIKE '%EXT4-fs error%')", (int(now) - 86400,)).fetchone()[0] if r else 0
+                if m:
+                    hint = f"同时内核有 {n} 条磁盘错误({m.group(1) or m.group(2)}),很可能是这块硬盘或它的 USB 连接出了问题(之前就有过因此重启)。可以先把它拔掉、不在开机时挂载,观察是否还重启。"
+            except Exception:
+                pass
+            out.append(_f("bad" if rb >= 4 else "warn", f"最近 24 小时路由器重启了 {rb} 次", hint or "看「告警」时间线里的「路由器重启」,再对照路由器日志里重启前的最后几条;常见原因是硬盘 / USB 故障、供电或过热。"))
+    except Exception:
+        pass
+    try:
         ac = agh.load_cfg(con)
         d = agh._cache.get("data") or {}
         if ac["url"] and ac["on"] and d.get("configured") and d.get("ok") is False:

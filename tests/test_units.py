@@ -756,6 +756,37 @@ def test_v036():
     geo.proxy_set("")
 
 
+def test_v043_1():
+    """路由器重启检测:面板随路由器一起重启时,靠数据库里记的开机时刻对比;自检提示频繁重启 + 硬盘错误。"""
+    import tempfile, time, os
+    from app import config, db, alerts, diag
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db(); now = int(time.time())
+    cnt = lambda: con.execute("SELECT COUNT(*) FROM alerts WHERE kind='router_reboot'").fetchone()[0]
+    alerts._boot_persist(con, 7200, now)                       # 第一次:只记录,不报
+    assert cnt() == 0 and con.execute("SELECT v FROM kv WHERE k='router_boot'").fetchone()
+    alerts._boot_persist(con, 7200 + 600, now + 600)           # 同一次开机,时刻不变 → 不报
+    alerts._boot_persist(con, 7200 + 603, now + 601)           # 抖动几秒 → 不报
+    assert cnt() == 0
+    alerts._boot_persist(con, 60, now + 3000)                  # 运行时间回到 60 秒 → 路由器重启过
+    assert cnt() == 1, cnt()
+    alerts._boot_persist(con, 90, now + 3030)                  # 同一次开机再读 → 不重复
+    assert cnt() == 1
+    alerts._boot_persist(con, 90000, now + 3100)               # 开机时刻比记录的早很多(校时往回拨)→ 不算重启
+    assert cnt() == 1
+    # 自检:24 小时内重启 ≥2 次才提示;有 sda 的 I/O 错误时点出硬盘
+    assert not any("路由器重启了" in x["title"] for x in diag.selfcheck(con, now + 3100))
+    con.execute("INSERT INTO alerts(ts,kind,level,key,title,detail,sent) VALUES(?,?,?,?,?,?,?)", (now + 3050, "router_reboot", "warn", "reboot", "路由器重启过", "", "仅记录"))
+    con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (now + 3000, "r", 3, "kernel", "[ 65.6] I/O error, dev sda, sector 331352064 op 0x0:(READ)"))
+    con.commit()
+    it = [x for x in diag.selfcheck(con, now + 3100) if "路由器重启了" in x["title"]]
+    assert it and "2 次" in it[0]["title"], it
+    from app import syslog
+    syslog.save_cfg(con, {"on": True, "port": 5514, "days": 2, "max_rows": 2000})
+    it = [x for x in diag.selfcheck(con, now + 3100) if "路由器重启了" in x["title"]]
+    assert it and "sda" in it[0]["detail"], it
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

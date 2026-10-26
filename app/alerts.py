@@ -492,6 +492,25 @@ def check_api(con, cfg, now):
              f"面板已有 {int((now - _api_bad_since) // 60)} 分钟连不上 nikki 的 API:{(c.status.get('error') if c else '')}。这段时间的流量不会被统计。", now)
 
 
+def _boot_persist(con, up, now):
+    """面板自己随路由器一起重启时,进程内的「运行时间变小」看不到。把开机时刻(now - uptime)存进数据库,下次启动对比:
+    开机时刻比上次记录的晚了两分钟以上 = 路由器在两次读数之间重启过。时钟被校时往回拨的不算。"""
+    boot = int(now - up)
+    try:
+        row = con.execute("SELECT v FROM kv WHERE k='router_boot'").fetchone()
+        old = int(row[0]) if row else 0
+        if not old or abs(boot - old) <= 120 or boot < old:
+            if not old or abs(boot - old) > 5:
+                with con:
+                    con.execute("INSERT INTO kv(k,v) VALUES('router_boot',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(boot),))
+            return
+        with con:
+            con.execute("INSERT INTO kv(k,v) VALUES('router_boot',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(boot),))
+        note(con, "router_reboot", "reboot", "路由器重启过", f"上次记录的开机时刻是 {time.strftime('%m-%d %H:%M:%S', time.localtime(old))},这次是 {time.strftime('%m-%d %H:%M:%S', time.localtime(boot))}(面板也随之重启),说明路由器重启(或断电)过。", level="warn", now=boot)
+    except Exception as e:
+        log("记录路由器开机时刻出错", e)
+
+
 def check_sys(con, cfg, now):
     s = sysinfo.STATE
     up = s.get("uptime") or 0
@@ -499,6 +518,13 @@ def check_sys(con, cfg, now):
     _state["uptime"] = up
     if last and up and up + 30 < last:
         note(con, "router_reboot", "reboot", "路由器重启过", f"运行时间从 {last // 3600} 小时回到了 {up // 60} 分钟,说明路由器刚重启(或断电)过。", level="warn", now=now - up)
+        try:
+            with con:
+                con.execute("INSERT INTO kv(k,v) VALUES('router_boot',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(int(now - up)),))
+        except Exception:
+            pass
+    elif up and not last:
+        _boot_persist(con, up, now)
     r = cfg["rules"]
     ct = s.get("ct")
     if r["sys_conntrack"]["on"] and ct and ct.get("pct") is not None and ct["pct"] >= r["sys_conntrack"]["pct"] and _allow("sys_conntrack", "ct", r["sys_conntrack"]["cool_min"], now):
