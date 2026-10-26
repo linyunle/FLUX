@@ -42,17 +42,13 @@
 |---|---|
 | ![新设备](docs/img/devices-new.png) | ![热力图](docs/img/heatmap.png) |
 
-| 概览 · 「状态 ▾」选择要隐藏的卡片 | |
+| 概览 · 「状态 ▾」选择要隐藏的卡片 | 手机端(底部浮动导航,iOS 风格) |
 |---|---|
-| ![状态弹层](docs/img/status-popover.png) | |
+| ![状态弹层](docs/img/status-popover.png) | <img src="docs/img/mobile-light.png" width="170" alt="手机-浅色"> <img src="docs/img/mobile-dark.png" width="170" alt="手机-深色"> |
 
 | 设置 | 登录页 |
 |---|---|
 | ![设置](docs/img/settings.png) | ![登录](docs/img/login.png) |
-
-手机端(底部浮动导航,iOS 风格):
-
-<img src="docs/img/mobile-light.png" width="260" alt="手机-浅色"> <img src="docs/img/mobile-dark.png" width="260" alt="手机-深色">
 
 ## 主要功能
 
