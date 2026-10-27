@@ -188,7 +188,7 @@ try:
         pg.evaluate("S.tab='settings';S.set='apps';showTab();refresh()"); pg.wait_for_timeout(1500)
         pg.fill("#appTxt","a.example=甲|办公 / 开发\nA.example=甲|办公 / 开发\n*.b.example=乙|办公 / 开发\nb.example=丙|其他")
         pg.click("#appDedup"); pg.wait_for_timeout(300)
-        assert pg.input_value("#appTxt").split("\n")==["a.example=甲|办公 / 开发","b.example=乙|办公 / 开发"] and "已去重" in pg.inner_text("#appMsg"), (pg.input_value("#appTxt"), pg.inner_text("#appMsg"))
+        assert pg.input_value("#appTxt").split("\n")==["a.example=甲|办公 / 开发","b.example=乙|办公 / 开发"] and "已整理" in pg.inner_text("#appMsg") and "完全相同的 1 条" in pg.inner_text("#appMsg"), (pg.input_value("#appTxt"), pg.inner_text("#appMsg"))
         import tempfile as _tf, os as _os
         _f=_os.path.join(_tf.mkdtemp(),"imp.txt"); open(_f,"w",encoding="utf-8").write("a.example=甲|办公 / 开发\nb.example=丙|其他\nc.example=丁|办公 / 开发\nc.example=丁|办公 / 开发\n")
         pg.set_input_files("#appFile",_f); pg.wait_for_timeout(1200)
@@ -196,6 +196,16 @@ try:
         assert pg.input_value("#appTxt").count("c.example")==0, "预览阶段不该改编辑框"
         pg.click("#appPrevOk"); pg.wait_for_timeout(300)
         assert pg.input_value("#appTxt").split("\n")==["a.example=甲|办公 / 开发","b.example=丙|其他","c.example=丁|办公 / 开发"], pg.input_value("#appTxt")
+        # v0.44:AI 输出里的 Markdown 残留(行尾 \\、w\\.cdn、&#x20;、关键字里的空格)导入 / 整理时自动清掉;和父域名同值的子域名规则可安全去掉
+        pg.fill("#appTxt","x.w\\.cdn.net=甲|系统 / 更新\\\nal ikun.com=乙|其他\\\n&#x20;zm.example=丙|其他\\\nexample.org=丁|其他\na.example.org=丁|其他\nb.example.org=戊|其他")
+        pg.click("#appDedup"); pg.wait_for_timeout(300)
+        _t=pg.input_value("#appTxt").split("\n"); assert "\\" not in "".join(_t) and "x.w.cdn.net=甲|系统 / 更新" in _t and "alikun.com=乙|其他" in _t and "zm.example=丙|其他" in _t, _t
+        assert "a.example.org=丁|其他" not in _t and "b.example.org=戊|其他" in _t, _t   # 同值的去掉;值不同的(会改变结果)保留
+        assert "多余的" in pg.inner_text("#appMsg"), pg.inner_text("#appMsg")
+        # v0.44:台湾旗用内联 SVG(CN 区域的 macOS / iOS 不渲染 🇹🇼),名字叫「台湾」;节点名里的地区优先于 GeoIP;QoE / 节点评分的节点名带旗
+        assert pg.evaluate("flag('TW').includes('flsvg')") and pg.evaluate("ccName('TW')")=="台湾" and pg.evaluate("flag('JP')")=="🇯🇵"
+        assert pg.evaluate("[nodeCC('prefix-CF | 香港 01'),nodeCC('SSRDOG ｜ 台湾 02'),nodeCC('US-LA-01'),nodeCC('红杏云 ｜ 印度尼西亚 01'),nodeCC('备用节点','US'),nodeCC('Lamlam')]")==["HK","TW","US","ID","US",""]
+        print("PASS 应用规则清理 / 台湾旗 / 节点地区识别")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

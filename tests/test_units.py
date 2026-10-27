@@ -787,6 +787,14 @@ def test_v043_1():
     assert it and "sda" in it[0]["detail"], it
 
 
+def test_v044():
+    """应用规则解析:清掉 AI 输出的 Markdown 残留(行尾 \\、w\\.cdn、HTML 空格实体、关键字里的空格)。"""
+    from app import appsig
+    r = appsig.parse_rules("cl2-cn.apple.com.w\\.cdngslb.com.t.tushuokeji.net=Apple 系统服务|系统 / 更新\\\nal ikunlun.com=A|其他\n&#x20;zmapi.bestmku.com=其他|其他\\\n*.b.example=乙|办公 / 开发\\")
+    assert r == [("cl2-cn.apple.com.w.cdngslb.com.t.tushuokeji.net", "Apple 系统服务", "系统 / 更新"), ("alikunlun.com", "A", "其他"),
+                 ("zmapi.bestmku.com", "其他", "其他"), ("b.example", "乙", "办公 / 开发")], r
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

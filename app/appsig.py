@@ -183,12 +183,15 @@ def parse_rules(text):
     if len(lines) > 1000:
         raise ValueError("规则最多 1000 行")
     for i, raw in enumerate(lines, 1):
-        line = raw.strip()
+        line = re.sub(r"[\u200b-\u200d\ufeff]", "", re.sub(r"&#x20;|&#32;|&nbsp;|&#160;", " ", raw, flags=re.I)).strip()
+        line = re.sub(r"\\+\s*$", "", line).strip()      # AI 输出的 Markdown 残留:行尾的 \、HTML 空格实体、零宽字符
         if not line or line.startswith("#"):
             continue
         if "=" not in line:
             raise ValueError(f"第 {i} 行格式不对,要写成 域名关键字=应用名 或 域名关键字=应用名|类别")
         kw, rest = (x.strip() for x in line.split("=", 1))
+        kw = re.sub(r"\s+", "", kw.replace("\\", ""))        # 关键字里不会有反斜杠和空格(w\.cdn 这种写法永远匹配不上)
+        rest = rest.replace("\\", "")
         kw = re.sub(r"/.*$", "", re.sub(r"^https?://", "", re.sub(r"^\*\.", "", kw.lower())))   # 和导入时的规整一致:去掉 *. / http:// / 路径
         app, _, cat = rest.partition("|")
         app, cat = app.strip(), cat.strip() or "其他"

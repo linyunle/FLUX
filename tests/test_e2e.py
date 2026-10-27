@@ -451,7 +451,7 @@ try:
     # ---- v0.26.0 gzip / ETag
     rq_ = urllib.request.Request(B + "/", headers={"Accept-Encoding": "gzip"}); r_ = urllib.request.urlopen(rq_, timeout=5)
     import gzip as _gz
-    raw_ = r_.read(); ok(r_.headers.get("Content-Encoding") == "gzip" and b"<title>" in _gz.decompress(raw_) and len(raw_) < 120000, f"首页:gzip 压缩 {len(raw_)} 字节")
+    raw_ = r_.read(); ok(r_.headers.get("Content-Encoding") == "gzip" and b"<title>" in _gz.decompress(raw_) and len(raw_) < 135000, f"首页:gzip 压缩 {len(raw_)} 字节")
     et_ = r_.headers.get("ETag"); ok(bool(et_) and "no-cache" in r_.headers.get("Cache-Control", ""), "首页:带 ETag,每次向服务器确认")
     try: c304 = urllib.request.urlopen(urllib.request.Request(B + "/", headers={"If-None-Match": et_, "Accept-Encoding": "gzip"}), timeout=5).status
     except urllib.error.HTTPError as e: c304 = e.code

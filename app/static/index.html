@@ -95,7 +95,7 @@ img.logo{flex:none;border-radius:8px;display:block}
 #dataTop .tiles,#dataTop #filters,#dataTop #chips{margin-bottom:8px}
 #dataTop #chips:empty{margin:0}
 #tiles{margin-bottom:var(--gap,12px)}
-.sysifh{display:flex;align-items:center;gap:8px;margin:8px 0 2px}.sysifh button{padding:2px 10px;font-size:12px}
+.flsvg{display:inline-block;width:1.25em;height:.84em;vertical-align:-.1em;background-size:cover;background-position:center;border-radius:2px;box-shadow:0 0 0 1px rgba(128,128,128,.28)}.nflag{margin-right:5px}.sysifh{display:flex;align-items:center;gap:8px;margin:8px 0 2px}.sysifh button{padding:2px 10px;font-size:12px}
 .gone{display:none!important}
 .card h2{font-size:14px;margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .legend{display:inline-flex;gap:12px;font-weight:400;color:var(--ink2);font-size:12px}
@@ -139,7 +139,17 @@ pre{background:var(--hover);border:1px solid var(--line);border-radius:6px;paddi
 .row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.row2>.lb{width:64px;color:var(--ink2);font-size:12px;flex:none}
 input[type=color]{padding:0;width:36px;height:28px;cursor:pointer}
 .crow{display:flex;align-items:center;gap:6px}
-.ord{display:flex;align-items:center;gap:6px;padding:3px 0}.ord span{flex:1}.ord button{padding:1px 8px}
+.ord{display:flex;align-items:center;gap:6px;padding:3px 0}.ord span{flex:1}.ord button{padding:1px 8px}.ord .ordc{display:contents}
+/* 手机:设置页的标签和内容上下排,不再把内容挤成窄窄一条;每张卡片「开关 + 名称」一行,宽度 / 高度 / 上下移另起一行、左对齐 */
+@media(max-width:820px){
+  .row2>.lb{width:100%}.row2>div{min-width:0!important;flex:1 1 100%!important}
+  .ord{flex-wrap:wrap;align-items:center;gap:4px 8px;padding:7px 0;border-bottom:1px solid rgba(128,128,128,.14)}
+  .ord>label{flex:1 1 0!important;min-width:0;text-align:left;overflow-wrap:anywhere}
+  .ord .ordc{display:flex;flex:1 0 100%;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:6px;padding-left:2px}
+  .ord .ordc select{width:auto;min-width:76px;max-width:44vw;padding:5px 6px;font-size:13px}
+  .ord .ordc button{padding:5px 14px}
+  #lkSideItems{gap:8px 18px!important;justify-content:flex-start}#lkSideItems .crow{white-space:nowrap}
+}
 @media(max-width:600px){.wrap{padding:12px}td.k{max-width:160px}.hide-s{display:none}}
 
 /* ---- 侧栏布局 ---- */
@@ -1284,14 +1294,14 @@ document.addEventListener("click",async e=>{const a=e.target.closest("[data-aph]
 $("#unkX").onclick=()=>$("#unk").classList.remove("open");$("#unkCopy").onclick=e=>copyBtn(e.target,()=>$("#unkTxt").value);
 $("#unkDl").onclick=()=>{const b=new Blob([$("#unkTxt").value],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="flux-unknown-apps.txt";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 /* 应用特征库:导入文件(.txt / .csv / .json),解析成「关键字=应用名|类别」合并进文本框,保存才生效 */
-function parseAppImport(txt,cats){txt=String(txt||"").replace(/^\uFEFF/,"").replace(/```[a-z]*/gi,"");const out=[],bad=[],cs=new Set(cats||[]);
-  const add=(k,a,c,src)=>{k=String(k||"").trim().toLowerCase().replace(/^\*\./,"").replace(/^https?:\/\//,"").replace(/\/.*$/,"");a=String(a||"").trim();c=String(c||"").trim();if(!k||!a||k.length>80||a.length>40){bad.push(src);return}if(!c||(cs.size&&!cs.has(c)))c="其他";out.push([k,a,c])};
+function parseAppImport(txt,cats){txt=String(txt||"").replace(/^\uFEFF/,"").replace(/```[a-z]*/gi,"");const out=[],bad=[],cs=new Set(cats||[]);let fixed=0,dirty=false;
+  const add=(k,a,c,src)=>{if(dirty||/\\|&#x20;|&nbsp;/i.test(String(k)+String(a)+String(c))||/\s/.test(String(k||"").trim()))fixed++;dirty=false;k=appNormK(k);a=appNoBs(appJunk(a));c=appNoBs(appJunk(c));if(!k||!a||k.length>80||a.length>40){bad.push(src);return}if(!c||(cs.size&&!cs.has(c)))c="其他";out.push([k,a,c])};
   let js=null;try{const t=txt.trim();if(t[0]==="["||t[0]==="{")js=JSON.parse(t)}catch(e){}
   if(js){const arr=Array.isArray(js)?js:Object.entries(js).map(([k,v])=>typeof v==="string"?{domain:k,app:v}:{domain:k,...v});for(const o of arr)add(o.domain||o.host||o.keyword||o.key||o.d,o.app||o.name||o.application,o.cat||o.category||o.type,JSON.stringify(o).slice(0,60))}
-  else for(const raw of txt.split(/\r?\n/)){const l=raw.trim();if(!l||l[0]==="#"||l.startsWith("//"))continue;
+  else for(const raw of txt.split(/\r?\n/)){const l=appFixLine(raw);dirty=l!==raw.trim();if(!l||l[0]==="#"||l.startsWith("//")){dirty=false;continue}
     if(l.includes("=")){const [k,rest]=[l.slice(0,l.indexOf("=")),l.slice(l.indexOf("=")+1)],i=rest.search(/[|｜]/);add(k,i<0?rest:rest.slice(0,i),i<0?"":rest.slice(i+1),l)}
     else if(l.includes("\t")||l.includes(",")){const p=l.split(/\t|,/).map(x=>x.trim());if(/^(domain|域名|host)$/i.test(p[0]))continue;add(p[0],p[1],p[2],l)}else bad.push(l)}
-  return{out,bad}}
+  return{out,bad,fixed}}
 /* ---- 堆叠面积图(流量趋势卡片的「堆叠维度」) ---- */
 function stColor(x,i){return x.other?"#9aa0a6":PCOL[i%PCOL.length]}
 function paintStack(j,box,leg,noteEl,H){
@@ -1345,7 +1355,7 @@ function paintQoe(){const [q,t]=S.qoeLast||[];if(!q)return;{
     else h+='<div class="sub">这个范围内没有流量</div>';
     h+='<div class="qsec">节点延迟 / 波动(来自 nikki 对节点的测速)</div>';
     if(!nodes.length||q.test_note)h+=`<div class="sub">${esc(q.test_note||"没有数据")}</div>`;
-    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th>${thS(S.qoeSort,"type","类型","hide-s")}${thS(S.qoeSort,"delay","当前","n")}${thS(S.qoeSort,"avg","平均","n")}${thS(S.qoeSort,"jitter","波动","n hide-s")}${thS(S.qoeSort,"fail","超时率","n")}${thS(S.qoeSort,"series","24 小时","hide-s")}</tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${sparkW(r.series)}</td></tr>`).join("")}</tbody></table></div>${all.length>per?pagerBar("qoe",all.length,per):""}`;
+    if(nodes.length)h+=`<div class="scroll lbody"><table><thead><tr><th>节点</th>${thS(S.qoeSort,"type","类型","hide-s")}${thS(S.qoeSort,"delay","当前","n")}${thS(S.qoeSort,"avg","平均","n")}${thS(S.qoeSort,"jitter","波动","n hide-s")}${thS(S.qoeSort,"fail","超时率","n")}${thS(S.qoeSort,"series","24 小时","hide-s")}</tr></thead><tbody>${nodes.map(r=>`<tr><td class="k" title="${esc(r.node)}">${nodeFlag(r.node)}${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="hide-s"><span class="tag">${esc(r.type||"?")}</span></td><td class="n ${dCls(r.delay)}">${r.delay==null?"–":r.delay+" ms"}</td><td class="n ${dCls(r.avg)}">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${r.jitter==null?"–":r.jitter+" ms"}</td><td class="n ${fCls(r.fail_rate)}">${r.fail_rate==null?"–":(r.fail_rate*100).toFixed(1)+"%"}</td><td class="hide-s">${sparkW(r.series)}</td></tr>`).join("")}</tbody></table></div>${all.length>per?pagerBar("qoe",all.length,per):""}`;
     h+='<div class="sub" style="margin-top:8px;line-height:1.6">口径说明:① 这张卡是全局数据,不随顶部筛选变化。② 延迟 / 波动 / 超时来自 nikki 对节点的主动测速(url-test),反映路由器到节点的链路;「平均延迟」按各节点实际流量加权(没有流量数据时退回简单平均);「波动」是测速结果的标准差,反映稳定性,不是严格意义的包间抖动。③ TCP 重传率读的是路由器内核的全局计数(重传报文 ÷ 发出报文),包含局域网和不经过代理的流量,不分设备、不分节点,不能直接当作某个节点的质量。④ 应用层丢包率需要抓包 / 流量镜像,mihomo 接口里没有这项数据,所以不提供。</div>';
     el.innerHTML=h}}
 function loadDevTop(){seg($("#dtMode"),CMODES,S.dtMode,k=>{S.dtMode=k;S.dtOpen.clear();S.pg.devtop.p=0;loadDevTop()});
@@ -1819,10 +1829,10 @@ function renderLook(){
   sg("#lkRad",Object.entries(RADS).map(([k,v])=>[k,v[0]]),TH.rad,k=>{TH.rad=k;themeChanged()});
   sg("#lkFont",Object.entries(FONTS).map(([k,v])=>[k,v[0]]),TH.font,k=>{TH.font=k;themeChanged(true)});
   $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
-    return `<div class="ord"><input type="checkbox" id="lkc_${k}" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><label style="cursor:pointer;flex:1" for="lkc_${k}">${CARDS[k][1]}</label>
+    return `<div class="ord"><input type="checkbox" id="lkc_${k}" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><label style="cursor:pointer;flex:1" for="lkc_${k}">${CARDS[k][1]}</label><span class="ordc">
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
     ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}${ROWOPT[k]?`<select data-k="${k}" data-f="rows" aria-label="${CARDS[k][1]}显示行数" title="显示行数">${ROWOPT[k].map(v=>`<option value="${v}" ${crows(k)===v?"selected":""}>显示 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
-    <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></div>`}).join("");
+    <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></span></div>`}).join("");
   {const n=Object.keys(CARDS).length-TH.hide.length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${Object.keys(CARDS).length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>${VIEWS[TH.view]?` · 当前「${VIEWS[TH.view][0]}」预设,勾选、大小、顺序都只记在这个预设里 · <a href="#" id="lkVDef">恢复该预设默认</a>`:""}`;
    if($("#lkVDef"))$("#lkVDef").onclick=e=>{e.preventDefault();delete TH.vh[TH.view];TH.order=Object.keys(CARDS);TH.cards=JSON.parse(JSON.stringify(DEF_CARDS));applyView(TH.view)};
    $("#lkGoOv").onclick=e=>{e.preventDefault();S.tab="overview";showTab();refresh()}}
@@ -1923,7 +1933,7 @@ S.pg.nscore.p=S.pg.nscore.p||0;S.nsRows=[];
 const NS_PER=10;
 function paintNs(){const rows=S.nsRows,view=sortRows(rows,S.nsSort,NS_GET),per=NS_PER,n=Math.max(1,Math.ceil(rows.length/per)),st=S.pg.nscore;st.p=Math.max(0,Math.min(st.p,n-1));
   const pill=r=>`<span class="lv ${r.level==="ok"?"ok":r.level}">${r.score}</span>`;
-  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th>${thS(S.nsSort,"score","评分","n")}${thS(S.nsSort,"delta","变化","n hide-s")}${thS(S.nsSort,"avg","延迟","n")}${thS(S.nsSort,"fail","超时率","n hide-s")}<th class="hide-s">建议</th></tr></thead><tbody>${view.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
+  setH($("#nsBody"),rows.length?`<table><thead><tr><th>节点</th>${thS(S.nsSort,"score","评分","n")}${thS(S.nsSort,"delta","变化","n hide-s")}${thS(S.nsSort,"avg","延迟","n")}${thS(S.nsSort,"fail","超时率","n hide-s")}<th class="hide-s">建议</th></tr></thead><tbody>${view.slice(st.p*per,st.p*per+per).map(r=>`<tr><td class="k" title="${esc(r.node)}">${nodeFlag(r.node)}${esc(r.node)}<div class="sub">${esc(r.airport||"")}</div></td><td class="n">${pill(r)}</td><td class="n hide-s ${r.delta==null?"sub":r.delta<=-10?"warn":""}">${r.delta==null?"–":(r.delta>0?"▲ ":r.delta<0?"▼ ":"")+Math.abs(r.delta)}</td><td class="n">${r.avg==null?"–":r.avg+" ms"}</td><td class="n hide-s">${(r.fail*100).toFixed(1)}%</td><td class="hide-s sub">${esc(r.advice||"")}</td></tr>`).join("")}</tbody></table>${rows.length>per?pagerBar("nscore",rows.length,per):""}`:'<div class="empty">测速数据不足(每个节点至少要有 10 次 nikki 测速记录),过一两天再来看</div>')}
 /* ---------- 拖动整理卡片(电脑端):概览卡片 + 左侧四张实时小卡 ---------- */
 const SIDE_CARDS=[["speed","#scSpeed"],["direct","#scDirect"],["proxy","#scProxy"],["conns","#scConns"]];
 S.arr=false;let DR=null;
@@ -2251,11 +2261,24 @@ function renderUpd(u){
   ${u.newer?`<div class="msg ok">有新版本。在路由器 compose 目录里执行:</div><pre>docker compose pull &amp;&amp; docker compose up -d</pre><a href="${esc(u.url)}" target="_blank" rel="noopener">查看更新说明</a>`:(u.error?'<div class="msg warn">暂时查不到(路由器访问 GitHub 不通?)</div>':'<div class="sub">已是最新。</div>')}`;
   const b=$("#uChk");if(b)b.onclick=async()=>{b.disabled=true;try{renderUpd(await post("/api/update/check",{}))}catch(e){}}}
 $("#appImp").onclick=()=>$("#appFile").click();
-const appNormK=k=>String(k||"").trim().toLowerCase().replace(/^\*\./,"").replace(/^https?:\/\//,"").replace(/\/.*$/,"");
-function appParseBox(txt){const out=[],bad=[];for(const raw of String(txt||"").split(/\r?\n/)){const l=raw.trim();if(!l||l[0]==="#")continue;const i=l.indexOf("=");if(i<0){bad.push(l);continue}
-  const k=appNormK(l.slice(0,i)),rest=l.slice(i+1),p=rest.search(/[|｜]/),a=(p<0?rest:rest.slice(0,p)).trim(),c=(p<0?"":rest.slice(p+1)).trim()||"其他";if(!k||!a){bad.push(l);continue}out.push([k,a,c])}return{out,bad}}
+const appJunk=s=>String(s||"").replace(/&#x20;|&#32;|&nbsp;|&#160;/gi," ").replace(/[\u200b-\u200d\uFEFF]/g,"");   // AI 输出里常见的 HTML 空格实体、零宽字符
+const appFixLine=l=>appJunk(l).replace(/\\+\s*$/,"").trim();   // 行尾多余的 \(Markdown 的换行残留)
+const appNormK=k=>appJunk(k).replace(/\\/g,"").replace(/\s+/g,"").toLowerCase().replace(/^\*\./,"").replace(/^https?:\/\//,"").replace(/\/.*$/,"");
+const appNoBs=x=>String(x||"").replace(/\\/g,"").trim();
+function appParseBox(txt){const out=[],bad=[];let fixed=0;for(const raw of String(txt||"").split(/\r?\n/)){const l=appFixLine(raw);if(!l||l[0]==="#")continue;const i=l.indexOf("=");if(i<0){bad.push(l);continue}
+  const k=appNormK(l.slice(0,i)),rest=l.slice(i+1),p=rest.search(/[|｜]/),a=appNoBs(p<0?rest:rest.slice(0,p)),c=appNoBs(p<0?"":rest.slice(p+1))||"其他";if(!k||!a){bad.push(l);continue}
+  if(l!==raw.trim()||/\\/.test(l)||/\s/.test(l.slice(0,i)))fixed++;out.push([k,a,c])}return{out,bad,fixed}}
 function appDedupe(rules){const seen=new Map(),res=[];let same=0,conflict=0;for(const r of rules){const o=seen.get(r[0]);if(o){(o[1]===r[1]&&o[2]===r[2])?same++:conflict++;continue}seen.set(r[0],r);res.push(r)}return{res,same,conflict}}
 const appLine=r=>`${r[0]}=${r[1]}|${r[2]}`;
+/* 规则按顺序匹配、靠前的先命中。red:和「排在它后面的、第一条能匹配它的父域名」应用 / 类别完全相同,而且它下面更具体的子域名规则(排在后面)也都是同样的值,去掉不改变识别结果;
+   dead:被排在它前面的父域名先命中、永远用不到;值相同的当 red 去掉,值不同的只统计、不删,免得丢掉你的本意。没有点的纯关键字是子串匹配,保守起见当作拦路的规则。 */
+function appPrune(rules){const n=rules.length,keep=new Array(n).fill(true),val=r=>r[1]+"|"+r[2],anc=(k,p)=>k!==p&&k.endsWith("."+p);let red=0,dead=0;
+  for(let i=0;i<n;i++){const k=rules[i][0];let j=-1;for(let t=0;t<n;t++){if(t!==i&&keep[t]&&anc(k,rules[t][0])){j=t;break}}
+    if(j<0)continue;if(j<i){if(val(rules[j])===val(rules[i])){keep[i]=false;red++}else dead++;continue}if(val(rules[j])!==val(rules[i]))continue;
+    let ok=true;for(let t=i+1;t<j&&ok;t++)if(keep[t]&&!rules[t][0].includes("."))ok=false;
+    for(let t=i+1;t<n&&ok;t++)if(keep[t]&&anc(rules[t][0],k)&&val(rules[t])!==val(rules[i]))ok=false;
+    if(ok){keep[i]=false;red++}}
+  return{res:rules.filter((_,i)=>keep[i]),red,dead}}
 const dupTxt=(same,conflict)=>[same?`完全相同的 ${same} 条`:"",conflict?`同关键字但应用 / 类别不同的 ${conflict} 条(保留靠前的)`:""].filter(Boolean).join("、");
 $("#appFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";const m=$("#appMsg");m.className="msg";if(!f)return;if(f.size>2e6){m.className="msg err";m.textContent="文件太大(超过 2 MB)";return}
   try{const j=await get("/api/apprules"),r=parseAppImport(await f.text(),j.cats);if(!r.out.length){m.className="msg err";m.textContent="没有解析出规则。每行写成 域名关键字=应用名|类别,或用 CSV(域名,应用,类别)/ JSON";return}
@@ -2269,15 +2292,18 @@ $("#appFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";con
       rows.push({c:[st,esc(k),esc(x[1]),esc(x[2]),o?esc(o[1]+"|"+o[2]):"–"]})}
     rows.sort((x,y)=>(x.c[0].includes("相同")?1:0)-(y.c[0].includes("相同")?1:0));
     if(cur.size+add>1000){m.className="msg err";m.textContent="合并后超过 1000 条,请先精简";return}
-    const notes=[fileDup?`文件里重复的 ${fileDup} 条已合并`:"",(bd.same+bd.conflict)?`编辑框里原本重复的 ${dupTxt(bd.same,bd.conflict)}会一起去掉`:""].filter(Boolean).join(";");
+    const notes=[fileDup?`文件里重复的 ${fileDup} 条已合并`:"",(bd.same+bd.conflict)?`编辑框里原本重复的 ${dupTxt(bd.same,bd.conflict)}会一起去掉`:"",(r.fixed||box.fixed)?`整理了 ${(r.fixed||0)+(box.fixed||0)} 行里多余的 \\ / 空格`:""].filter(Boolean).join(";");
     $("#appPrev").innerHTML=`<div class="sub" style="margin:8px 0 4px">导入预览:解析出 ${seen.size} 条 — 新增 ${add}、覆盖 ${upd}、相同 ${same}${r.bad.length?`、跳过 ${r.bad.length} 行格式不对的`:""}。${notes?notes+"。":""}确认后才会合并进上面的编辑框(合并后还要点「保存」才生效)。</div>`+pgTbl("appPrev",["动作","域名关键字","应用","类别","原来"],rows,{size:10})+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button id="appPrevNo">取消</button><button class="pri" id="appPrevOk">合并到编辑框</button></div>`;
     $("#appPrevNo").onclick=()=>{$("#appPrev").innerHTML="";m.textContent=""};
     $("#appPrevOk").onclick=()=>{for(const [k,x] of seen){const o=cur.get(k);if(o&&o[1]===x[1]&&nc(o[2])===nc(x[2]))continue;cur.set(k,x)}$("#appTxt").value=[...cur.values()].map(appLine).join("\n");$("#appPrev").innerHTML="";m.className="msg ok";m.textContent=`已合并:新增 ${add}、覆盖 ${upd}、相同 ${same}${notes?`;${notes}`:""}。现在编辑框里共 ${cur.size} 条,还没保存,检查后点「保存」生效`};
     m.className="msg";m.textContent=""}catch(x){m.className="msg err";m.textContent=x.message}};
 $("#appDedup").onclick=()=>{const m=$("#appMsg"),box=appParseBox($("#appTxt").value);m.className="msg";
-  if(box.bad.length){m.className="msg err";m.textContent=`有 ${box.bad.length} 行格式不对(例如「${box.bad[0].slice(0,30)}」),先改正再去重`;return}
-  const d=appDedupe(box.out);if(!d.same&&!d.conflict){m.className="msg ok";m.textContent=`没有重复,共 ${d.res.length} 条`;return}
-  $("#appTxt").value=d.res.map(appLine).join("\n");m.className="msg ok";m.textContent=`已去重:去掉 ${dupTxt(d.same,d.conflict)},现在共 ${d.res.length} 条。还没保存,检查后点「保存」生效`};
+  if(box.bad.length){m.className="msg err";m.textContent=`有 ${box.bad.length} 行格式不对(例如「${box.bad[0].slice(0,30)}」),先改正再整理`;return}
+  const d=appDedupe(box.out),pr=appPrune(d.res);
+  if(!d.same&&!d.conflict&&!pr.red&&!box.fixed){m.className="msg ok";m.textContent=`没有可整理的,共 ${d.res.length} 条`+(pr.dead?`;另有 ${pr.dead} 条被排在前面的父域名挡住、没有生效(想让它们生效,把它们挪到父域名前面)`:"");return}
+  $("#appTxt").value=pr.res.map(appLine).join("\n");m.className="msg ok";
+  const parts=[box.fixed?`清掉 ${box.fixed} 行里多余的 \\ / 空格`:"",dupTxt(d.same,d.conflict),pr.red?`多余的 ${pr.red} 条(和父域名的应用 / 类别相同,去掉不影响识别结果)`:""].filter(Boolean).join("、");
+  m.textContent=`已整理:${parts},现在共 ${pr.res.length} 条。还没保存,检查后点「保存」生效`+(pr.dead?`;另有 ${pr.dead} 条被排在前面的父域名挡住、没有生效(没有删,想让它们生效就挪到父域名前面)`:"")};
 $("#appExp").onclick=()=>{const b=new Blob([$("#appTxt").value+"\n"],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="flux-app-rules.txt";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 $("#appSave").onclick=async()=>{const m=$("#appMsg");m.className="msg";try{const j=await post("/api/apps/rules",{text:$("#appTxt").value});if(j.text!==undefined)$("#appTxt").value=j.text;const dd=j.dedup||{},dn=(dd.same||0)+(dd.conflict||0);m.className="msg ok";m.textContent=`已保存 ${j.rules} 条规则,新产生的连接立即按新规则识别(已记录的历史不会改)`+(dn?`;自动去重:去掉 ${dupTxt(dd.same||0,dd.conflict||0)}${(dd.examples||[]).length?"。例如 "+dd.examples[0]:""}`:"")}catch(e){m.className="msg err";m.textContent=e.message}};
 $("#authSave").onclick=async()=>{const m=$("#authMsg");m.className="msg";try{const j=await post("/api/auth/set",{old:$("#authOld").value,new:$("#authNew").value});
@@ -2298,8 +2324,22 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("#devPanel").clas
 
 
 /* ---------- v0.11 安全 / 分析 ---------- */
-const CCN={CN:"中国大陆",HK:"中国香港",TW:"中国台湾",US:"美国",JP:"日本",SG:"新加坡",KR:"韩国",GB:"英国",DE:"德国",FR:"法国",NL:"荷兰",CA:"加拿大",AU:"澳大利亚",RU:"俄罗斯",IN:"印度",SE:"瑞典",IE:"爱尔兰",IT:"意大利",ES:"西班牙",BR:"巴西",TH:"泰国",MY:"马来西亚",VN:"越南",ID:"印尼",PH:"菲律宾",TR:"土耳其",AE:"阿联酋",CH:"瑞士",FI:"芬兰",PL:"波兰",UA:"乌克兰"};
-const flag=cc=>/^[A-Z]{2}$/.test(cc)?String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0))):"🌐";
+const CCN={CN:"中国大陆",HK:"中国香港",TW:"台湾",US:"美国",JP:"日本",SG:"新加坡",KR:"韩国",GB:"英国",DE:"德国",FR:"法国",NL:"荷兰",CA:"加拿大",AU:"澳大利亚",RU:"俄罗斯",IN:"印度",SE:"瑞典",IE:"爱尔兰",IT:"意大利",ES:"西班牙",BR:"巴西",TH:"泰国",MY:"马来西亚",VN:"越南",ID:"印尼",PH:"菲律宾",TR:"土耳其",AE:"阿联酋",CH:"瑞士",FI:"芬兰",PL:"波兰",UA:"乌克兰"};
+/* 台湾旗:macOS / iOS 在「中国大陆」区域设置下不渲染 🇹🇼(显示成带叉的方块),所以台湾固定用内联 SVG;其它国家仍用 emoji 旗 */
+const TW_SVG=(()=>{const c=[7.5,5];let ray="";for(let i=0;i<12;i++){const a=i*Math.PI/6,b=a+Math.PI/12,r1=3.7,r2=2.5;ray+=`${(c[0]+r1*Math.sin(a)).toFixed(2)},${(c[1]-r1*Math.cos(a)).toFixed(2)} ${(c[0]+r2*Math.sin(b)).toFixed(2)},${(c[1]-r2*Math.cos(b)).toFixed(2)} `}
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20"><rect width="30" height="20" fill="#fe0000"/><rect width="15" height="10" fill="#000095"/><polygon points="${ray.trim()}" fill="#fff"/><circle cx="7.5" cy="5" r="2.15" fill="#000095"/><circle cx="7.5" cy="5" r="1.8" fill="#fff"/></svg>`;
+  return `<span class="flsvg" role="img" aria-label="台湾" style="background-image:url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}')"></span>`})();
+const flag=cc=>cc==="TW"?TW_SVG:/^[A-Z]{2}$/.test(cc)?String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0))):"🌐";
+/* 节点名里写了地区的,旗帜以名字为准(机场常用中转 / CDN,服务器 IP 登记在别处,GeoIP 查到的是中转点,不是节点的出口地区) */
+const NODE_REG=[["HK",/香港/,"HK","Hong\\s?Kong"],["TW",/台湾|台灣|台北|新北/,"TW","Taiwan"],["JP",/日本|东京|大阪|埼玉/,"JP","Japan|Tokyo|Osaka"],["SG",/新加坡|狮城/,"SG","Singapore"],["KR",/韩国|韓國|首尔/,"KR","Korea|Seoul"],
+  ["US",/美国|美國|洛杉矶|硅谷|圣何塞|西雅图|纽约|芝加哥|达拉斯|凤凰城/,"US|USA","United\\s?States|Los\\s?Angeles|Seattle|San\\s?Jose|Chicago|Dallas"],["GB",/英国|英國|伦敦/,"GB|UK","London|Britain"],["DE",/德国|德國|法兰克福/,"DE","Germany|Frankfurt"],["FR",/法国|法國|巴黎/,"FR","France|Paris"],
+  ["NL",/荷兰|荷蘭|阿姆斯特丹/,"NL","Netherlands|Amsterdam"],["CA",/加拿大|多伦多|温哥华/,"CA","Canada|Toronto|Vancouver"],["AU",/澳大利亚|澳洲|悉尼/,"AU","Australia|Sydney"],["RU",/俄罗斯|俄羅斯|莫斯科/,"RU","Russia|Moscow"],["IN",/印度(?!尼西亚)|孟买/,"IN","India|Mumbai"],
+  ["IE",/爱尔兰|愛爾蘭/,"IE","Ireland|Dublin"],["AR",/阿根廷/,"AR","Argentina"],["IQ",/伊拉克/,"IQ","Iraq"],["TR",/土耳其/,"TR","Turkey|Istanbul"],["MY",/马来西亚|馬來西亞/,"MY","Malaysia"],["TH",/泰国|泰國|曼谷/,"TH","Thailand|Bangkok"],["VN",/越南/,"VN","Vietnam"],
+  ["PH",/菲律宾|菲律賓/,"PH","Philippines"],["ID",/印尼|印度尼西亚/,"ID","Indonesia|Jakarta"],["BR",/巴西/,"BR","Brazil"],["MX",/墨西哥/,"MX","Mexico"],["ZA",/南非/,"ZA","South\\s?Africa"],["AE",/阿联酋|迪拜/,"AE|UAE","Dubai"],["IT",/意大利/,"IT","Italy|Milan"],
+  ["ES",/西班牙/,"ES","Spain|Madrid"],["SE",/瑞典/,"SE","Sweden"],["CH",/瑞士/,"CH","Switzerland|Zurich"],["PL",/波兰|波蘭/,"PL","Poland"],["UA",/乌克兰/,"UA","Ukraine"],["PK",/巴基斯坦/,"PK","Pakistan"],["NG",/尼日利亚/,"NG","Nigeria"],["CN",/中国大陆|大陆|回国/,"CN","China"]]
+  .map(([cc,zh,code,word])=>[cc,zh,new RegExp("(^|[^A-Za-z])(?:"+code+")(?![A-Za-z])"),new RegExp("(^|[^A-Za-z])(?:"+word+")(?![A-Za-z])","i")]);   // 两个字母的代码只认大写,整词不分大小写
+const nodeCC=(name,fb)=>{const s=String(name||"");for(const [cc,zh,code,word] of NODE_REG)if(zh.test(s)||code.test(s)||word.test(s))return cc;return fb||""};
+const nodeFlag=name=>{const cc=nodeCC(name);return cc?`<span class="nflag">${flag(cc)}</span>`:""};
 const ccName=cc=>cc==="??"?"未知":(CCN[cc]||cc);
 const barR=(p,c)=>`<div style="height:6px;background:var(--hover);border-radius:3px;overflow:hidden;min-width:60px"><div style="height:100%;width:${Math.max(0,Math.min(100,p))}%;background:${c||"var(--accent)"}"></div></div>`;
 const WD=["周一","周二","周三","周四","周五","周六","周日"];
@@ -2469,7 +2509,7 @@ function loadGeo(){const sc=srCalc();load("geo","/api/geo",{days:sc.days,until:s
   if(!j.available){$("#geoNote").textContent="";el.innerHTML='<div class="empty">没有 GeoIP 数据库。<a href="#" id="geoSet">去设置下载</a></div>';const a=$("#geoSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("geo")};return}
   $("#geoNote").textContent=`${sc.label} · 能识别目的地的流量占 ${j.all?Math.round(j.known*100/j.all):0}%(其余是代理流量,看不到真实目的地)`;
   const mx=Math.max(1,...j.by_cc.map(x=>x.bytes));
-  const nodes=j.nodes.length?`<div class="h3">节点服务器所在地 <span class="sub">代理流量的真实目的地看不到,只能看出口在哪</span></div><div style="display:flex;flex-wrap:wrap;gap:6px">${j.nodes.map(n=>`<span class="lv info" title="${esc(n.asn)}">${flag(n.cc)} ${esc(n.node)}</span>`).join("")}</div>`:"";
+  const nodes=j.nodes.length?`<div class="h3">节点所在地 <span class="sub">旗帜按节点名里写的地区;名字里没写的,按服务器 IP 所在地。悬停看服务器 IP 登记的国家(用了中转 / CDN 的节点,两者会不一样)</span></div><div style="display:flex;flex-wrap:wrap;gap:6px">${j.nodes.map(n=>{const nc=nodeCC(n.node,n.cc),diff=nc!==n.cc;return `<span class="lv info" title="${esc(n.asn||"")}${diff?` · 服务器 IP 登记在 ${esc(ccName(n.cc))},与节点名里的地区不同,多半是中转 / CDN`:""}">${flag(nc)} ${esc(n.node)}</span>`}).join("")}</div>`:"";
   el.innerHTML=`<div class="g2"><div>${j.by_cc.length?pgTbl("geoC",["国家 / 地区","占比","流量"],j.by_cc.map(r=>({c:[`${flag(r.cc)} ${esc(ccName(r.cc))}`,barR(r.bytes*100/mx),fmt(r.bytes)],dt:{title:"目的地 · "+ccName(r.cc),lines:[["国家 / 地区",ccName(r.cc)+" ("+r.cc+")"],["下行",fmt(r.down||0)],["上行",fmt(r.up||0)],["合计",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):'<div class="empty">暂无</div>'}</div>
   <div>${j.by_asn.length?pgTbl("geoA",["ASN","流量"],j.by_asn.map(r=>({c:[esc(r.asn),fmt(r.bytes)],dt:{title:"ASN · "+r.asn,lines:[["ASN",r.asn],["流量",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):""}</div></div>${nodes}`})}
 
