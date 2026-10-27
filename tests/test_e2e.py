@@ -291,6 +291,12 @@ try:
     ok(c == 200 and r["disks"] == {"/mnt/x": {"ign": True, "pct": None}, "/mnt/y": {"ign": False, "pct": 97.0}} and "disk_list" in r, f"告警:磁盘忽略 / 单独阈值保存 {r.get('disks')}")
     c, r = post("/api/alerts/config", {"disks": {}}); ok(c == 200 and r["disks"] == {}, "告警:磁盘设置可清空")
     rh = get("/api/rulehealth"); ok(rh["match"] and rh["match"]["share"] > 0, f"规则健康:落到兜底的占比 {rh['match']}")
+    ng = get("/api/nodegeo")
+    ok(isinstance(ng.get("rows"), list) and "cn" in ng and "available" in ng, "节点登记地:接口可用")
+    c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": True})
+    ok(c == 200 and "测试节点" in r["ignored"], "节点登记地:可忽略")
+    c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": False})
+    ok(c == 200 and "测试节点" not in r["ignored"], "节点登记地:可恢复")
     gj = None
     for _ in range(20):
         gj = get("/api/geo")

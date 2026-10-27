@@ -34,6 +34,7 @@ KINDS = {
     "group_policy": "分组白名单",
     "node_degrade": "节点变差",
     "geo_new": "新目的地国家",
+    "node_geo": "节点登记地不符",
     "quota_forecast": "套餐预计超额",
     "quota_expire": "套餐到期",
     "audit": "设置变更",
@@ -68,6 +69,7 @@ DEFAULT_RULES = {
     "group_policy": {"on": True, "cool_min": 1440},
     "node_degrade": {"on": True, "drop": 20, "cool_min": 1440},
     "geo_new": {"on": True, "min_mb": 50, "cool_min": 1440},
+    "node_geo": {"on": True, "cn": 0, "cool_min": 1440},
     "quota_forecast": {"on": True, "cool_min": 1440},
     "quota_expire": {"on": True, "days": 7, "cool_min": 720},
     "sys_conntrack": {"on": True, "pct": 85, "cool_min": 60},
@@ -91,7 +93,7 @@ DEFAULT_RULES = {
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"retrans_pct": (0, 100), "min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "cn": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}, "disks": {}}
@@ -557,6 +559,11 @@ def check_geo_new(con, cfg, now):
     advisor.check_geo_new(con, cfg, now)
 
 
+def check_node_geo(con, cfg, now):
+    from . import nodegeo
+    nodegeo.check_alert(con, cfg, now)
+
+
 def check_providers(con, cfg, now):
     from . import providers
     providers.sample(con, now)
@@ -662,7 +669,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry), ("docker", check_docker)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("node_geo", check_node_geo), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry), ("docker", check_docker)]
 
 
 def evaluate(con, now=None):

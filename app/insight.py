@@ -427,11 +427,17 @@ def report(con, days=7):
         tot = (n or 0) + (fails or 0)
         if tot >= 10 and fails * 100 / tot >= 10:
             bad.append({"node": node, "fail_pct": round(fails * 100 / tot, 1)})
+    try:
+        from . import nodegeo
+        ng = [{"node": x["node"], "name": nodegeo.ccn(x["name_cc"]), "reg": nodegeo.ccn(x["reg_cc"]), "level": x["level"], "level_name": x["level_name"]}
+              for x in nodegeo.scan(con) if not x["ignored"]]
+    except Exception:
+        ng = []
     nd = con.execute("SELECT COUNT(DISTINCT client) FROM known_dev WHERE first>=?", (int(time.time() - days * 86400),)).fetchone()[0]
     return {"days": days, "from": s1, "to": time.strftime("%Y-%m-%d"), "up": cur[0], "down": cur[1], "prev": prev[0] + prev[1],
             "kinds": kinds, "airports": [{"name": a, "bytes": b} for a, b in sorted(ap.items(), key=lambda x: -x[1])[:5]],
             "devices": devs, "domains": doms, "apps": apps, "peak_hour": int(peak[0]) if peak and peak[0] else None,
-            "retrans_pct": round(t[1] * 100 / t[0], 2) if t[0] else None, "alerts": al, "bad_nodes": bad,
+            "retrans_pct": round(t[1] * 100 / t[0], 2) if t[0] else None, "alerts": al, "bad_nodes": bad, "node_geo": ng,
             "new_devices": nd, "quota": quota_status(con)}
 
 
@@ -462,6 +468,14 @@ def report_text(rp):
         L.append(f"套餐 {q['airport']}:{q['pct']}%({_b(q['used'])} / {q['gb']:g} GB){';' + quota_when(q) if q['expire'] else ''}")
     for b in rp["bad_nodes"][:3]:
         L.append(f"节点 {b['node']} 测速失败率 {b['fail_pct']}%")
+    ng = rp.get("node_geo") or []
+    if ng:
+        cn = [x for x in ng if x["level"] == "high"]
+        if cn:
+            L.append(f"⚠ 重点关注:{len(cn)} 个节点登记在中国大陆,但名字写的是境外:" + "、".join(f"{x['node']}" for x in cn[:5]) + "(流量落在大陆网络,可能被监控,建议核实或停用)")
+        oth = [x for x in ng if x["level"] != "high"]
+        if oth:
+            L.append(f"节点登记地与名称不符 {len(oth)} 个:" + "、".join(f"{x['node']}({x['name']}→{x['reg']})" for x in oth[:4]))
     return "\n".join(L)
 
 

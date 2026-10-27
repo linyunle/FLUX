@@ -562,7 +562,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="scroll" id="chartTable" style="display:none"></div>
     <div class="stleg" id="stLeg"></div>
   </div>
-  <div class="card gcard" id="appsCard"><h2>应用分布 <span class="seg" id="apBy" role="group" aria-label="分组"></span><span class="seg" id="apMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub" id="apNote"></span></h2><div id="apBody"></div></div>
+  <div class="card gcard" id="appsCard"><h2>应用分布 <span class="seg" id="apBy" role="group" aria-label="分组"></span><span class="seg" id="apMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub" id="apNote"></span><button id="apExp" title="导出当前分组下的全部明细(应用分组时含每个应用下的域名)" style="margin-left:8px">导出详细</button></h2><div id="apBody"></div></div>
   <div class="card gcard" id="qoeCard"><h2>网络质量 QoE <span class="sp"></span><span class="sub" id="qoeNote">全局数据,不随筛选变化</span></h2><div id="qoeBody"></div></div>
 </section>
 
@@ -947,6 +947,7 @@ uci commit dhcp
   <div class="sub" style="margin-bottom:6px;line-height:1.6">把代理的 environment 改成下面这样,<code>docker compose up -d</code> 重建代理。仍然不放行创建、删除、exec。如果面板里点操作提示 403,说明代理没放行,把这一段核对一遍。</div>
   <pre id="dkYml2" style="font-size:12px;white-space:pre-wrap;user-select:all;margin:0"></pre></div>
       <div class="card sec" id="sec-plog"><h2>审计日志(访问记录与运行日志)</h2>
+  <div class="sub" style="margin-bottom:8px;line-height:1.7">「设置变更」类记录里也包含对<b>节点登记地提示</b>的操作(忽略 / 恢复):节点服务器 IP 登记的国家和节点名里的地区对不上时,面板会在「安全 → 回看 → 节点所在地」按级别标色(登记在中国大陆 = 重点关注),可在告警设置里开关推送;周报和诊断包里也会写明。</div>
   <div class="h3" style="margin-top:0">自检与诊断包</div>
   <div class="sub" style="margin-bottom:8px">自检会检查面板自己的运行状态、数据一致性和配置,把看起来不对劲的地方列出来(很多 bug 会先在这里露出来)。诊断包是一个 JSON 文件:版本、配置摘要、节点/订阅状态、最近告警、面板日志、页面脚本报错和自检结果;<b>不含任何密码或 Token</b>,默认把 IP / MAC / 设备别名打码。</div>
   <div id="plFinds" style="margin-bottom:8px"></div>
@@ -1289,6 +1290,16 @@ function loadApps(){
 function paintApps(){const x=S.apx,el=$("#apBody");if(!x||!el)return;const per=crows("apps"),n=Math.max(1,Math.ceil(x.all.length/per)),st=S.pg.apps;st.p=Math.max(0,Math.min(st.p,n-1));
   el.innerHTML=colorBar(x.bar,x.T,"占比")+'<div id="apTbl2"></div>'+(x.all.length>per?pagerBar("apps",x.all.length,per):"");
   expTable($("#apTbl2"),{rows:x.all.slice(st.p*per,st.p*per+per),total:x.total},[{h:x.hd,k:1,f:r=>`<span class="pdot" style="background:${r._c}"></span>${x.nm(r)}`},{h:"占比",n:1,f:cShare},cDown,cUp,cTotal],S.appOpen,x.ld)}
+async function apExport(b){if(!S.apx)return;const o=b.textContent;b.disabled=true;const q=x=>'"'+String(x==null?"":x).replace(/"/g,'""')+'"',L=[],x=S.apx,isA=S.apBy==="app",rg=base({mode:S.cm.apps});
+  try{L.push([x.hd,"类别","占比%","下行","上行","合计","域名","域名流量","设备数","节点"]);
+    const rows=x.all.filter(r=>r.key!=="其他");let i=0;
+    for(const r of rows){const nm=S.apBy==="client"?devName(r):r.key,tot=r.up+r.down,pc=x._T?(tot*100/x._T).toFixed(2):"";i++;
+      if(isA&&i<=60){b.textContent=`导出中 ${i}/${Math.min(60,rows.length)}`;let h=[];try{h=(await get("/api/apps/hosts",{...rg,app:r.key,limit:300})).rows}catch(e){}
+        if(h.length){h.forEach((d,j)=>L.push([nm,r.cat||"",j?"":pc,j?"":r.down,j?"":r.up,j?"":tot,d.host,d.bytes,d.devices,(d.nodes||[]).join("、")]));continue}}
+      L.push([nm,r.cat||"",pc,r.down,r.up,tot,"","","",""])}
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+L.map(r=>r.map(q).join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"}));a.download="flux-apps-"+S.apBy+"-"+ymd(new Date())+".csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+  finally{b.disabled=false;b.textContent=o}}
+document.addEventListener("click",e=>{const b=e.target.closest("#apExp");if(b)apExport(b)});
 const miniApps=(rows,ctx)=>rows.length?`<table><tbody>${rows.map(r=>`<tr class="click" data-aph="${esc(r.key)}" data-apc="${esc(JSON.stringify(ctx||{}))}" title="点开看这个应用下面的域名明细"><td>${esc(r.key)} <span class="tag">${esc(r.cat||"")}</span></td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 /* 应用 → 域名明细 / 未识别导出 */
 const apBar=app=>`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 6px"><button data-aph="${esc(app)}" data-apc="{}">查看域名明细</button>${app==="未识别"?'<button class="pri" data-apunk="1">导出未识别明细(给 AI 分类)</button>':""}<span class="sub" style="align-self:center">下面的设备行也可以点开,看这台设备访问了哪些域名</span></div>`;
@@ -2125,6 +2136,7 @@ const RULE_META=[
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
  ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
  ["node_degrade","节点变差","正在使用的节点,近 24 小时评分比过去一周平时低了阈值以上,且评分低于 70(评分见「订阅」页)",[["drop","下降","分"],["cool_min","同一节点间隔","分钟"]]],
+ ["node_geo","节点登记地不符","节点服务器 IP 登记的国家与节点名里的地区对不上时提醒;登记在中国大陆(名字却写境外)是重点关注(警告级)。多半是中转 / CDN 的只记录在回看里。可在「安全 → 回看 → 节点所在地」里忽略某个节点;「只提醒大陆」=1 时只推登记在大陆的。这个开关管记录和推送",[["cn","只提醒登记在大陆的(0 = 全部不符的,1 = 只大陆)",""],["cool_min","同一节点间隔","分钟"]]],
  ["geo_new","新目的地国家","今天出现了过去 30 天没去过的国家,且流量达到下限(需要先有 5 天以上的历史;只统计能看到真实目的地的流量)",[["min_mb","下限","MB"],["cool_min","同一国家间隔","分钟"]]],
  ["quota_expire","套餐到期提醒","订阅额度设了到期日后,到期前这些天数内提醒续费(7 / 3 / 1 天各一次,到期当天和已到期再各一次)",[["days","提前","天"],["cool_min","间隔","分钟"]]],
  ["quota_forecast","套餐预计超额","按近 7 天速度,预计在重置日之前就用完订阅额度(每个周期只提醒一次)",[]],
@@ -2462,7 +2474,7 @@ function loadCompare(){load("cmp","/api/compare",{},j=>{
   <div class="g2"><div><div class="h3" style="margin-top:0">每日流量 <span class="sub">灰=上周 蓝=本周</span></div><div class="cbars"><div class="cbg">${bars(s.prev,s.prev_labels,"rgba(127,127,127,.45)")}</div><div class="cbg">${bars(s.cur,s.cur_labels,"var(--accent)")}</div></div></div>
   <div><div class="h3" style="margin-top:0">关键指标</div>${kv("总流量",fmt(t.cur.total),fmt(t.prev.total),"",()=>false)}${t.delta_pct!=null?`<div class="sub">变化 ${pctTag(t.delta_pct)}</div>`:""}
   ${kv("TCP 重传率",j.retrans.cur,j.retrans.prev,"%",(a,b)=>a-b>=1)}${kv("ICMP 丢包",j.wan.cur?j.wan.cur.loss:null,j.wan.prev?j.wan.prev.loss:null,"%",(a,b)=>a-b>=10)}${kv("公网延迟",j.wan.cur?j.wan.cur.rtt:null,j.wan.prev?j.wan.prev.rtt:null," ms",(a,b)=>b&&a>b*1.5)}</div></div>
-  ${j.nodes_worse.length?`<div class="h3">变差的节点</div>${pgTbl("cmpN",["节点","平均延迟","失败率"],j.nodes_worse.map(n=>({c:[esc(n.node),`${n.avg_prev} → <b>${n.avg}</b> ms`,`${n.fail_prev}% → <b>${n.fail}%</b>`],dt:{title:"变差的节点 · "+n.node,lines:[["节点",n.node],["平均延迟(上周 → 本周)",`${n.avg_prev} → ${n.avg} ms`],["失败率(上周 → 本周)",`${n.fail_prev}% → ${n.fail}%`]]}})),{size:6})}`:""}
+  ${j.nodes_worse.length?`<div class="h3">变差的节点</div>${pgTbl("cmpN",["节点","平均延迟","失败率"],j.nodes_worse.map(n=>({c:[nodeFlag(n.node)+esc(n.node),`${n.avg_prev} → <b>${n.avg}</b> ms`,`${n.fail_prev}% → <b>${n.fail}%</b>`],dt:{title:"变差的节点 · "+n.node,lines:[["节点",n.node],["平均延迟(上周 → 本周)",`${n.avg_prev} → ${n.avg} ms`],["失败率(上周 → 本周)",`${n.fail_prev}% → ${n.fail}%`]]}})),{size:6})}`:""}
   ${j.devices.length?`<div class="h3">流量变化最大的设备</div>${pgTbl("cmpD",["设备","本周","上周","变化"],j.devices.map(d=>({c:[esc(d.name),fmt(d.cur),fmt(d.prev),`<span class="${d.delta>0?"warn":""}">${d.delta>0?"+":"-"}${fmt(Math.abs(d.delta))}</span>`],dt:{title:"设备流量变化 · "+d.name,lines:[["设备",d.name],["本周",fmt(d.cur)],["上周",fmt(d.prev)],["变化",(d.delta>0?"+":"-")+fmt(Math.abs(d.delta))]]}})),{size:6})}`:""}
   ${j.new_hosts.count?`<div class="h3">本周新出现的域名 <span class="sub">共 ${j.new_hosts.count} 个,流量最多的:</span></div>${pgTbl("cmpH",["域名","流量"],j.new_hosts.top.map(h=>({c:[`<span class="pv">${esc(h.host)}</span>`,fmt(h.bytes)],dt:{title:"本周新出现的域名",lines:[["域名",h.host],["流量",fmt(h.bytes)]],note:"可到「域名」页查询它走什么规则。"}})),{size:8})}`:""}`})}
 function loadTimeline(){load("tl","/api/timeline",(()=>{const c=srCalc();return{hours:c.hours,until:c.until}})(),j=>{
@@ -2553,14 +2565,29 @@ function loadLeaks(){const c=srCalc();load("leaks","/api/leaks",{days:c.days,unt
    +blk("lkB","境外站点直连","可能被阻断或暴露真实访问:检查是否漏了境外规则",j.fo_direct,j.fo_direct_bytes,["域名","流量","来源设备","节点 / 规则"],"境外站点直连")
    +blk("lkC","走代理但在本机用真实 DNS 解析","该域名的连接 dnsMode=normal,没有走 fake-ip / 远程解析,可能把查询暴露给本地 DNS",j.dns_local,j.dns_local_bytes,["域名","流量","来源设备"],"真实 DNS 解析")})}
 
-function loadGeo(){const sc=srCalc();load("geo","/api/geo",{days:sc.days,until:sc.until},j=>{
+let NG=null;
+function ngRows(){return(NG&&NG.rows||[]).map(r=>({c:[`${flag(r.reg_cc)} ${esc(r.node)}`,r.name_cc?`${flag(r.name_cc)} ${esc(ccName(r.name_cc))}`:"—",`${flag(r.reg_cc)} ${esc(ccName(r.reg_cc))}`,esc(r.asn||""),esc(r.remote||""),`<span class="lv ${({high:"bad",mid:"warn",low:"info"})[r.level]||"ok"}">${esc(r.level_name||"一致")}</span>${r.ignored?" · 已忽略":""}`,esc(r.why||"")],dt:null}))}
+async function openNodeGeo(focus){$("#kvTitle").textContent="节点登记地与节点名地区";$("#kvBody").innerHTML='<div class="sub">读取中…</div>';$("#kvm").classList.add("open");KVT="";
+  try{NG=await get("/api/nodegeo");const rows=NG.rows,ro=document.documentElement.dataset.vro==="1";
+    KVT="节点登记地与节点名地区\n"+["节点\t节点名地区\t登记地\tASN\t服务器\t级别\t说明",...rows.map(r=>[r.node,ccName(r.name_cc),ccName(r.reg_cc),r.asn,r.remote,(r.level_name||"一致")+(r.ignored?"(已忽略)":""),r.why].join("\t"))].join("\n");
+    const f=focus&&rows.find(r=>r.node===focus);
+    $("#kvBody").innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">登记地 = 节点服务器 IP 在 GeoIP 库里的国家;节点名地区 = 节点名里写的地区。两者不同的原因通常是:① 中转 / IEPL 专线(入口在境外、出口在别处)② CDN 前置 ③ 机场名字乱标 ④ 节点被换。<b>登记在中国大陆的标「重点关注」</b>:流量落在大陆网络,可能被监控或审查。面板只读,不会改 nikki;「弃用」需要你自己在 nikki / 订阅里停用这个节点。</div>
+      ${NG.cn?`<div class="msg err" style="margin-bottom:8px">⚠ ${NG.cn} 个节点登记在中国大陆(重点关注)</div>`:""}
+      ${f&&f.level?`<div class="card" style="padding:10px;margin-bottom:8px"><b>${flag(f.reg_cc)} ${esc(f.node)}</b> <span class="lv ${({high:"bad",mid:"warn",low:"info"})[f.level]}">${esc(f.level_name)}</span><div style="margin:6px 0;line-height:1.7">${esc(f.why)}</div>${ro?"":`<button data-ngign="${esc(f.node)}" data-on="${f.ignored?0:1}">${f.ignored?"恢复提示":"忽略这个节点(已知情)"}</button>`}</div>`:""}
+      ${rows.length?pgTbl("ngT",["节点","节点名地区","登记地","ASN","服务器","级别","说明"],ngRows(),{size:10}):'<div class="empty">没有发现登记地与节点名对不上的节点</div>'}
+      ${ro||!rows.length?"":`<div class="sub" style="margin-top:8px">要忽略 / 恢复某个节点:在「节点所在地」里点它,在弹出的详情上按按钮。已忽略 ${NG.ignored} 个。告警开关在「设置 → 告警 → 节点登记地不符」。</div>`}`}
+  catch(e){$("#kvBody").innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+document.addEventListener("click",async e=>{const c=e.target.closest("[data-ng]");if(c){openNodeGeo(c.dataset.ng);return}
+  const b=e.target.closest("[data-ngign]");if(b){try{await post("/api/nodegeo/ignore",{node:b.dataset.ngign,on:b.dataset.on==="1"});await openNodeGeo(b.dataset.ngign);loadGeo()}catch(x){alert(x.message)}}});
+function loadGeo(){const sc=srCalc();get("/api/nodegeo").then(x=>{NG=x}).catch(()=>{NG=null}).then(()=>load("geo","/api/geo",{days:sc.days,until:sc.until},j=>{
   const el=$("#geoBody");
   if(!j.available){$("#geoNote").textContent="";el.innerHTML='<div class="empty">没有 GeoIP 数据库。<a href="#" id="geoSet">去设置下载</a></div>';const a=$("#geoSet");if(a)a.onclick=e=>{e.preventDefault();openSettings("geo")};return}
   $("#geoNote").textContent=`${sc.label} · 能识别目的地的流量占 ${j.all?Math.round(j.known*100/j.all):0}%(其余是代理流量,看不到真实目的地)`;
   const mx=Math.max(1,...j.by_cc.map(x=>x.bytes));
-  const nodes=j.nodes.length?`<div class="h3">节点所在地 <span class="sub">旗帜按节点名里写的地区;名字里没写的,按服务器 IP 所在地。悬停看服务器 IP 登记的国家(用了中转 / CDN 的节点,两者会不一样)</span></div><div style="display:flex;flex-wrap:wrap;gap:6px">${j.nodes.map(n=>{const nc=nodeCC(n.node,n.cc),diff=nc!==n.cc;return `<span class="lv info" title="${esc(n.asn||"")}${diff?` · 服务器 IP 登记在 ${esc(ccName(n.cc))},与节点名里的地区不同,多半是中转 / CDN`:""}">${flag(nc)} ${esc(n.node)}</span>`}).join("")}</div>`:"";
+  const NGL={high:"bad",mid:"warn",low:"info"},ngm=Object.fromEntries(((NG&&NG.rows)||[]).map(r=>[r.node,r]));
+  const nodes=j.nodes.length?`<div class="h3">节点所在地 <span class="sub">旗帜 = 节点服务器 IP 登记的国家(GeoIP)。登记地和节点名里写的地区对不上,多半是用了中转 / IEPL / CDN,也可能是机场乱标或节点被换;名字按级别变色:<b class="lv bad">红</b> 登记在中国大陆(重点关注) <b class="lv warn">橙</b> 需核对 <b class="lv info">蓝</b> 一致或多半是 CDN。点开看详情,可复制 / 导出</span></div><div style="display:flex;flex-wrap:wrap;gap:6px" id="ngChips">${j.nodes.map(n=>{const r=ngm[n.node],lv=r&&r.level&&!r.ignored?NGL[r.level]:(r&&r.ignored?"":"ok");return `<span class="lv ${lv||"info"}" data-ng="${esc(n.node)}" role="button" tabindex="0" style="cursor:pointer;${lv===""?"opacity:.55;":""}" title="${esc((n.asn||"")+(r&&r.level?" · "+r.level_name+":节点名「"+ccName(r.name_cc)+"」,登记在 "+ccName(r.reg_cc)+(r.ignored?"(已忽略)":""):""))}">${flag(n.cc)} ${esc(n.node)}${r&&r.level==="high"&&!r.ignored?" ⚠":""}</span>`}).join("")}</div>${NG&&NG.cn?`<div class="msg err" style="margin-top:8px">⚠ 有 ${NG.cn} 个节点的服务器登记在中国大陆,名字却写的是境外(重点关注)。点上面红色的节点看详情和建议。</div>`:""}`:"";
   el.innerHTML=`<div class="g2"><div>${j.by_cc.length?pgTbl("geoC",["国家 / 地区","占比","流量"],j.by_cc.map(r=>({c:[`${flag(r.cc)} ${esc(ccName(r.cc))}`,barR(r.bytes*100/mx),fmt(r.bytes)],dt:{title:"目的地 · "+ccName(r.cc),lines:[["国家 / 地区",ccName(r.cc)+" ("+r.cc+")"],["下行",fmt(r.down||0)],["上行",fmt(r.up||0)],["合计",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):'<div class="empty">暂无</div>'}</div>
-  <div>${j.by_asn.length?pgTbl("geoA",["ASN","流量"],j.by_asn.map(r=>({c:[esc(r.asn),fmt(r.bytes)],dt:{title:"ASN · "+r.asn,lines:[["ASN",r.asn],["流量",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):""}</div></div>${nodes}`})}
+  <div>${j.by_asn.length?pgTbl("geoA",["ASN","流量"],j.by_asn.map(r=>({c:[esc(r.asn),fmt(r.bytes)],dt:{title:"ASN · "+r.asn,lines:[["ASN",r.asn],["流量",fmt(r.bytes)],["统计范围",sc.label]]}})),{size:8}):""}</div></div>${nodes}`}))}
 
 S.hm={view:"week",stat:"avg",days:14,day:"",split:"week"};
 try{const h=JSON.parse(localStorage.getItem("flux.hm")||"{}");if(h.stat==="median")S.hm.stat="median";if(h.split==="wk")S.hm.split="wk";if(+h.days>0)S.hm.days=+h.days;if(h.view==="day")S.hm.view="day"}catch(e){}
@@ -2805,7 +2832,7 @@ function repText(r){const t=r.up+r.down,k=r.kinds,L=[`${r.from} ~ ${r.to}(${r.da
   if(r.peak_hour!=null)L.push(`最忙时段 ${pad(r.peak_hour)}:00`);if(r.retrans_pct!=null)L.push(`TCP 重传率 ${r.retrans_pct}%`);
   L.push("新设备 "+r.new_devices+" 台");
   const al=Object.entries(r.alerts);if(al.length)L.push("告警:"+al.map(([a,n])=>a+" "+n).join("、"));
-  r.quota.forEach(q=>L.push(`套餐 ${q.airport}:${q.pct}%(${fmt(q.used)} / ${q.gb} GB)`));r.bad_nodes.forEach(b=>L.push(`节点 ${b.node} 测速失败率 ${b.fail_pct}%`));return L.join("\n")}
+  r.quota.forEach(q=>L.push(`套餐 ${q.airport}:${q.pct}%(${fmt(q.used)} / ${q.gb} GB)`));r.bad_nodes.forEach(b=>L.push(`节点 ${b.node} 测速失败率 ${b.fail_pct}%`));(()=>{const g=r.node_geo||[],h=g.filter(x=>x.level==='high'),o=g.filter(x=>x.level!=='high');if(h.length)L.push(`⚠ 重点关注:${h.length} 个节点登记在中国大陆,但名字写的是境外:${h.slice(0,5).map(x=>x.node).join('、')}(流量落在大陆网络,可能被监控,建议核实或停用)`);if(o.length)L.push(`节点登记地与名称不符 ${o.length} 个:${o.slice(0,4).map(x=>`${x.node}(${x.name}→${x.reg})`).join('、')}`)})();return L.join("\n")}
 $("#repOpen").onclick=async()=>{openM("#rep");$("#repBody").innerHTML='<div class="empty">生成中…</div>';try{REP=await get("/api/report",{days:7});$("#repBody").innerHTML=`<pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(repText(REP))}</pre>`}catch(e){$("#repBody").innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}};
 $("#repX").onclick=()=>closeM("#rep");
 $("#repCopy").onclick=async e=>{try{await navigator.clipboard.writeText(repText(REP));e.target.textContent="已复制"}catch(er){e.target.textContent="复制失败"}setTimeout(()=>e.target.textContent="复制文本",1500)};

@@ -53,6 +53,13 @@ def selfcheck(con, now=None):
     live_at = w.live()["at"]
     if live_at and now - live_at > 20:
         out.append(_f("warn", "实时采集停了", f"实时数据已经 {int(now - live_at)} 秒没有更新,设备页/实时速度会停住。看面板日志里有没有「实时速度读取失败」。"))
+    try:
+        from . import nodegeo
+        ng = nodegeo.summary(con)
+        if ng["cn"]:
+            out.append(_f("warn", f"{ng['cn']} 个节点的服务器登记在中国大陆", "节点名写的是境外,但服务器 IP 登记在中国大陆(重点关注):" + "、".join(x["node"] for x in ng["rows"] if x["level"] == "high" and not x["ignored"])[:160] + "。到「安全 → 回看 → 节点所在地」查看详情。"))
+    except Exception:
+        pass
     names = {t.name for t in threading.enumerate()}
     for n, label in (("realtime", "实时采集"), ("alerts", "告警引擎"), ("wanq", "宽带质量探测")):
         if n not in names:
@@ -416,6 +423,16 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["docker"] = d
     except Exception as e:
         out["docker"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 节点登记地与节点名地区不符(只读判断)
+    try:
+        from . import nodegeo
+        ng = nodegeo.summary(con)
+        out["node_geo"] = {"note": "登记地=节点服务器 IP 在 GeoIP 库里的国家;不符多半是中转 / CDN,登记在中国大陆(CN)的标重点关注",
+                           "cn_registered": ng["cn"], "mismatch_other": ng["mid"], "cdn_like": ng["low"], "ignored": ng["ignored"],
+                           "nodes": [{"node": x["node"], "name_region": x["name_cc"], "registered": x["reg_cc"], "asn": x["asn"], "server": m(x["remote"]),
+                                      "level": x["level"], "ignored": x["ignored"]} for x in ng["rows"][:60]]}
+    except Exception as e:
+        out["node_geo"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- 磁盘 / 监听 / 功能开关
     try:
         out["disks"] = sysinfo.snapshot(1).get("disks")

@@ -235,6 +235,13 @@ try:
         pg.keyboard.press("Escape"); pg.wait_for_timeout(100); assert pg.locator("#lkPop").count()==0
         pg.evaluate("TH.links=[];saveTheme();lkRender()")
         print("PASS 顶栏快捷方式")
+        # v0.46:节点登记地弹窗(没有 GeoIP 库时也能打开)、应用分布导出按钮
+        pg.evaluate("openNodeGeo()"); pg.wait_for_timeout(800)
+        assert "节点登记地与节点名地区" in pg.inner_text("#kvTitle") and "中国大陆" in pg.inner_text("#kvBody")
+        pg.evaluate("document.getElementById('kvm').classList.remove('open')")
+        pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)
+        assert pg.locator("#apExp").count()==1
+        print("PASS 节点登记地弹窗 / 应用分布导出")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

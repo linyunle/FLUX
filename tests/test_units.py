@@ -795,6 +795,34 @@ def test_v044():
                  ("zmapi.bestmku.com", "其他", "其他"), ("b.example", "乙", "办公 / 开发")], r
 
 
+def test_v046():
+    """节点登记地 vs 节点名地区:级别、忽略、告警、周报。"""
+    import sqlite3, time
+    from app import nodegeo, geo, alerts, insight
+    assert nodegeo.name_cc("香港 01") == "HK" and nodegeo.name_cc("JP-Tokyo") == "JP" and nodegeo.name_cc("abc") == ""
+    assert nodegeo.level_of("HK", "CN", "") == "high" and nodegeo.level_of("US", "HK", "AS13335 Cloudflare") == "low"
+    assert nodegeo.level_of("JP", "SG", "x") == "mid" and nodegeo.level_of("HK", "HK", "") is None and nodegeo.level_of("", "CN", "") is None
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE kv(k TEXT PRIMARY KEY, v TEXT)")
+    con.execute("CREATE TABLE nodeinfo(node TEXT, type TEXT, remote TEXT, geo TEXT, geo_at INT, seen INT)")
+    con.executemany("INSERT INTO nodeinfo(node,remote) VALUES(?,?)", [("香港 01", "1.1.1.1"), ("日本 02", "2.2.2.2"), ("美国 03", "3.3.3.3"), ("新加坡 04", "4.4.4.4")])
+    table = {"1.1.1.1": ("CN", "AS4134 CHINANET"), "2.2.2.2": ("SG", "AS1 x"), "3.3.3.3": ("US", "AS2 y"), "4.4.4.4": ("HK", "AS13335 Cloudflare")}
+    old = geo.lookup
+    geo.lookup = lambda ip: table.get(ip, ("", ""))
+    try:
+        r = nodegeo.scan(con)
+        assert [(x["node"], x["level"]) for x in r] == [("香港 01", "high"), ("日本 02", "mid"), ("新加坡 04", "low")], r
+        assert nodegeo.summary(con)["cn"] == 1
+        nodegeo.set_ignore(con, "香港 01", True)
+        sm = nodegeo.summary(con)
+        assert sm["cn"] == 0 and sm["ignored"] == 1
+        nodegeo.set_ignore(con, "香港 01", False)
+        assert nodegeo.summary(con)["cn"] == 1
+    finally:
+        geo.lookup = old
+    assert "node_geo" in alerts.DEFAULT_RULES and alerts.KINDS["node_geo"]
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
