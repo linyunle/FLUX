@@ -206,6 +206,35 @@ try:
         assert pg.evaluate("flag('TW').includes('flsvg')") and pg.evaluate("ccName('TW')")=="台湾" and pg.evaluate("flag('JP')")=="🇯🇵"
         assert pg.evaluate("[nodeCC('prefix-CF | 香港 01'),nodeCC('SSRDOG ｜ 台湾 02'),nodeCC('US-LA-01'),nodeCC('红杏云 ｜ 印度尼西亚 01'),nodeCC('备用节点','US'),nodeCC('Lamlam')]")==["HK","TW","US","ID","US",""]
         print("PASS 应用规则清理 / 台湾旗 / 节点地区识别")
+        # v0.45:被父域名挡住的规则——一键挪到父域名前 / 一键清除
+        pg.fill("#appTxt","qq.com=腾讯服务|社交 / 通讯\nwx.qq.com=微信|社交 / 通讯\nb.example=乙|其他")
+        pg.click("#appUp"); pg.wait_for_timeout(200)
+        assert pg.input_value("#appTxt").split("\n")==["wx.qq.com=微信|社交 / 通讯","qq.com=腾讯服务|社交 / 通讯","b.example=乙|其他"] and "挪到父域名前面" in pg.inner_text("#appMsg"), (pg.input_value("#appTxt"), pg.inner_text("#appMsg"))
+        pg.fill("#appTxt","qq.com=腾讯服务|社交 / 通讯\nwx.qq.com=微信|社交 / 通讯\nb.example=乙|其他")
+        pg.click("#appDeadRm"); pg.wait_for_timeout(200)
+        assert pg.input_value("#appTxt").split("\n")==["qq.com=腾讯服务|社交 / 通讯","b.example=乙|其他"] and "已清除 1 条" in pg.inner_text("#appMsg"), (pg.input_value("#appTxt"), pg.inner_text("#appMsg"))
+        pg.click("#appDeadRm"); pg.wait_for_timeout(200); assert "没有被父域名挡住" in pg.inner_text("#appMsg")
+        print("PASS 应用规则:挪到父域名前 / 清除被挡住的")
+        # v0.45:顶栏自定义快捷方式(没有时只显示「＋」;只允许 http(s);最多 8 个;可编辑 / 删除)
+        assert pg.evaluate("JSON.stringify(normLinks([{n:'a',u:'javascript:alert(1)'},{n:'',u:'192.168.1.1:8080'},{n:'b',u:'ftp://x.y'},{n:'c',u:'www.example.com/p'}]))")==json.dumps([{"n":"192.168.1.1","u":"https://192.168.1.1:8080/"},{"n":"c","u":"https://www.example.com/p"}],separators=(",",":"),ensure_ascii=False)
+        pg.evaluate("S.tab='overview';showTab();TH.links=[];lkRender()"); pg.wait_for_timeout(500)
+        assert pg.locator("#lkAdd").is_visible() and pg.locator("#lkTop .lkc").count()==0, "没有快捷方式时应只显示「＋」"
+        pg.click("#lkAdd"); pg.wait_for_timeout(200); assert pg.locator("#lkPop").is_visible()
+        pg.fill("#lkU","javascript:alert(1)"); pg.click("#lkPop [data-lk=s]"); pg.wait_for_timeout(100)
+        assert pg.locator("#lkTop .lkc").count()==0 and "网址不对" in pg.inner_text("#lkMsg")
+        pg.fill("#lkN","示例"); pg.fill("#lkU","example.com"); pg.click("#lkPop [data-lk=s]"); pg.wait_for_timeout(200)
+        assert pg.locator("#lkTop .lkc").count()==1 and pg.get_attribute("#lkTop .lkc","href")=="https://example.com/" and pg.get_attribute("#lkTop .lkc","target")=="_blank" and "noopener" in pg.get_attribute("#lkTop .lkc","rel")
+        pg.click("#lkPop [data-lk=e]"); pg.fill("#lkN","改名"); pg.click("#lkPop [data-lk=s]"); pg.wait_for_timeout(200)
+        assert pg.inner_text("#lkTop .lkc")=="改名"
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(100)
+        pg.evaluate("TH.links=normLinks(Array.from({length:10},(_,i)=>({n:'n'+i,u:'https://e'+i+'.com'})));lkRender()"); pg.wait_for_timeout(200)
+        assert pg.locator("#lkTop .lkc").count()==8, "最多 8 个"
+        pg.click("#lkAdd"); pg.wait_for_timeout(200); assert pg.locator("#lkPop .lkform").count()==0 and "已经有 8 个" in pg.inner_text("#lkPop")
+        pg.click("#lkPop [data-lk=x][data-i='0']"); pg.wait_for_timeout(200)
+        assert pg.locator("#lkTop .lkc").count()==7 and pg.locator("#lkPop .lkform").count()==1
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(100); assert pg.locator("#lkPop").count()==0
+        pg.evaluate("TH.links=[];saveTheme();lkRender()")
+        print("PASS 顶栏快捷方式")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
