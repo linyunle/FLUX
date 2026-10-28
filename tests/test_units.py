@@ -839,6 +839,12 @@ def test_v047():
     c = analysis.compare(con, 5, prev_end=analysis._days(0, 0)[0])     # 重叠 → 退回紧挨着本期之前
     assert c["prev"][1] == analysis._shift(c["cur"][0], 1)
     assert analysis.compare(con, 999)["days"] == 90 and analysis.compare(con, "x")["days"] == 7
+    for i in range(14):      # 有数据时也要能算(曾因变量名冲突在有设备数据时 500)
+        day = time.strftime("%Y-%m-%d", time.localtime(time.time() - i * 86400))
+        con.execute("INSERT INTO traffic(day,client,node,grp,rule,host,up,down) VALUES(?,?,?,?,?,?,?,?)", (day, "aa:bb:cc:dd:ee:01", "n", "g", "r", "h%d.com" % i, 10, 90))
+    con.commit()
+    c = analysis.compare(con, 7)
+    assert c["traffic"]["cur"]["total"] == 700 and c["devices"] and c["new_hosts"]["count"] == 7 and c["names"] == ["本周", "上周"], c
     t = analysis.timeline(con, 720)
     assert t["step"] == 5 and len(t["rows"]) == 144 and analysis.timeline(con, 24)["step"] == 1
 

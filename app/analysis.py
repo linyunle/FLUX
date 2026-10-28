@@ -55,8 +55,8 @@ def compare(con, days=7, cur_end=None, prev_end=None):
     ps = _shift(pe, days - 1)
     cur, prev = (cs, ce), (ps, pe)
     weekly = days == 7 and ce == today and pe == _shift(cs, 1)
-    nm = ("本周", "上周") if weekly else ("本期", "上期")
-    out = {"cur": cur, "prev": prev, "days": days, "names": list(nm)}
+    pn = ("本周", "上周") if weekly else ("本期", "上期")
+    out = {"cur": cur, "prev": prev, "days": days, "names": list(pn)}
 
     def tot(rng):
         rows = con.execute("SELECT day, node, SUM(up), SUM(down) FROM traffic WHERE day>=? AND day<=? GROUP BY day, node", rng).fetchall()
@@ -124,17 +124,17 @@ def compare(con, days=7, cur_end=None, prev_end=None):
     notes = []
     t = out["traffic"]
     if t["delta_pct"] is not None and abs(t["delta_pct"]) >= 25:
-        notes.append((f"流量比{nm[1]}" + ("多" if t["delta_pct"] > 0 else "少") + f" {abs(t['delta_pct'])}%", "info"))
+        notes.append((f"流量比{pn[1]}" + ("多" if t["delta_pct"] > 0 else "少") + f" {abs(t['delta_pct'])}%", "info"))
     rc, rp = out["retrans"]["cur"], out["retrans"]["prev"]
     if rc is not None and rp is not None and rc - rp >= 1:
-        notes.append((f"TCP 重传率 {rp}% → {rc}%,线路 / 上游比{nm[1]}差", "warn"))
+        notes.append((f"TCP 重传率 {rp}% → {rc}%,线路 / 上游比{pn[1]}差", "warn"))
     wc, wp = out["wan"]["cur"], out["wan"]["prev"]
     if wc and wp and wc["loss"] - wp["loss"] >= 10:
         notes.append((f"到公共 DNS 的 ICMP 丢包 {wp['loss']}% → {wc['loss']}%(常是运营商限速,结合重传率看)", "info"))
     if out["nodes_worse"]:
-        notes.append((f"{len(out['nodes_worse'])} 个节点比{nm[1]}明显变差(延迟 +30% 以上或失败率 +10 个点)", "warn"))
+        notes.append((f"{len(out['nodes_worse'])} 个节点比{pn[1]}明显变差(延迟 +30% 以上或失败率 +10 个点)", "warn"))
     if out["new_hosts"]["count"] >= 50:
-        notes.append((f"{nm[0]}新出现 {out['new_hosts']['count']} 个域名,多半是新装了应用或有设备行为变了", "info"))
+        notes.append((f"{pn[0]}新出现 {out['new_hosts']['count']} 个域名,多半是新装了应用或有设备行为变了", "info"))
     out["notes"] = [{"text": x, "level": lv} for x, lv in notes]
     return out
 
