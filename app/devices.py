@@ -201,11 +201,56 @@ def parse_uci_text(text):
     return out
 
 
+# ---------------------------------------------------------------- 设备合并(把同一台设备的多个 MAC / IP 并成一台)
+# 只改「怎么归到哪台设备」:新数据直接记在主设备名下,历史数据在查询时按这张表归并,原始记录不动,拆开后立刻恢复。
+MERGE = {}      # 从设备键 → 主设备键
+
+
+def load_merge(con):
+    try:
+        m = {a: b for a, b in con.execute("SELECT alias, main FROM devmerge")}
+    except Exception:
+        m = {}
+    MERGE.clear()
+    MERGE.update(m)
+
+
+def _dk(k):
+    k = str(k or "").strip()
+    return k.lower() if is_mac(k.lower()) else k
+
+
+def set_merge(con, main, alias, on=True):
+    main, alias = _dk(main), _dk(alias)
+    if not main or not alias or len(main) > 80 or len(alias) > 80:
+        raise ValueError("设备不对")
+    if on:
+        main = MERGE.get(main, main)
+        if main == alias:
+            raise ValueError("不能把设备并进它自己")
+        with con:
+            con.execute("UPDATE devmerge SET main=? WHERE main=?", (main, alias))
+            con.execute("INSERT OR REPLACE INTO devmerge(alias,main) VALUES(?,?)", (alias, main))
+    else:
+        with con:
+            con.execute("DELETE FROM devmerge WHERE alias=?", (alias,))
+    load_merge(con)
+
+
+def merged_groups(con):
+    """{主设备键: [从设备键...]}"""
+    out = {}
+    for a, m in con.execute("SELECT alias, main FROM devmerge ORDER BY main, alias"):
+        out.setdefault(m, []).append(a)
+    return out
+
+
 # ---------------------------------------------------------------- 邻居缓存 + 名字
 class Neigh:
     """IP→MAC 缓存,线程内使用。"""
 
     def __init__(self, con):
+        load_merge(con)
         self.map = {r[0]: r[1] for r in con.execute("SELECT ip, mac FROM ipmap")}
         self.dirty = {}
         self.at = 0.0
@@ -228,12 +273,13 @@ class Neigh:
             return "unknown"
         mac = self.map.get(ip)
         if mac:
-            return mac
+            return MERGE.get(mac, mac)
         self.refresh()
         if time.time() - self.miss.get(ip, 0) > 60:
             self.miss[ip] = time.time()
             self.refresh(force=True)
-        return self.map.get(ip) or ip
+        k = self.map.get(ip) or ip
+        return MERGE.get(k, k)
 
 
 class Names:
@@ -359,6 +405,11 @@ def ips_by_dev(con):
     out = {}
     for ip, mac in con.execute("SELECT ip, mac FROM ipmap ORDER BY seen DESC"):
         out.setdefault(mac, []).append(ip)
+    for al, mn in list(MERGE.items()):      # 合并过的设备:从设备的 IP 算到主设备名下
+        if al in out:
+            out.setdefault(mn, []).extend(x for x in out.pop(al) if x not in out.get(mn, []))
+        elif not is_mac(al) and al not in out.get(mn, []):
+            out.setdefault(mn, []).append(al)       # 没有 MAC 的(固定 IP)设备,键本身就是 IP
     for mac in out:
         out[mac].sort(key=lambda x: (":" in x))  # IPv4 在前
     return out
@@ -378,6 +429,8 @@ def new_devices(con, days=14):
     stored = stored_names(con)
     out = []
     for k, first in rows:
+        if k in MERGE:      # 已合并进别的设备的,不算新设备
+            continue
         if k in local_ips() or (":" in k and not is_mac(k)):   # 查不到 MAC 的 IPv6 隐私临时地址会不停变,不算设备
             continue
         ips = macips.get(k, [] if is_mac(k) else [k])

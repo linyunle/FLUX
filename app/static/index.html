@@ -292,7 +292,7 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 #lkTop .lkc{display:inline-block;max-width:8.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 10px;border-radius:999px;font-size:12px;line-height:1.5;color:var(--ink2,inherit);background:var(--hover,rgba(128,128,128,.14));text-decoration:none}
 #lkTop .lkc:hover{color:var(--accent)}
 #lkTop{flex-wrap:wrap}#lkTop .lkc{display:inline-flex;align-items:center;gap:5px;vertical-align:middle}#lkTop .lkc.ico{padding:3px 5px}
-.lki{position:relative;overflow:hidden;display:inline-flex;flex:none;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;line-height:1;color:#fff;font-weight:600}.lki.em{background:none;font-size:15px;color:inherit}.lki img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--card,#fff);display:none}.lki.fav img{display:block}
+.lki{position:relative;overflow:hidden;display:inline-flex;flex:none;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;line-height:1;color:#fff;font-weight:600}.lki.em{background:none;font-size:15px;color:inherit}.lki img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--card,#fff);opacity:0}.lki.fav img{opacity:1}
 #lkTop .lkc[draggable=true]{cursor:grab}.lkdrag{opacity:.4}.lkh{cursor:grab;color:var(--mute,#8e8e93);user-select:none;padding:0 2px;letter-spacing:-2px}.lkrow[draggable=true]{cursor:grab}.lkrow button[disabled]{opacity:.3}
 #lkTop .lkadd{padding:1px 9px;font-size:15px;line-height:1.4;border-radius:999px}
 @media(min-width:821px){#filters #hostQ{width:clamp(150px,15vw,230px)!important}}   /* 多了一个「＋」,窗口不太宽时搜索框让一点位置,免得「退出登录」被挤到下一行 */
@@ -640,7 +640,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div id="devListView"><div class="card" id="newDevCard" style="display:none"><h2>新设备 <span class="seg" id="ndDays" role="group" aria-label="范围"></span><span class="sp"></span><span class="sub" id="ndNote"></span></h2><div id="ndBody"></div></div>
   <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
   <div id="devDetail" style="display:none">
-    <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div></div>
+    <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div><div id="ddMerge" style="margin-top:8px"></div></div>
     <div class="tiles" id="ddTiles"></div>
     <div class="dgrid">
       <div class="card" style="grid-column:span 12"><h2>流量趋势 <span class="legend" id="ddLegend"></span><span class="sp"></span><span class="sub" id="ddTrNote"></span></h2><div class="chartbox" id="ddChart"></div></div>
@@ -1480,8 +1480,14 @@ function devTabRows(){
   $("#devTbl").querySelectorAll(".ren").forEach(b=>b.onclick=async e=>{e.stopPropagation();const n=prompt("设备别名(留空 = 恢复自动名)",b.dataset.n);if(n===null)return;
     try{await post("/api/device",{dev:b.dataset.k,name:n});loadDevices();loadDevicesTab()}catch(er){alert(er.message)}})})}
 /* 单台设备详情 */
+/* 设备合并:把同一台设备的多个 MAC / IP(如 2.4G 和 5G 各绑一个)并成一台;只改归并显示,原始记录不动,可随时拆开 */
+function paintMerge(key){const el=$("#ddMerge");if(!el)return;const ro=S.role==="v"||document.documentElement.dataset.vro==="1";
+  get("/api/devmerge").then(j=>{const mem=j.groups[key]||[],cand=(S.devices||[]).filter(d=>d.key!==key&&!mem.some(m=>m.key===d.key));
+    el.innerHTML=(mem.length?`<div class="sub">已并入这台设备的 MAC / IP(它们的流量、访问记录都算在这台名下):</div>`+mem.map(m=>`<div class="lkrow"><span style="flex:1;min-width:0"><b>${esc(m.name||m.key)}</b> <span class="sub">${esc(m.key)}${m.ips.length?" · "+esc(m.ips.join("、")):""}</span></span>${ro?"":`<button data-mg="x" data-a="${esc(m.key)}">拆分</button>`}</div>`).join(""):'<div class="sub">这台设备没有合并其他 MAC / IP。同一台手机 2.4G / 5G 绑了不同 MAC 变成两台设备时,可以在这里把另一个并进来。</div>')
+      +(ro||!cand.length?"":`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><select id="mgSel" aria-label="选择要并进来的设备"><option value="">选择要并进来的设备…</option>${cand.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))} · ${esc(d.key)}</option>`).join("")}</select><button data-mg="a" class="pri">并进这台设备</button><span class="sub">只改归并,历史记录原样保留,拆分后立即恢复</span></div>`);
+    el.onclick=async e=>{const b=e.target.closest("[data-mg]");if(!b)return;try{if(b.dataset.mg==="a"){const a=$("#mgSel").value;if(!a)return;if(!confirm("把所选设备并进「"+$("#ddName").textContent.trim()+"」?它的流量和访问记录会算到这台设备名下(可随时拆分)。"))return;await post("/api/devmerge",{main:key,alias:a,on:true})}else await post("/api/devmerge",{main:key,alias:b.dataset.a,on:false});await loadDevices();loadDevicesTab()}catch(er){alert(er.message)}}}).catch(()=>{el.innerHTML=""})}
 function loadDetail(){
-  const key=S.dd,o=base({dev:key});
+  const key=S.dd,o=base({dev:key});paintMerge(key);
   load("dd_who","/api/summary",{...o,by:"client",limit:5},j=>{const r=j.rows.find(x=>x.key===key)||j.rows[0];
     const d=S.devices.find(x=>x.key===key),name=(r&&r.name)||(d&&devLabel(d))||key;
     $("#ddName").textContent=" "+name+" ";
@@ -1804,7 +1810,7 @@ function applyTheme(){
   R.style.setProperty("--w",(WIDTHS[TH.width]||WIDTHS.m)[1]);
   const r=(RADS[TH.rad]||RADS.m)[1];R.style.setProperty("--r",r[0]);R.style.setProperty("--rs",r[1]);
   R.style.setProperty("--fs",(FONTS[TH.font]||FONTS.m)[1]);
-  TH.order.forEach((k,i)=>{const el=$(CARDS[k][0]);if(el){el.style.order=i+1;el.style.setProperty("--span",TH.cards[k].w);el.style.minHeight=(BH[TH.cards[k].h]||0)+"px";el.classList.toggle("gone",TH.hide.includes(k))}});
+  TH.order.forEach((k,i)=>{const el=$(CARDS[k][0]);if(el){el.style.order=i+1;el.style.setProperty("--span",k==="rthost"&&S.q?12:TH.cards[k].w);el.style.minHeight=(BH[TH.cards[k].h]||0)+"px";el.classList.toggle("gone",TH.hide.includes(k))}});
   {const dk=mode==="dark",a=dk?.5:.1,m=(SHADOWS[TH.shadow]||SHADOWS.s)[1];
    R.style.setProperty("--sh",TH.shadow==="off"?"none":`0 ${Math.round(2*m)}px ${Math.round(6*m)}px rgba(0,0,0,${(a*Math.min(m,1.8)).toFixed(2)})`);
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
@@ -1824,7 +1830,7 @@ function applyTheme(){
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
     const off=!TH.gl&&TH.glSet.includes(k);   /* 「状态」关掉时,隐藏用户在「状态 ▾」里勾选的卡片 */
-    if(k==="rthost"){el.classList.toggle("gone",(TH.hide.includes(k)||off)&&!q);el.classList.remove("autohide")}
+    if(k==="rthost"){el.classList.toggle("gone",(TH.hide.includes(k)||off)&&!q);el.classList.remove("autohide");el.style.setProperty("--span",q?12:TH.cards.rthost.w)}   /* 搜索时「访问目标」独占整行,不管卡片宽度设成多少 */
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||off)}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
@@ -1841,10 +1847,10 @@ function glPop(){let p=$("#glPop");if(p){p.remove();return}
   $("#glReset").onclick=()=>{TH.glSet=["sys","mem","rt","rtdev","rtnode"];saveTheme();applyTheme();p.remove();glPop()}}
 document.addEventListener("click",e=>{const p=$("#glPop");if(p&&!e.target.closest("#viewSeg,#glPop"))p.remove()});
 const lkLab=r=>String(r.n||"").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u,"")||r.n;
-function lkIcon(r){const c=Array.from(r.n||"")[0]||"•";if(/^\p{Extended_Pictographic}/u.test(c))return`<span class="lki em" aria-hidden="true">${esc(c)}</span>`;let h=0;try{for(const ch of new URL(r.u).hostname)h=(h*31+ch.charCodeAt(0))%360}catch(e){}return`<span class="lki" aria-hidden="true" style="background:hsl(${h} 55% 45%)">${esc(c.toUpperCase())}${TH.linkFav!==false?`<img alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" src="/api/favicon?u=${encodeURIComponent(r.u)}">`:""}</span>`}
+function lkIcon(r){const c=Array.from(r.n||"")[0]||"•";if(/^\p{Extended_Pictographic}/u.test(c))return`<span class="lki em" aria-hidden="true">${esc(c)}</span>`;let h=0;try{for(const ch of new URL(r.u).hostname)h=(h*31+ch.charCodeAt(0))%360}catch(e){}return`<span class="lki" aria-hidden="true" style="background:hsl(${h} 55% 45%)">${esc(c.toUpperCase())}${TH.linkFav!==false?`<img alt="" decoding="async" referrerpolicy="no-referrer" src="/api/favicon?u=${encodeURIComponent(r.u)}">`:""}</span>`}
 /* 网站图标由面板服务端取(页面安全策略不允许直接加载外站图片);取到了就盖住首字圆标,取不到保留圆标 */
 document.addEventListener("load",e=>{const i=e.target;if(i&&i.tagName==="IMG"&&i.parentNode&&i.parentNode.classList.contains("lki"))i.parentNode.classList.add("fav")},true);
-document.addEventListener("error",e=>{const i=e.target;if(i&&i.tagName==="IMG"&&i.parentNode&&i.parentNode.classList.contains("lki"))i.remove()},true);
+document.addEventListener("error",e=>{const i=e.target;if(i&&i.tagName==="IMG"&&i.parentNode&&i.parentNode.classList.contains("lki")){if(!i.dataset.r){i.dataset.r="1";setTimeout(()=>{if(i.isConnected)i.src=i.src+"&r=1"},2500)}else i.remove()}},true);   /* 刚添加的链接还没存到服务器时会取不到,2.5 秒后重试一次 */
 function lkRender(){const e=$("#lkTop");if(!e)return;const ro=S.role==="v",L=TH.links||[],md=TH.linkMode||"name";
   e.innerHTML=L.map((r,i)=>`<a class="lkc${md==="icon"?" ico":""}"${ro?"":` draggable="true" data-lki="${i}"`} href="${esc(r.u)}" target="_blank" rel="noopener noreferrer" title="${esc(r.n)} · ${esc(r.u)}${ro?"":"(可拖动调整顺序)"}" aria-label="${esc(r.n)}">${md!=="name"?lkIcon(r):""}${md!=="icon"?esc(md==="both"?lkLab(r):r.n):""}</a>`).join("")+(ro?"":`<button id="lkAdd" class="lkadd" aria-label="添加快捷方式" aria-haspopup="true" title="添加 / 管理快捷方式(最多 ${LK_MAX} 个)">＋</button>`);
   e.style.display=ro&&!L.length?"none":""}

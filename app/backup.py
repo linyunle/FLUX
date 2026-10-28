@@ -88,6 +88,7 @@ def export(con, secrets=False):
     out["airport_rules"] = airports.rules_text()
     out["app_rules"] = appsig.rules_text()
     out["devices"] = devices.stored_names(con)
+    out["dev_merge"] = {a: m for ms, al in devices.merged_groups(con).items() for a, m in ((x, ms) for x in al)}
     out["dev_groups"] = groups.dev_groups(con)
     out["group_policy"] = groups.policy(con)
     out["probe"] = probe.load_cfg(con)
@@ -154,6 +155,14 @@ def restore(con, d):
             for k, v in list(d["devices"].items())[:2000]:
                 devices.rename(con, str(k), str(v))
         step("设备别名", g)
+    if isinstance(d.get("dev_merge"), dict):
+        def gm():
+            for a, m in list(d["dev_merge"].items())[:500]:
+                try:
+                    devices.set_merge(con, str(m), str(a), True)
+                except ValueError:
+                    pass
+        step("设备合并", gm)
     if isinstance(d.get("dev_groups"), dict):
         def h():
             for k, v in list(d["dev_groups"].items())[:2000]:

@@ -311,6 +311,14 @@ try:
     ok(req_code("/api/favicon?u=" + urllib.parse.quote(_site)) == 200, "网站图标:已保存的快捷方式能取到")
     ok(req_code("/api/favicon?u=" + urllib.parse.quote("http://127.0.0.1:1/")) == 404, "网站图标:其他网址仍然不取")
     _srv.shutdown()
+    _k = [x["key"] for x in get("/api/devices")["devices"]]
+    if len(_k) >= 2:
+        c, r = post("/api/devmerge", {"main": _k[0], "alias": _k[1], "on": True})
+        ok(c == 200 and _k[1] not in [x["key"] for x in get("/api/devices")["devices"]], "设备合并:从设备并进主设备后不再单列")
+        ok(get("/api/devmerge")["groups"].get(_k[0], [{}])[0].get("key") == _k[1], "设备合并:能列出已并入的设备")
+        ok(post("/api/devmerge", {"main": _k[0], "alias": _k[0], "on": True})[0] == 400, "设备合并:不能并进自己")
+        post("/api/devmerge", {"main": _k[0], "alias": _k[1], "on": False})
+        ok(_k[1] in [x["key"] for x in get("/api/devices")["devices"]], "设备合并:拆分后恢复")
     ng = get("/api/nodegeo")
     ok(isinstance(ng.get("rows"), list) and "cn" in ng and "available" in ng, "节点登记地:接口可用")
     c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": True})

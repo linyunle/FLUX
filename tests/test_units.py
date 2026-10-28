@@ -885,6 +885,41 @@ def test_v047_4():
     srv.shutdown()
 
 
+def test_v047_5():
+    """设备合并:新数据记到主设备、历史按表归并、IP 并入主设备、拆分后恢复。"""
+    import os, sqlite3, tempfile, time
+    from app import config, db, devices, web
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db()
+    day = time.strftime("%Y-%m-%d")
+    A, B = "aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"
+    con.execute("INSERT INTO ipmap(ip,mac,seen) VALUES('192.168.1.10',?,1),('192.168.1.11',?,1)", (A, B))
+    for c, v in ((A, 100), (B, 50), ("192.168.1.11", 7)):
+        con.execute("INSERT INTO traffic(day,client,node,grp,rule,host,up,down) VALUES(?,?,?,?,?,?,?,?)", (day, c, "n", "g", "r", "h.com", 0, v))
+    con.commit()
+    q = lambda: dict(con.execute(f"SELECT {web.DEVX} k, SUM(up+down) FROM traffic GROUP BY k").fetchall())
+    assert q() == {A: 100, B: 57}, q()
+    devices.set_merge(con, A, B, True)
+    assert q() == {A: 157}, q()
+    assert devices.MERGE == {B: A} and devices.merged_groups(con) == {A: [B]}
+    assert devices.ips_by_dev(con)[A] == ["192.168.1.10", "192.168.1.11"] and B not in devices.ips_by_dev(con)
+    n = devices.Neigh(con)
+    assert n.key("192.168.1.11") == A, "新数据直接记到主设备"
+    try:
+        devices.set_merge(con, B, A, True)      # 主设备本身是别人的从设备 → 追到最终主设备,不能并进自己
+        raise AssertionError("应当拒绝")
+    except ValueError:
+        pass
+    devices.set_merge(con, B, A, False)         # 拆分一个不存在的从设备也不报错
+    devices.set_merge(con, A, B, False)
+    assert q() == {A: 100, B: 57} and devices.MERGE == {}
+    # 链:C 并进 B,B 再并进 A,C 跟着去 A
+    C = "aa:bb:cc:dd:ee:03"
+    devices.set_merge(con, B, C, True); devices.set_merge(con, A, B, True)
+    assert devices.MERGE == {B: A, C: A}, devices.MERGE
+    devices.set_merge(con, A, B, False); devices.set_merge(con, A, C, False)
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

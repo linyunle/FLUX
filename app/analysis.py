@@ -104,8 +104,15 @@ def compare(con, days=7, cur_end=None, prev_end=None):
             chg.append({"node": n_, "avg": v["avg"], "avg_prev": o["avg"], "fail": v["fail"], "fail_prev": o["fail"]})
     out["nodes_worse"] = sorted(chg, key=lambda x: -(x["avg"] - x["avg_prev"]))[:30]
 
+    ipm = dict(con.execute("SELECT ip, mac FROM ipmap").fetchall())
+
     def devs(rng):
-        return dict(con.execute("SELECT client, SUM(up+down) FROM traffic WHERE day>=? AND day<=? GROUP BY client", rng).fetchall())
+        o = {}
+        for c, b in con.execute("SELECT client, SUM(up+down) FROM traffic WHERE day>=? AND day<=? GROUP BY client", rng):
+            k = ipm.get(c, c)
+            k = devices.MERGE.get(k, k)     # 旧记录按 IP→MAC→合并后的主设备归并
+            o[k] = o.get(k, 0) + (b or 0)
+        return o
     da, db_ = devs(cur), devs(prev)
     macips, stored = devices.ips_by_dev(con), devices.stored_names(con)
     nm = lambda k: devices.NAMES.label(k, macips.get(k, [] if is_mac(k) else [k]), stored) or (macips.get(k) or [k])[0]

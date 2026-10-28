@@ -267,6 +267,19 @@ try:
         pg.click("#cmpSeg [data-k='7']"); pg.wait_for_timeout(1500); assert "本周 vs 上周" in pg.inner_text("#cmpT")
         pg.click("#tlCtl [data-k='24']"); pg.wait_for_timeout(500)
         print("PASS 时间线范围 / 动态对比窗口")
+        # v0.47.5:搜索时「访问目标」独占整行;设备详情里有「合并设备」
+        pg.evaluate("S.tab='overview';showTab();TH.cards.rthost.w=6;applyTheme();autoHide()"); pg.wait_for_timeout(300)
+        pg.fill("#hostQ","a"); pg.wait_for_timeout(1200)
+        assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="12", "搜索时整行"
+        pg.fill("#hostQ",""); pg.wait_for_timeout(1200)
+        assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="6", "清空搜索后恢复设置的宽度"
+        pg.evaluate("TH.cards.rthost.w=12;applyTheme()")
+        pg.evaluate("S.tab='devices';showTab();loadDevices()"); pg.wait_for_timeout(1500)
+        if pg.evaluate("(S.devices||[]).length"):
+            pg.evaluate("S.dd=S.devices[0].key;loadDevicesTab()"); pg.wait_for_timeout(1500)
+            assert "合并" in pg.inner_text("#ddMerge"), pg.inner_text("#ddMerge")
+            pg.evaluate("S.dd='';loadDevicesTab()")
+        print("PASS 搜索整行 / 设备合并面板")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
