@@ -296,6 +296,21 @@ try:
     ok(get("/api/compare")["names"][0] == "本周", "对比:默认仍是本周 vs 上周")
     tj = get("/api/timeline?hours=720")
     ok(tj["step"] == 5 and len(tj["rows"]) <= 168, "时间线:30 天自动聚合")
+    import base64, http.server, threading, urllib.parse
+    _png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+
+    class _H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def do_GET(self):
+            b, ct = (_png, "image/png") if self.path == "/favicon.ico" else (b"<html></html>", "text/html")
+            self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+    _srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H); threading.Thread(target=_srv.serve_forever, daemon=True).start()
+    _site = "http://127.0.0.1:%d/" % _srv.server_address[1]
+    ok(req_code("/api/favicon?u=" + urllib.parse.quote(_site)) == 404, "网站图标:没保存的网址不去取")
+    post("/api/ui", {"theme": {"v": 4, "links": [{"n": "测试站", "u": _site}]}})
+    ok(req_code("/api/favicon?u=" + urllib.parse.quote(_site)) == 200, "网站图标:已保存的快捷方式能取到")
+    ok(req_code("/api/favicon?u=" + urllib.parse.quote("http://127.0.0.1:1/")) == 404, "网站图标:其他网址仍然不取")
+    _srv.shutdown()
     ng = get("/api/nodegeo")
     ok(isinstance(ng.get("rows"), list) and "cn" in ng and "available" in ng, "节点登记地:接口可用")
     c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": True})

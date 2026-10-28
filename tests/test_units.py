@@ -849,6 +849,42 @@ def test_v047():
     assert t["step"] == 5 and len(t["rows"]) == 144 and analysis.timeline(con, 24)["step"] == 1
 
 
+def test_v047_4():
+    """网站图标:读页面里的 rel=icon,没有就 /favicon.ico;只收图片;有缓存。"""
+    import base64, http.server, os, tempfile, threading
+    from app import config, favicon
+    config.DATA_DIR = tempfile.mkdtemp()
+    PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    hits = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+
+        def do_GET(self):
+            hits.append(self.path)
+            if self.path == "/a/":
+                body, ct = b'<html><head><link rel="shortcut icon" href="/static/i.png"></head></html>', "text/html"
+            elif self.path == "/static/i.png":
+                body, ct = PNG, "image/png"
+            elif self.path == "/b/":
+                body, ct = b"<html></html>", "text/html"
+            elif self.path == "/favicon.ico":
+                body, ct = b"<html>not an image</html>", "text/html"
+            else:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    r = favicon.get(base + "/a/")
+    assert r and r[1] == "image/png" and r[0] == PNG, r
+    n = len(hits)
+    assert favicon.get(base + "/a/")[0] == PNG and len(hits) == n, "第二次走缓存"
+    assert favicon.get(base.replace("127.0.0.1", "localhost") + "/b/") is None, "/favicon.ico 不是图片 → 没有图标(换个来源,不吃缓存)"
+    assert favicon._kind(b"\x89PNG\r\n\x1a\nxxxx", "") == "image/png" and favicon._kind(b"<html>", "image/png") == ""
+    srv.shutdown()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

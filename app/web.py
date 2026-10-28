@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, lookup, analysis, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health, nodegeo
+from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, lookup, analysis, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health, nodegeo, favicon
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -1470,6 +1470,17 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
                 html = f.read()
             return self._send(200, html, "text/html; charset=utf-8", etag='"' + hashlib.sha1(html).hexdigest()[:20] + '"')
+        if u.path == "/api/favicon":
+            link = one(params, "u")
+            con = ro()
+            try:
+                ok = link in favicon.saved_links(con)
+            finally:
+                con.close()
+            res = favicon.get(link) if ok else None
+            if not res:
+                return self._send(404, {"error": "no icon"}, extra={"Cache-Control": "private, max-age=600"})
+            return self._send(200, res[0], res[1], {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"})
         if u.path == "/api/syslog/export":
             return self._syslog_export(params)
         if u.path == "/api/nklog/export":
