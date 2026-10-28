@@ -291,6 +291,9 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 #lkTop{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-right:6px}
 #lkTop .lkc{display:inline-block;max-width:8.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 10px;border-radius:999px;font-size:12px;line-height:1.5;color:var(--ink2,inherit);background:var(--hover,rgba(128,128,128,.14));text-decoration:none}
 #lkTop .lkc:hover{color:var(--accent)}
+#lkTop{flex-wrap:wrap}#lkTop .lkc{display:inline-flex;align-items:center;gap:5px;vertical-align:middle}#lkTop .lkc.ico{padding:3px 5px}
+.lki{display:inline-flex;flex:none;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;line-height:1;color:#fff;font-weight:600}.lki.em{background:none;font-size:15px;color:inherit}
+#lkTop .lkc[draggable=true]{cursor:grab}.lkdrag{opacity:.4}.lkh{cursor:grab;color:var(--mute,#8e8e93);user-select:none;padding:0 2px;letter-spacing:-2px}.lkrow[draggable=true]{cursor:grab}.lkrow button[disabled]{opacity:.3}
 #lkTop .lkadd{padding:1px 9px;font-size:15px;line-height:1.4;border-radius:999px}
 @media(min-width:821px){#filters #hostQ{width:clamp(150px,15vw,230px)!important}}   /* 多了一个「＋」,窗口不太宽时搜索框让一点位置,免得「退出登录」被挤到下一行 */
 .lkpop{width:340px}.lkrow{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--line)}.lkrow a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;color:inherit}.lkrow button{padding:1px 8px}
@@ -1738,11 +1741,11 @@ const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 /* ---------- 顶栏自定义快捷方式:最多 8 个,存在外观设置里(随服务器同步、随备份走);只允许 http(s) 链接 ---------- */
-const LK_MAX=8;
+const LK_MAX=12;
 function lkUrl(u){u=String(u||"").trim();if(!u||u.length>300)return"";if(/^[a-z0-9.-]+:\d+(\/|$)/i.test(u))u="https://"+u;else if(!/^[a-z][a-z0-9+.-]*:/i.test(u))u="https://"+u;
   let x;try{x=new URL(u)}catch(e){return""}return(x.protocol==="http:"||x.protocol==="https:")&&x.hostname?x.href:""}
 function normLinks(a){const o=[];for(const r of Array.isArray(a)?a:[]){const u=lkUrl(r&&r.u);if(!u)continue;let n=String((r&&r.n)||"").trim().slice(0,12);if(!n)try{n=new URL(u).hostname.replace(/^www\./,"").slice(0,12)}catch(e){}o.push({n,u});if(o.length>=LK_MAX)break}return o}
-const themeDefault=()=>({mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",gl:true,glSet:["sys","mem","rt","rtdev","rtnode"],priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
+const themeDefault=()=>({linkMode:"name",mode:"auto",preset:"apple",custom:{},dens:"normal",width:"m",rad:"m",font:"m",v:5,navOp:45,view:"all",gl:true,glSet:["sys","mem","rt","rtdev","rtnode"],priv:false,rtSrc:"all",views:{dev:"live",host:"live"},navOp:45,sideViz:"line",viz:{style:"line",a:"",b:""},
   order:Object.keys(CARDS),hide:[],vh:{},vl:{},tiles:true,side:true,shadow:"s",op:100,sideShow:{speed:true,direct:true,proxy:true,conns:true,status:true,dev:true,theme:true,ver:true},cards:JSON.parse(JSON.stringify(DEF_CARDS)),trend:{style:"bars",split:false,up:"",down:""},collapse:false});
 const VIEWS={all:["状态",null]};
 const normCards=src=>{const o={};for(const k in CARDS){const c={...DEF_CARDS[k],...((src||{})[k]||{})};if(!CW.some(x=>x[0]===c.w))c.w=DEF_CARDS[k].w;if(c.h&&!HGT.rt[c.h])c.h="m";o[k]=c}return o};
@@ -1756,7 +1759,7 @@ function loadTheme(over){let raw=null;if(over!==undefined)raw=over;else try{raw=
   r.cards=normCards(t.cards);
   if(!TSTYLES.some(x=>x[0]===r.trend.style))r.trend.style="bars";
   if(!["live","period"].includes(r.views.dev))r.views.dev="live";if(!["live","period"].includes(r.views.host))r.views.host="live";
-  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.links=normLinks(t.links);r.gl=t.gl!==false;r.glSet=Array.isArray(t.glSet)?t.glSet.filter(k=>CARDS[k]):["sys","mem","rt","rtdev","rtnode"];
+  if(!["all","custom"].includes(r.view)){r.view="all";r.hide=[]}if(!["all","direct","proxy"].includes(r.rtSrc))r.rtSrc="all";r.priv=!!r.priv;r.links=normLinks(t.links);r.linkMode=["both","icon","name"].includes(t.linkMode)?t.linkMode:"name";r.gl=t.gl!==false;r.glSet=Array.isArray(t.glSet)?t.glSet.filter(k=>CARDS[k]):["sys","mem","rt","rtdev","rtnode"];
   if(r.viz.style!=="wave")r.viz.style="line";
   r.sideOrder=(Array.isArray(t.sideOrder)?t.sideOrder:[]).filter(k=>["speed","direct","proxy","conns"].includes(k));for(const k of ["speed","direct","proxy","conns"])if(!r.sideOrder.includes(k))r.sideOrder.push(k);
   r.sideShow={...d.sideShow,...(t.sideShow||{})};if(t.side===false&&!t.sideShow){for(const k of ["speed","direct","proxy","conns"])r.sideShow[k]=false}
@@ -1837,16 +1840,25 @@ function glPop(){let p=$("#glPop");if(p){p.remove();return}
   p.onchange=e=>{const k=e.target.dataset.gk;if(!k)return;TH.glSet=TH.glSet.filter(x=>x!==k);if(e.target.checked)TH.glSet.push(k);saveTheme();applyTheme()};
   $("#glReset").onclick=()=>{TH.glSet=["sys","mem","rt","rtdev","rtnode"];saveTheme();applyTheme();p.remove();glPop()}}
 document.addEventListener("click",e=>{const p=$("#glPop");if(p&&!e.target.closest("#viewSeg,#glPop"))p.remove()});
-function lkRender(){const e=$("#lkTop");if(!e)return;const ro=S.role==="v",L=TH.links||[];
-  e.innerHTML=L.map(r=>`<a class="lkc" href="${esc(r.u)}" target="_blank" rel="noopener noreferrer" title="${esc(r.n)} · ${esc(r.u)}">${esc(r.n)}</a>`).join("")+(ro?"":`<button id="lkAdd" class="lkadd" aria-label="添加快捷方式" aria-haspopup="true" title="添加 / 管理快捷方式(最多 ${LK_MAX} 个)">＋</button>`);
+const lkLab=r=>String(r.n||"").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u,"")||r.n;
+function lkIcon(r){const c=Array.from(r.n||"")[0]||"•";if(/^\p{Extended_Pictographic}/u.test(c))return`<span class="lki em" aria-hidden="true">${esc(c)}</span>`;let h=0;try{for(const ch of new URL(r.u).hostname)h=(h*31+ch.charCodeAt(0))%360}catch(e){}return`<span class="lki" aria-hidden="true" style="background:hsl(${h} 55% 45%)">${esc(c.toUpperCase())}</span>`}
+function lkRender(){const e=$("#lkTop");if(!e)return;const ro=S.role==="v",L=TH.links||[],md=TH.linkMode||"name";
+  e.innerHTML=L.map((r,i)=>`<a class="lkc${md==="icon"?" ico":""}"${ro?"":` draggable="true" data-lki="${i}"`} href="${esc(r.u)}" target="_blank" rel="noopener noreferrer" title="${esc(r.n)} · ${esc(r.u)}${ro?"":"(可拖动调整顺序)"}" aria-label="${esc(r.n)}">${md!=="name"?lkIcon(r):""}${md!=="icon"?esc(md==="both"?lkLab(r):r.n):""}</a>`).join("")+(ro?"":`<button id="lkAdd" class="lkadd" aria-label="添加快捷方式" aria-haspopup="true" title="添加 / 管理快捷方式(最多 ${LK_MAX} 个)">＋</button>`);
   e.style.display=ro&&!L.length?"none":""}
+function lkMove(a,b){const L=(TH.links||[]).slice();if(a<0||b<0||a>=L.length||b>=L.length||a===b)return;const[x]=L.splice(a,1);L.splice(b,0,x);TH.links=L;saveTheme();lkRender();if($("#lkPop"))lkPop(-1)}
+let LKD=-1;
+document.addEventListener("dragstart",e=>{const t=e.target.closest&&e.target.closest("[data-lki]");if(!t)return;LKD=+t.dataset.lki;e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",String(LKD))}catch(x){}t.classList.add("lkdrag")});
+document.addEventListener("dragover",e=>{if(LKD<0)return;if(e.target.closest&&e.target.closest("[data-lki]")){e.preventDefault();e.dataTransfer.dropEffect="move"}});
+document.addEventListener("drop",e=>{if(LKD<0)return;const t=e.target.closest&&e.target.closest("[data-lki]");if(t){e.preventDefault();lkMove(LKD,+t.dataset.lki)}LKD=-1});
+document.addEventListener("dragend",()=>{LKD=-1;document.querySelectorAll(".lkdrag").forEach(x=>x.classList.remove("lkdrag"))});
 function lkPlace(){const q=$("#lkPop"),b=$("#lkAdd");if(!q||!b)return;const r=b.getBoundingClientRect(),w=q.offsetWidth||340;q.style.top=Math.round(r.bottom+6)+"px";q.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";q.style.maxHeight=Math.max(200,innerHeight-r.bottom-20)+"px"}
 addEventListener("scroll",lkPlace,{passive:true});addEventListener("resize",lkPlace);
 function lkPop(edit){let p=$("#lkPop");if(!p){p=document.createElement("div");p.id="lkPop";p.className="glpop lkpop";document.body.appendChild(p);p.onclick=lkClick;p.onkeydown=e=>{if(e.key==="Enter"&&e.target.closest(".lkform")){e.preventDefault();lkSave()}}}
   const L=TH.links||[],cur=edit>=0&&L[edit]?L[edit]:null;p.dataset.edit=cur?edit:"-1";
-  p.innerHTML=`<div class="sub" style="margin-bottom:6px">顶栏快捷方式(${L.length} / ${LK_MAX}):常用网页链接,点一下在新窗口打开</div>`
-   +L.map((r,i)=>`<div class="lkrow"><a href="${esc(r.u)}" target="_blank" rel="noopener noreferrer" title="${esc(r.u)}"><b>${esc(r.n)}</b> <span class="sub">${esc(r.u.replace(/^https?:\/\//,"").replace(/\/$/,""))}</span></a><button data-lk="e" data-i="${i}" aria-label="编辑${esc(r.n)}">✎</button><button data-lk="x" data-i="${i}" aria-label="删除${esc(r.n)}">×</button></div>`).join("")
-   +((cur||L.length<LK_MAX)?`<div class="lkform"><input id="lkN" maxlength="12" placeholder="名称(最多 12 个字,可留空)" value="${esc(cur?cur.n:"")}" aria-label="名称"><input id="lkU" maxlength="300" placeholder="网址,如 https://example.com 或 192.168.100.1:8080" value="${esc(cur?cur.u:"")}" aria-label="网址"><div class="lkact"><span class="msg" id="lkMsg"></span>${cur?'<button data-lk="c">取消</button>':""}<button data-lk="s">${cur?"保存修改":"添加"}</button></div></div>`:`<div class="sub" style="margin-top:6px">已经有 ${LK_MAX} 个了,删掉一个才能再加</div>`);
+  p.innerHTML=`<div class="sub" style="margin-bottom:6px">顶栏快捷方式(${L.length} / ${LK_MAX}):常用网页链接,点一下在新窗口打开;拖动 ⋮⋮(或点 ↑ ↓)调整顺序</div><div class="seg" id="lkLook" style="margin-bottom:6px"></div>`
+   +L.map((r,i)=>`<div class="lkrow" draggable="true" data-lki="${i}"><span class="lkh" aria-hidden="true">⋮⋮</span><a href="${esc(r.u)}" target="_blank" rel="noopener noreferrer" title="${esc(r.u)}"><b>${esc(r.n)}</b> <span class="sub">${esc(r.u.replace(/^https?:\/\//,"").replace(/\/$/,""))}</span></a><button data-lk="u" data-i="${i}" aria-label="上移${esc(r.n)}" ${i?"":"disabled"}>↑</button><button data-lk="d" data-i="${i}" aria-label="下移${esc(r.n)}" ${i<L.length-1?"":"disabled"}>↓</button><button data-lk="e" data-i="${i}" aria-label="编辑${esc(r.n)}">✎</button><button data-lk="x" data-i="${i}" aria-label="删除${esc(r.n)}">×</button></div>`).join("")
+   +((cur||L.length<LK_MAX)?`<div class="lkform"><input id="lkN" maxlength="12" placeholder="名称(最多 12 个字,可留空;开头放个表情就当图标)" value="${esc(cur?cur.n:"")}" aria-label="名称"><input id="lkU" maxlength="300" placeholder="网址,如 https://example.com 或 192.168.100.1:8080" value="${esc(cur?cur.u:"")}" aria-label="网址"><div class="lkact"><span class="msg" id="lkMsg"></span>${cur?'<button data-lk="c">取消</button>':""}<button data-lk="s">${cur?"保存修改":"添加"}</button></div></div>`:`<div class="sub" style="margin-top:6px">已经有 ${LK_MAX} 个了,删掉一个才能再加</div>`);
+  seg($("#lkLook"),[["both","图标+名称"],["icon","仅图标"],["name","仅名称"]],TH.linkMode||"name",k=>{TH.linkMode=k;saveTheme();lkRender();lkPop(-1)});
   lkPlace();const u=$("#lkU");if(u&&!cur)u.focus()}
 function lkSave(){const p=$("#lkPop");if(!p)return;const m=$("#lkMsg"),u=lkUrl($("#lkU").value);m.className="msg err";
   if(!u){m.textContent="网址不对:要写成 https://… 或 http://…(也可以只写 域名 / IP:端口)";return}
@@ -1854,7 +1866,7 @@ function lkSave(){const p=$("#lkPop");if(!p)return;const m=$("#lkMsg"),u=lkUrl($
   if(ed>=0&&L[ed])L[ed]={n,u};else{if(L.length>=LK_MAX){m.textContent=`最多 ${LK_MAX} 个`;return}L.push({n,u})}
   TH.links=L;saveTheme();lkRender();lkPop(-1)}
 function lkClick(e){e.stopPropagation();const b=e.target.closest("[data-lk]");if(!b)return;const k=b.dataset.lk,i=+b.dataset.i;
-  if(k==="s")lkSave();else if(k==="c")lkPop(-1);else if(k==="e")lkPop(i);
+  if(k==="s")lkSave();else if(k==="c")lkPop(-1);else if(k==="e")lkPop(i);else if(k==="u")lkMove(i,i-1);else if(k==="d")lkMove(i,i+1);
   else if(k==="x"){TH.links=(TH.links||[]).filter((_,j)=>j!==i);saveTheme();lkRender();lkPop(-1)}}
 document.addEventListener("click",e=>{const p=$("#lkPop");if(p&&!e.target.closest("#lkAdd,#lkPop"))p.remove()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){const p=$("#lkPop");if(p)p.remove()}});

@@ -390,6 +390,7 @@ try:
     ok(post("/api/docker/act", {"id": "b" * 12, "action": "stop"})[0] == 400, "容器:只读模式下不能操作")
     ok("docker" in get("/api/backup") and get("/api/backup")["docker"]["on"], "备份:包含容器设置")
     dg = get("/api/diag"); ex_ = dg["ext"]
+    ok("countries" in ex_["geo_top"] and "cn_registered" in ex_["node_geo"], "诊断包:带目的地国家 Top 和节点登记地")
     ok("update" in ex_ and "sub_update_log" in ex_ and isinstance(ex_["sub_update_log"], list), "诊断包:带更新检查与订阅更新日志")
     ok(ex_["docker"]["ok"] is True and len(ex_["docker"]["containers"]) == 4 and ex_["docker"]["summary"]["total"] == 4 and "recent_events" in ex_["docker"], "诊断包:容器详情")
     ok("top_tags_24h" in ex_["syslog"] and "recent_warn_and_above" in ex_["syslog"] and "series_3h" in ex_["ups"] and "certs" in ex_["expiry"] and ex_["listen"]["current"]["port"] == WEB_P and ex_["disks"] is not None and "features" in dg, "诊断包:日志/UPS/到期/监听/磁盘")

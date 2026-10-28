@@ -227,11 +227,25 @@ try:
         pg.click("#lkPop [data-lk=e]"); pg.fill("#lkN","改名"); pg.click("#lkPop [data-lk=s]"); pg.wait_for_timeout(200)
         assert pg.inner_text("#lkTop .lkc")=="改名"
         pg.keyboard.press("Escape"); pg.wait_for_timeout(100)
-        pg.evaluate("TH.links=normLinks(Array.from({length:10},(_,i)=>({n:'n'+i,u:'https://e'+i+'.com'})));lkRender()"); pg.wait_for_timeout(200)
-        assert pg.locator("#lkTop .lkc").count()==8, "最多 8 个"
-        pg.click("#lkAdd"); pg.wait_for_timeout(200); assert pg.locator("#lkPop .lkform").count()==0 and "已经有 8 个" in pg.inner_text("#lkPop")
+        pg.evaluate("TH.links=normLinks(Array.from({length:14},(_,i)=>({n:'n'+i,u:'https://e'+i+'.com'})));lkRender()"); pg.wait_for_timeout(200)
+        assert pg.locator("#lkTop .lkc").count()==12, "最多 12 个"
+        pg.click("#lkAdd"); pg.wait_for_timeout(200); assert pg.locator("#lkPop .lkform").count()==0 and "已经有 12 个" in pg.inner_text("#lkPop")
         pg.click("#lkPop [data-lk=x][data-i='0']"); pg.wait_for_timeout(200)
-        assert pg.locator("#lkTop .lkc").count()==7 and pg.locator("#lkPop .lkform").count()==1
+        assert pg.locator("#lkTop .lkc").count()==11 and pg.locator("#lkPop .lkform").count()==1
+        # v0.47.3:排序(↑↓ 与拖动)、仅图标 / 图标+名称 / 仅名称
+        pg.click("#lkPop [data-lk=d][data-i='0']"); pg.wait_for_timeout(200)
+        assert pg.evaluate("TH.links[0].n")=="n2" and pg.evaluate("TH.links[1].n")=="n1", "下移"
+        pg.evaluate("lkMove(5,0)"); assert pg.evaluate("TH.links[0].n")=="n6"
+        pg.drag_and_drop("#lkTop .lkc[data-lki='3']", "#lkTop .lkc[data-lki='0']"); pg.wait_for_timeout(300)
+        assert pg.evaluate("TH.links[0].n")!="n6", "拖动到最前"
+        if pg.locator("#lkPop").count()==0: pg.click("#lkAdd"); pg.wait_for_timeout(200)
+        pg.click("#lkLook [data-k='icon']"); pg.wait_for_timeout(200)
+        assert pg.evaluate("TH.linkMode")=="icon"
+        assert pg.locator("#lkTop .lkc .lki").count()==11 and pg.evaluate("document.querySelector('#lkTop .lkc').textContent.trim().length")==1
+        pg.click("#lkLook [data-k='both']"); pg.wait_for_timeout(200)
+        assert len(pg.inner_text("#lkTop .lkc").strip())>1
+        pg.click("#lkLook [data-k='name']"); pg.wait_for_timeout(200)
+        assert pg.locator("#lkTop .lkc .lki").count()==0
         pg.keyboard.press("Escape"); pg.wait_for_timeout(100); assert pg.locator("#lkPop").count()==0
         pg.evaluate("TH.links=[];saveTheme();lkRender()")
         print("PASS 顶栏快捷方式")

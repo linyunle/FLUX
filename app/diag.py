@@ -423,6 +423,15 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["docker"] = d
     except Exception as e:
         out["docker"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 目的地国家 / ASN Top(近 7 天;只含国家码和 ASN 名,不含域名和 IP)
+    try:
+        from . import insight
+        g = insight.geo_summary(con, 7)
+        out["geo_top"] = {"days": 7, "available": g["available"], "known_pct": round(g["known"] * 100 / g["all"], 1) if g["all"] else None,
+                          "note": "只统计能看到真实目的地的流量(直连等),代理流量只能看到节点所在国",
+                          "countries": [{"cc": x["cc"], "bytes": x["bytes"]} for x in g["by_cc"][:15]], "asn": [{"asn": x["asn"], "bytes": x["bytes"]} for x in g["by_asn"][:10]]}
+    except Exception as e:
+        out["geo_top"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- 节点登记地与节点名地区不符(只读判断)
     try:
         from . import nodegeo
