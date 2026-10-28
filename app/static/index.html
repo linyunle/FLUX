@@ -293,7 +293,10 @@ tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 #lkTop .lkc:hover{color:var(--accent)}
 #lkTop{flex-wrap:wrap}#lkTop .lkc{display:inline-flex;align-items:center;gap:5px;vertical-align:middle}#lkTop .lkc.ico{padding:3px 5px}
 .lki{position:relative;overflow:hidden;display:inline-flex;flex:none;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;line-height:1;color:#fff;font-weight:600}.lki.em{background:none;font-size:15px;color:inherit}.lki img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--card,#fff);opacity:0}.lki.fav img{opacity:1}
-#lkTop .lkc[draggable=true]{cursor:grab}.lkdrag{opacity:.4}.lkh{cursor:grab;color:var(--mute,#8e8e93);user-select:none;padding:0 2px;letter-spacing:-2px}.lkrow[draggable=true]{cursor:grab}.lkrow button[disabled]{opacity:.3}
+#lkTop .lkc[draggable=true]{cursor:grab}.lkdrag{opacity:.4}.mgrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}.mgrow #mgQ{flex:1 1 220px;min-width:0;max-width:360px}#mgSelBox{display:inline-flex;gap:4px;align-items:center;font-size:13px}
+.mgpop{padding:4px;overflow:auto;-webkit-overflow-scrolling:touch}.mgit{padding:7px 9px;border-radius:8px;cursor:pointer}.mgit:hover,.mgit:active{background:var(--hover)}.mgit.nw{background:rgba(255,149,0,.14);border-left:3px solid var(--warn,#ff9500)}
+@media(max-width:820px){.mgrow #mgQ{max-width:none;flex-basis:100%}.mgrow .pri{flex:1}}
+.lkh{cursor:grab;color:var(--mute,#8e8e93);user-select:none;padding:0 2px;letter-spacing:-2px}.lkrow[draggable=true]{cursor:grab}.lkrow button[disabled]{opacity:.3}
 #lkTop .lkadd{padding:1px 9px;font-size:15px;line-height:1.4;border-radius:999px}
 @media(min-width:821px){#filters #hostQ{width:clamp(150px,15vw,230px)!important}}   /* 多了一个「＋」,窗口不太宽时搜索框让一点位置,免得「退出登录」被挤到下一行 */
 .lkpop{width:340px}.lkrow{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--line)}.lkrow a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;color:inherit}.lkrow button{padding:1px 8px}
@@ -1481,11 +1484,44 @@ function devTabRows(){
     try{await post("/api/device",{dev:b.dataset.k,name:n});loadDevices();loadDevicesTab()}catch(er){alert(er.message)}})})}
 /* 单台设备详情 */
 /* 设备合并:把同一台设备的多个 MAC / IP(如 2.4G 和 5G 各绑一个)并成一台;只改归并显示,原始记录不动,可随时拆开 */
+const MG={sel:"",q:"",key:"",sig:""};
+function mgClose(){const q=$("#mgPop");if(q)q.remove()}
+function mgPlace(){const q=$("#mgPop"),inp=$("#mgQ");if(!q||!inp)return;const r=inp.getBoundingClientRect(),vh=(window.visualViewport&&window.visualViewport.height)||innerHeight,vw=innerWidth;
+  const below=vh-r.bottom-10,above=r.top-10,want=Math.min(320,q.scrollHeight+4),dn=below>=Math.min(want,200)||below>=above,room=Math.max(120,dn?below:above);
+  const w=Math.min(Math.max(r.width,280),vw-16);q.style.width=w+"px";q.style.left=Math.max(8,Math.min(r.left,vw-w-8))+"px";q.style.maxHeight=Math.min(320,room)+"px";
+  if(dn){q.style.top=Math.round(r.bottom+4)+"px";q.style.bottom="auto"}else{q.style.bottom=Math.round(vh-r.top+4)+"px";q.style.top="auto"}}
+/* 候选:新设备排最前(醒目),其余按名字排,同名的挨在一起;输入关键字按 名字 / IP / MAC 筛选 */
+function mgList(){const kw=(MG.q||"").trim().toLowerCase(),nd=S.newDev||{};
+  let L=(MG.cand||[]).map(d=>({key:d.key,name:devLabel(d)||"",ips:d.ips||[],nw:nd[d.key]})).filter(d=>!kw||(d.name+" "+d.key+" "+d.ips.join(" ")).toLowerCase().includes(kw));
+  L.sort((a,b)=>(!!b.nw-!!a.nw)||(a.nw&&b.nw?b.nw.first-a.nw.first:0)||(a.name||"￿").localeCompare(b.name||"￿","zh")||a.key.localeCompare(b.key));
+  const cnt={};L.forEach(d=>{if(d.name)cnt[d.name]=(cnt[d.name]||0)+1});return{L,cnt}}
+function mgPaintPop(){let q=$("#mgPop");const inp=$("#mgQ");if(!inp)return;
+  if(!q){q=document.createElement("div");q.id="mgPop";q.className="glpop mgpop";q.setAttribute("role","listbox");document.body.appendChild(q);
+    q.onmousedown=e=>e.preventDefault();   /* 点列表时不让输入框失焦 */
+    q.onclick=e=>{const it=e.target.closest("[data-mgk]");if(!it)return;MG.sel=it.dataset.mgk;MG.q="";mgClose();mgSelUi()}}
+  const{L,cnt}=mgList();
+  q.innerHTML=L.length?L.slice(0,80).map(d=>`<div class="mgit${d.nw?" nw":""}" role="option" data-mgk="${esc(d.key)}"><div><b>${d.name?esc(d.name):'<span class="warn">未命名</span>'}</b>${d.nw?` <span class="lv warn">新 · ${agoTs(d.nw.first)}</span>`:""}${d.name&&cnt[d.name]>1?` <span class="lv info">同名 ×${cnt[d.name]}</span>`:""}</div><div class="sub">${esc(d.key)}${d.ips.length?" · "+esc(d.ips.slice(0,3).join("、")):""}</div></div>`).join("")+(L.length>80?`<div class="sub" style="padding:6px 8px">还有 ${L.length-80} 个,继续输入缩小范围</div>`:""):'<div class="sub" style="padding:8px">没有匹配的设备</div>';
+  mgPlace()}
+function mgSelUi(){const b=$("#mgSelBox"),go=$("#mgGo");if(!b)return;const d=(MG.cand||[]).find(x=>x.key===MG.sel);
+  b.innerHTML=d?`已选:<b>${esc(devLabel(d)||d.key)}</b> <span class="sub">${esc(d.key)}</span> <button data-mg="clr" aria-label="取消选择">×</button>`:'<span class="sub">还没有选设备</span>';if(go)go.disabled=!d;const inp=$("#mgQ");if(inp)inp.value=""}
 function paintMerge(key){const el=$("#ddMerge");if(!el)return;const ro=S.role==="v"||document.documentElement.dataset.vro==="1";
-  get("/api/devmerge").then(j=>{const mem=j.groups[key]||[],cand=(S.devices||[]).filter(d=>d.key!==key&&!mem.some(m=>m.key===d.key));
+  Promise.all([get("/api/devmerge"),get("/api/devices/new",{days:14}).catch(()=>({rows:[]}))]).then(([j,nd])=>{
+    S.newDev=S.newDev||{};(nd.rows||[]).forEach(r=>{S.newDev[r.key]=r});
+    const mem=j.groups[key]||[],cand=(S.devices||[]).filter(d=>d.key!==key&&!mem.some(m=>m.key===d.key)),sig=key+"|"+JSON.stringify(mem)+"|"+cand.map(d=>d.key).join(",");
+    if(MG.key!==key){MG.sel="";MG.q="";MG.key=key}
+    if(el.dataset.sig===sig||el.contains(document.activeElement))return;   /* 内容没变、或正在输入时不重画,免得输入框 / 列表被刷掉 */
+    el.dataset.sig=sig;MG.cand=cand;mgClose();
     el.innerHTML=(mem.length?`<div class="sub">已并入这台设备的 MAC / IP(它们的流量、访问记录都算在这台名下):</div>`+mem.map(m=>`<div class="lkrow"><span style="flex:1;min-width:0"><b>${esc(m.name||m.key)}</b> <span class="sub">${esc(m.key)}${m.ips.length?" · "+esc(m.ips.join("、")):""}</span></span>${ro?"":`<button data-mg="x" data-a="${esc(m.key)}">拆分</button>`}</div>`).join(""):'<div class="sub">这台设备没有合并其他 MAC / IP。同一台手机 2.4G / 5G 绑了不同 MAC 变成两台设备时,可以在这里把另一个并进来。</div>')
-      +(ro||!cand.length?"":`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><select id="mgSel" aria-label="选择要并进来的设备"><option value="">选择要并进来的设备…</option>${cand.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))} · ${esc(d.key)}</option>`).join("")}</select><button data-mg="a" class="pri">并进这台设备</button><span class="sub">只改归并,历史记录原样保留,拆分后立即恢复</span></div>`);
-    el.onclick=async e=>{const b=e.target.closest("[data-mg]");if(!b)return;try{if(b.dataset.mg==="a"){const a=$("#mgSel").value;if(!a)return;if(!confirm("把所选设备并进「"+$("#ddName").textContent.trim()+"」?它的流量和访问记录会算到这台设备名下(可随时拆分)。"))return;await post("/api/devmerge",{main:key,alias:a,on:true})}else await post("/api/devmerge",{main:key,alias:b.dataset.a,on:false});await loadDevices();loadDevicesTab()}catch(er){alert(er.message)}}}).catch(()=>{el.innerHTML=""})}
+      +(ro||!cand.length?"":`<div class="mgrow"><input id="mgQ" type="search" autocomplete="off" spellcheck="false" placeholder="输入名字 / IP / MAC 查找要合并的设备" aria-label="查找要合并的设备"><span id="mgSelBox"></span><button data-mg="a" id="mgGo" class="pri" disabled>合并设备</button></div><div class="sub" style="margin-top:4px">新设备排在最前;同名的挨在一起。只改归并,历史记录原样保留,拆分后立即恢复</div>`);
+    mgSelUi();
+    const inp=$("#mgQ");if(inp){inp.oninput=()=>{MG.q=inp.value;mgPaintPop()};inp.onfocus=()=>mgPaintPop();inp.onclick=()=>mgPaintPop();inp.onkeydown=e=>{if(e.key==="Escape")mgClose();else if(e.key==="Enter"){e.preventDefault();const f=$("#mgPop .mgit");if(f){MG.sel=f.dataset.mgk;MG.q="";mgClose();mgSelUi()}}}}
+    el.onclick=async e=>{const b=e.target.closest("[data-mg]");if(!b)return;const k=b.dataset.mg;
+      try{if(k==="clr"){MG.sel="";mgSelUi();return}
+        if(k==="a"){const a=MG.sel;if(!a)return;if(!confirm("把所选设备并进「"+$("#ddName").textContent.trim()+"」?它的流量和访问记录会算到这台设备名下(可随时拆分)。"))return;await post("/api/devmerge",{main:key,alias:a,on:true});MG.sel=""}
+        else if(k==="x")await post("/api/devmerge",{main:key,alias:b.dataset.a,on:false});
+        el.dataset.sig="";await loadDevices();loadDevicesTab()}catch(er){alert(er.message)}}}).catch(()=>{el.innerHTML=""})}
+document.addEventListener("click",e=>{if(!e.target.closest("#mgQ,#mgPop"))mgClose()});
+addEventListener("scroll",mgPlace,{passive:true,capture:true});addEventListener("resize",mgPlace);if(window.visualViewport)visualViewport.addEventListener("resize",mgPlace);
 function loadDetail(){
   const key=S.dd,o=base({dev:key});paintMerge(key);
   load("dd_who","/api/summary",{...o,by:"client",limit:5},j=>{const r=j.rows.find(x=>x.key===key)||j.rows[0];

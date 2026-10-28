@@ -278,6 +278,20 @@ try:
         if pg.evaluate("(S.devices||[]).length"):
             pg.evaluate("S.dd=S.devices[0].key;loadDevicesTab()"); pg.wait_for_timeout(1500)
             assert "合并" in pg.inner_text("#ddMerge"), pg.inner_text("#ddMerge")
+            if pg.evaluate("S.devices.length")>1:
+                pg.click("#mgQ"); pg.wait_for_timeout(300)
+                assert pg.locator("#mgPop .mgit").count()>=1, "点输入框就列出候选"
+                n0 = pg.locator("#mgPop .mgit").count()
+                pg.fill("#mgQ","zzzz-no-such"); pg.wait_for_timeout(200); assert pg.locator("#mgPop .mgit").count()==0
+                pg.fill("#mgQ",""); pg.wait_for_timeout(200); assert pg.locator("#mgPop .mgit").count()==n0
+                pg.wait_for_timeout(4500); assert pg.locator("#mgPop .mgit").count()==n0, "刷新后列表不会被刷掉"
+                for vp in ({"width":1280,"height":800},{"width":390,"height":560}):
+                    pg.set_viewport_size(vp); pg.wait_for_timeout(300); pg.click("#mgQ"); pg.wait_for_timeout(300)
+                    r = pg.evaluate("(()=>{const r=document.querySelector('#mgPop').getBoundingClientRect();return [r.top,r.bottom,r.left,r.right]})()")
+                    assert r[0]>=0 and r[1]<=vp["height"]+1 and r[2]>=0 and r[3]<=vp["width"]+1, ("弹出层要在屏幕内", vp, r)
+                pg.set_viewport_size({"width":1280,"height":800})
+                pg.click("#mgPop .mgit"); pg.wait_for_timeout(200)
+                assert pg.locator("#mgGo").is_enabled() and pg.inner_text("#mgGo")=="合并设备"
             pg.evaluate("S.dd='';loadDevicesTab()")
         print("PASS 搜索整行 / 设备合并面板")
         print("PASS 各预设布局独立")
