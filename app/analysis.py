@@ -23,12 +23,40 @@ def _pct(a, b):
     return None if not b else round((a - b) * 100 / b)
 
 
-def compare(con):
-    """近 7 天(含今天)和之前 7 天。"""
+def _day_ok(v):
+    try:
+        time.strptime(str(v), "%Y-%m-%d")
+        return str(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _shift(day, n):
+    """日期字符串 day 往前推 n 天(n 可为负)。用中午避开夏令时。"""
+    t = time.mktime(time.strptime(day, "%Y-%m-%d")) + 12 * 3600
+    return time.strftime("%Y-%m-%d", time.localtime(t - n * 86400))
+
+
+def compare(con, days=7, cur_end=None, prev_end=None):
+    """动态对比窗口:最近 days 天(含今天)和紧挨着它之前的 days 天;也可指定两段同样长度的任意日期(cur_end / prev_end 为各段最后一天)。"""
     w = _web()
     d, r = w.kind_names()
-    cur, prev = _days(6, 0), _days(13, 7)
-    out = {"cur": cur, "prev": prev}
+    try:
+        days = max(1, min(90, int(days)))
+    except (TypeError, ValueError):
+        days = 7
+    today = _days(0, 0)[0]
+    ce = _day_ok(cur_end) or today
+    ce = min(ce, today)
+    cs = _shift(ce, days - 1)
+    pe = _day_ok(prev_end) or _shift(cs, 1)
+    if pe >= cs:                       # 上期不能和本期重叠:退回紧挨着本期之前
+        pe = _shift(cs, 1)
+    ps = _shift(pe, days - 1)
+    cur, prev = (cs, ce), (ps, pe)
+    weekly = days == 7 and ce == today and pe == _shift(cs, 1)
+    nm = ("本周", "上周") if weekly else ("本期", "上期")
+    out = {"cur": cur, "prev": prev, "days": days, "names": list(nm)}
 
     def tot(rng):
         rows = con.execute("SELECT day, node, SUM(up), SUM(down) FROM traffic WHERE day>=? AND day<=? GROUP BY day, node", rng).fetchall()
@@ -43,8 +71,7 @@ def compare(con):
     out["traffic"] = {"cur": a, "prev": b, "delta_pct": _pct(a["total"], b["total"])}
 
     def days_list(rng):
-        t0 = time.mktime(time.strptime(rng[0], "%Y-%m-%d"))
-        return [time.strftime("%Y-%m-%d", time.localtime(t0 + i * 86400 + 3600)) for i in range(7)]
+        return [_shift(rng[0], -i) for i in range(days)]
     out["series"] = {"cur": [a["by_day"].get(x, 0) for x in days_list(cur)], "prev": [b["by_day"].get(x, 0) for x in days_list(prev)],
                      "cur_labels": [x[5:] for x in days_list(cur)], "prev_labels": [x[5:] for x in days_list(prev)]}
 
@@ -75,20 +102,20 @@ def compare(con):
         dd = v["avg"] - o["avg"]
         if (o["avg"] and dd * 100 / o["avg"] >= 30 and dd >= 30) or v["fail"] - o["fail"] >= 10:
             chg.append({"node": n_, "avg": v["avg"], "avg_prev": o["avg"], "fail": v["fail"], "fail_prev": o["fail"]})
-    out["nodes_worse"] = sorted(chg, key=lambda x: -(x["avg"] - x["avg_prev"]))[:6]
+    out["nodes_worse"] = sorted(chg, key=lambda x: -(x["avg"] - x["avg_prev"]))[:30]
 
     def devs(rng):
         return dict(con.execute("SELECT client, SUM(up+down) FROM traffic WHERE day>=? AND day<=? GROUP BY client", rng).fetchall())
     da, db_ = devs(cur), devs(prev)
     macips, stored = devices.ips_by_dev(con), devices.stored_names(con)
     nm = lambda k: devices.NAMES.label(k, macips.get(k, [] if is_mac(k) else [k]), stored) or (macips.get(k) or [k])[0]
-    moves = sorted(((da.get(k, 0) - db_.get(k, 0), k) for k in set(da) | set(db_)), key=lambda x: -abs(x[0]))[:6]
+    moves = sorted(((da.get(k, 0) - db_.get(k, 0), k) for k in set(da) | set(db_)), key=lambda x: -abs(x[0]))[:30]
     out["devices"] = [{"name": nm(k), "delta": dv, "cur": da.get(k, 0), "prev": db_.get(k, 0)} for dv, k in moves if dv]
     ha = {x[0] for x in con.execute("SELECT DISTINCT host FROM traffic WHERE day>=? AND day<=?", cur)}
     hb = {x[0] for x in con.execute("SELECT DISTINCT host FROM traffic WHERE day>=? AND day<=?", prev)}
     new = [h for h in ha - hb if h and not re.match(r"^[0-9a-f:.]+$", h)]
     if new:
-        top = con.execute("SELECT host, SUM(up+down) s FROM traffic WHERE day>=? AND day<=? AND host IN (%s) GROUP BY host ORDER BY s DESC LIMIT 6" % ",".join("?" * min(len(new), 500)),
+        top = con.execute("SELECT host, SUM(up+down) s FROM traffic WHERE day>=? AND day<=? AND host IN (%s) GROUP BY host ORDER BY s DESC LIMIT 30" % ",".join("?" * min(len(new), 500)),
                           list(cur) + new[:500]).fetchall()
         out["new_hosts"] = {"count": len(new), "top": [{"host": h, "bytes": s} for h, s in top]}
     else:
@@ -97,24 +124,25 @@ def compare(con):
     notes = []
     t = out["traffic"]
     if t["delta_pct"] is not None and abs(t["delta_pct"]) >= 25:
-        notes.append(("流量比上周" + ("多" if t["delta_pct"] > 0 else "少") + f" {abs(t['delta_pct'])}%", "info"))
+        notes.append((f"流量比{nm[1]}" + ("多" if t["delta_pct"] > 0 else "少") + f" {abs(t['delta_pct'])}%", "info"))
     rc, rp = out["retrans"]["cur"], out["retrans"]["prev"]
     if rc is not None and rp is not None and rc - rp >= 1:
-        notes.append((f"TCP 重传率 {rp}% → {rc}%,线路 / 上游比上周差", "warn"))
+        notes.append((f"TCP 重传率 {rp}% → {rc}%,线路 / 上游比{nm[1]}差", "warn"))
     wc, wp = out["wan"]["cur"], out["wan"]["prev"]
     if wc and wp and wc["loss"] - wp["loss"] >= 10:
         notes.append((f"到公共 DNS 的 ICMP 丢包 {wp['loss']}% → {wc['loss']}%(常是运营商限速,结合重传率看)", "info"))
     if out["nodes_worse"]:
-        notes.append((f"{len(out['nodes_worse'])} 个节点比上周明显变差(延迟 +30% 以上或失败率 +10 个点)", "warn"))
+        notes.append((f"{len(out['nodes_worse'])} 个节点比{nm[1]}明显变差(延迟 +30% 以上或失败率 +10 个点)", "warn"))
     if out["new_hosts"]["count"] >= 50:
-        notes.append((f"本周新出现 {out['new_hosts']['count']} 个域名,多半是新装了应用或有设备行为变了", "info"))
+        notes.append((f"{nm[0]}新出现 {out['new_hosts']['count']} 个域名,多半是新装了应用或有设备行为变了", "info"))
     out["notes"] = [{"text": x, "level": lv} for x, lv in notes]
     return out
 
 
 def timeline(con, hours=48, until=None):
     """逐小时把 丢包 / 重传 / 节点测速 / 流量 放在一起,标出同时异常的小时并给倾向。"""
-    hours = max(6, min(168, int(hours)))
+    hours = max(6, min(720, int(hours)))
+    step = -(-hours // 168)            # 超过 168 小时按 step 小时聚合,避免时间轴太挤
     now = min(time.time(), float(until)) if until else time.time()
     hrs = [time.strftime("%Y-%m-%d %H", time.localtime(now - i * 3600)) for i in range(hours - 1, -1, -1)]
     first = hrs[0]
@@ -174,10 +202,20 @@ def timeline(con, hours=48, until=None):
                 marks.append(cur)
         else:
             cur = None
+    flag_hours = sum(1 for r in rows if r["verdict"])
+    if step > 1:
+        agg_rows = []
+        for i in range(0, len(rows), step):
+            g = rows[i:i + step]
+            mx = lambda k: max((x[k] for x in g if x[k] is not None), default=None)
+            vs = [x["verdict"] for x in g if x["verdict"]]
+            agg_rows.append({"hour": g[0]["hour"], "loss": mx("loss"), "gw_loss": mx("gw_loss"), "rtt": mx("rtt"), "retrans": mx("retrans"), "node_fail": mx("node_fail"),
+                             "node_avg": mx("node_avg"), "bytes": sum(x["bytes"] for x in g), "flags": sorted({f for x in g for f in x["flags"]}), "verdict": vs[0] if vs else ""})
+        rows = agg_rows
     since = int(now - hours * 3600)
     ev = [{"ts": t, "kind": k, "level": lv, "title": ti} for t, k, lv, ti in
           con.execute("SELECT ts, kind, level, title FROM alerts WHERE ts>=? AND ts<=? AND level IN ('warn','bad') ORDER BY ts DESC LIMIT 30", (since, int(now)))]
-    return {"hours": hours, "rows": rows, "marks": marks[-12:], "events": ev, "median_node_delay": med,
+    return {"hours": hours, "step": step, "flag_hours": flag_hours, "rows": rows, "marks": marks[-12:], "events": ev, "median_node_delay": med,
             "has_wan": bool(L), "has_tcp": bool(ret), "has_nodes": bool(q)}
 
 

@@ -242,6 +242,17 @@ try:
         pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)
         assert pg.locator("#apExp").count()==1
         print("PASS 节点登记地弹窗 / 应用分布导出")
+        # v0.47:故障时间线默认 24 小时可切换;对比窗口可选 / 自定义
+        pg.evaluate("S.tab='security';showTab();secTab('diag',true);loadSecurity()"); pg.wait_for_timeout(2500)
+        assert "24 小时" in pg.inner_text("#tlCtl") and pg.locator("#tlCtl [aria-pressed=true]").inner_text()=="24 小时"
+        pg.click("#tlCtl [data-k='720']"); pg.wait_for_timeout(1500)
+        assert "30 天" in pg.inner_text("#tlNote"), pg.inner_text("#tlNote")
+        pg.click("#cmpSeg [data-k='3']"); pg.wait_for_timeout(1500)
+        assert "本期 vs 上期" in pg.inner_text("#cmpT")
+        pg.click("#cmpSeg [data-k='c']"); pg.wait_for_timeout(500); assert pg.locator("#cmpGo").count()==1
+        pg.click("#cmpSeg [data-k='7']"); pg.wait_for_timeout(1500); assert "本周 vs 上周" in pg.inner_text("#cmpT")
+        pg.click("#tlCtl [data-k='24']"); pg.wait_for_timeout(500)
+        print("PASS 时间线范围 / 动态对比窗口")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

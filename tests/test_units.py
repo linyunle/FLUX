@@ -823,6 +823,26 @@ def test_v046():
     assert "node_geo" in alerts.DEFAULT_RULES and alerts.KINDS["node_geo"]
 
 
+def test_v047():
+    """动态对比窗口 + 长周期时间线聚合。"""
+    import os, tempfile, time
+    from app import analysis, config, db
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db()
+    c = analysis.compare(con)
+    assert c["days"] == 7 and c["names"] == ["本周", "上周"] and len(c["series"]["cur"]) == 7
+    c = analysis.compare(con, 3)
+    assert c["days"] == 3 and c["names"] == ["本期", "上期"] and len(c["series"]["cur"]) == 3 and len(c["series"]["prev"]) == 3
+    assert c["cur"][0] > c["prev"][1] and c["prev"][1] < c["cur"][0]
+    c = analysis.compare(con, 5, cur_end=analysis._shift(analysis._days(0, 0)[0], 10), prev_end=analysis._shift(analysis._days(0, 0)[0], 30))
+    assert c["cur"][1] == analysis._shift(analysis._days(0, 0)[0], 10) and c["prev"][1] == analysis._shift(analysis._days(0, 0)[0], 30) and len(c["series"]["prev"]) == 5
+    c = analysis.compare(con, 5, prev_end=analysis._days(0, 0)[0])     # 重叠 → 退回紧挨着本期之前
+    assert c["prev"][1] == analysis._shift(c["cur"][0], 1)
+    assert analysis.compare(con, 999)["days"] == 90 and analysis.compare(con, "x")["days"] == 7
+    t = analysis.timeline(con, 720)
+    assert t["step"] == 5 and len(t["rows"]) == 144 and analysis.timeline(con, 24)["step"] == 1
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

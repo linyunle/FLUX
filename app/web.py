@@ -1249,7 +1249,7 @@ def q_sessions(con, p):
     return {"rows": rows, "note": "升级到 v0.28.2 之前登录的设备不在这个列表里(它们没有会话号);用「退出所有设备」可以一并清掉。"}
 
 
-GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con)), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48), _until_ts(p))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24), _until_ts(p))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
+GET_ROUTES.update({"/api/lookup": q_lookup, "/api/compare": _q(lambda con, p: analysis.compare(con, one(p, "days", "7"), one(p, "cur_end"), one(p, "prev_end"))), "/api/timeline": _q(lambda con, p: analysis.timeline(con, int(one(p, "hours", "48") or 48), _until_ts(p))), "/api/wifi": _q(lambda con, p: analysis.wifi(con, int(one(p, "hours", "24") or 24), _until_ts(p))), "/api/auth/sessions": _q(q_sessions), "/api/health": _q(lambda con, p: {"checks": health.checks(con), "backups": health.listing()}), "/api/storage": _q(lambda con, p: health.storage(con))})
 POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_nikki_ui(con, body)), "/api/lookup/probe": lambda body: lookup.probe(body), "/api/lookup/test": lambda body: lookup.live_test(body),
     "/api/storage/clean": lambda body: health.clean(body),
     "/api/nklog/cfg": lambda body: _wcon(lambda con: nikkilog.save_cfg(con, body)),

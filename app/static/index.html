@@ -612,9 +612,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card" id="lkCard"><h2>分流检查 <span class="sub">启发式:按内置的常见国内 / 境外域名清单判断,只是排查线索,不是判决</span><span class="sp"></span><span class="sub" id="lkRange">近 7 天</span></h2><div id="lkBody"></div></div>
   </div>
   <div class="sectab" data-st="diag" style="display:none">
-  <div class="card" id="tlCard"><h2>故障时间线 <span class="sub">丢包 / 重传 / 节点测速 / 流量放在同一条时间轴上,标出同时异常的时段</span><span class="sp"></span><span class="sub" id="tlNote"></span></h2><div id="tlBody"></div></div>
+  <div class="card" id="tlCard"><h2>故障时间线 <span class="sub">丢包 / 重传 / 节点测速 / 流量放在同一条时间轴上,标出同时异常的时段</span><span class="sp"></span><span class="sub" id="tlNote"></span></h2><div id="tlCtl" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"></div><div id="tlBody"></div></div>
   <div class="card" id="wfCard"><h2>无线连接事件 <span class="sub" id="wfNote">来自路由器转发的 hostapd 日志</span></h2><div id="wfBody"></div></div>
-  <div class="card" id="cmpCard"><h2>本周 vs 上周 <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpBody"></div></div>
+  <div class="card" id="cmpCard"><h2><span id="cmpT">本周 vs 上周</span> <span class="sub" id="cmpNote">近 7 天和之前 7 天对比</span></h2><div id="cmpCtl" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"></div><div id="cmpBody"></div></div>
   </div>
   <div class="sectab" data-st="rv" style="display:none">
   <div class="card" id="hmCard"><h2>活跃时段热力图 <span class="sub" id="hmSub">周几 × 几点的流量</span><span class="sp"></span><select id="hmDev" aria-label="设备" style="padding:3px 6px"></select></h2><div class="hmctl" id="hmCtl"></div><div id="hmBody"></div></div>
@@ -2465,34 +2465,47 @@ function loadSecTab(){load("secs","/api/secsum",{},j=>{
   $("#secTiles").innerHTML=secTilesH(j);$("#secFinds").innerHTML=secFindsH(j);
   const ig=new Set(ignGet()),vis=j.findings.filter(x=>!(x.level!=="bad"&&ig.has(ignKey(x)))),n=vis.filter(x=>x.level==="bad"||x.level==="warn").length,hasBad=vis.some(x=>x.level==="bad");$("#secLvl").innerHTML=n?`<span class="lv ${hasBad?"bad":"warn"}">${n} 项待处理</span>`:'<span class="lv ok">正常</span>';$("#secAt").textContent=fmtTs(j.at)})}
 const pctTag=(v,inv)=>v==null?"":`<span class="${(inv?v<0:v>0)?"warn":"ok"}" style="margin-left:4px">${v>0?"+":""}${v}%</span>`;
-function loadCompare(){load("cmp","/api/compare",{},j=>{
+S.cmpR=(()=>{try{const v=JSON.parse(localStorage.getItem("flux.cmpR"));if(v&&+v.days>0)return v}catch(e){}return{days:7,custom:false,ce:"",pe:""}})();
+const cmpSave=()=>{try{localStorage.setItem("flux.cmpR",JSON.stringify(S.cmpR))}catch(e){}};
+function cmpCtl(){const r=S.cmpR,c=$("#cmpCtl"),ymdIn=d=>ymd(new Date(Date.now()-d*864e5));
+  c.innerHTML=`<span class="seg" id="cmpSeg"></span>`+(r.custom?`<label class="sub">每段 <input id="cmpDays" type="number" min="1" max="90" value="${r.days}" style="width:60px"> 天</label><label class="sub">本期最后一天 <input type="date" id="cmpCe" value="${r.ce||ymdIn(0)}" max="${ymdIn(0)}"></label><label class="sub">对比期最后一天 <input type="date" id="cmpPe" value="${r.pe||""}" max="${ymdIn(0)}"></label><button id="cmpGo" class="pri">对比</button><span class="sub">两段长度相同,不能重叠;对比期留空 = 紧挨着本期之前</span>`:"");
+  seg($("#cmpSeg"),[[3,"3 天"],[7,"7 天"],[14,"14 天"],[30,"30 天"],["c","自定义"]],r.custom?"c":String(r.days),k=>{if(k==="c"){r.custom=true}else{r.custom=false;r.days=+k;r.ce=r.pe=""}cmpSave();cmpCtl();loadCompare()});
+  if(r.custom){$("#cmpGo").onclick=()=>{r.days=Math.max(1,Math.min(90,+$("#cmpDays").value||7));r.ce=$("#cmpCe").value;r.pe=$("#cmpPe").value;cmpSave();loadCompare()}}}
+function loadCompare(){cmpCtl();const r=S.cmpR;load("cmp","/api/compare",{days:r.days,...(r.custom&&r.ce?{cur_end:r.ce}:{}),...(r.custom&&r.pe?{prev_end:r.pe}:{})},j=>{
+  const N=j.names||["本周","上周"];$("#cmpT").textContent=N[0]+" vs "+N[1];
   const t=j.traffic,s=j.series,mx=Math.max(1,...s.cur,...s.prev);
-  const bars=(arr,labels,c)=>arr.map((v,i)=>`<div class="cb" title="${labels[i]} ${fmt(v)}"><i style="height:${Math.max(2,v*100/mx)}%;background:${c}"></i><span>${labels[i]}</span></div>`).join("");
-  const kv=(l,a,b,u,worse)=>`<div class="kv"><span class="sub">${l}</span><b>${a==null?"–":a+u}</b><span class="sub">上周 ${b==null?"–":b+u}</span>${a!=null&&b!=null&&worse(a,b)?'<span class="warn">变差</span>':""}</div>`;
-  $("#cmpNote").textContent=`${j.cur[0].slice(5)} ~ ${j.cur[1].slice(5)} 对比 ${j.prev[0].slice(5)} ~ ${j.prev[1].slice(5)}`;
-  $("#cmpBody").innerHTML=`${j.notes.length?`<div class="cmpnotes">${j.notes.map(n=>`<div class="lv ${n.level}" style="margin:2px 6px 2px 0">${esc(n.text)}</div>`).join("")}</div>`:'<div class="sub" style="margin-bottom:6px">和上周相比没有明显变化。</div>'}
-  <div class="g2"><div><div class="h3" style="margin-top:0">每日流量 <span class="sub">灰=上周 蓝=本周</span></div><div class="cbars"><div class="cbg">${bars(s.prev,s.prev_labels,"rgba(127,127,127,.45)")}</div><div class="cbg">${bars(s.cur,s.cur_labels,"var(--accent)")}</div></div></div>
+  const bars=(arr,labels,c)=>arr.map((v,i)=>`<div class="cb" title="${labels[i]} ${fmt(v)}"><i style="height:${Math.max(2,v*100/mx)}%;background:${c}"></i><span>${arr.length>14&&i%Math.ceil(arr.length/10)?"":labels[i]}</span></div>`).join("");
+  const kv=(l,a,b,u,worse)=>`<div class="kv"><span class="sub">${l}</span><b>${a==null?"–":a+u}</b><span class="sub">${N[1]} ${b==null?"–":b+u}</span>${a!=null&&b!=null&&worse(a,b)?'<span class="warn">变差</span>':""}</div>`;
+  $("#cmpNote").textContent=`${j.cur[0].slice(5)} ~ ${j.cur[1].slice(5)} 对比 ${j.prev[0].slice(5)} ~ ${j.prev[1].slice(5)}(各 ${j.days} 天)`;
+  $("#cmpBody").innerHTML=`${j.notes.length?`<div class="cmpnotes">${j.notes.map(n=>`<div class="lv ${n.level}" style="margin:2px 6px 2px 0">${esc(n.text)}</div>`).join("")}</div>`:'<div class="sub" style="margin-bottom:6px">和${N[1]}相比没有明显变化。</div>'}
+  <div class="g2"><div><div class="h3" style="margin-top:0">每日流量 <span class="sub">灰=${N[1]} 蓝=${N[0]}</span></div><div class="cbars"><div class="cbg">${bars(s.prev,s.prev_labels,"rgba(127,127,127,.45)")}</div><div class="cbg">${bars(s.cur,s.cur_labels,"var(--accent)")}</div></div></div>
   <div><div class="h3" style="margin-top:0">关键指标</div>${kv("总流量",fmt(t.cur.total),fmt(t.prev.total),"",()=>false)}${t.delta_pct!=null?`<div class="sub">变化 ${pctTag(t.delta_pct)}</div>`:""}
   ${kv("TCP 重传率",j.retrans.cur,j.retrans.prev,"%",(a,b)=>a-b>=1)}${kv("ICMP 丢包",j.wan.cur?j.wan.cur.loss:null,j.wan.prev?j.wan.prev.loss:null,"%",(a,b)=>a-b>=10)}${kv("公网延迟",j.wan.cur?j.wan.cur.rtt:null,j.wan.prev?j.wan.prev.rtt:null," ms",(a,b)=>b&&a>b*1.5)}</div></div>
-  ${j.nodes_worse.length?`<div class="h3">变差的节点</div>${pgTbl("cmpN",["节点","平均延迟","失败率"],j.nodes_worse.map(n=>({c:[nodeFlag(n.node)+esc(n.node),`${n.avg_prev} → <b>${n.avg}</b> ms`,`${n.fail_prev}% → <b>${n.fail}%</b>`],dt:{title:"变差的节点 · "+n.node,lines:[["节点",n.node],["平均延迟(上周 → 本周)",`${n.avg_prev} → ${n.avg} ms`],["失败率(上周 → 本周)",`${n.fail_prev}% → ${n.fail}%`]]}})),{size:6})}`:""}
-  ${j.devices.length?`<div class="h3">流量变化最大的设备</div>${pgTbl("cmpD",["设备","本周","上周","变化"],j.devices.map(d=>({c:[esc(d.name),fmt(d.cur),fmt(d.prev),`<span class="${d.delta>0?"warn":""}">${d.delta>0?"+":"-"}${fmt(Math.abs(d.delta))}</span>`],dt:{title:"设备流量变化 · "+d.name,lines:[["设备",d.name],["本周",fmt(d.cur)],["上周",fmt(d.prev)],["变化",(d.delta>0?"+":"-")+fmt(Math.abs(d.delta))]]}})),{size:6})}`:""}
-  ${j.new_hosts.count?`<div class="h3">本周新出现的域名 <span class="sub">共 ${j.new_hosts.count} 个,流量最多的:</span></div>${pgTbl("cmpH",["域名","流量"],j.new_hosts.top.map(h=>({c:[`<span class="pv">${esc(h.host)}</span>`,fmt(h.bytes)],dt:{title:"本周新出现的域名",lines:[["域名",h.host],["流量",fmt(h.bytes)]],note:"可到「域名」页查询它走什么规则。"}})),{size:8})}`:""}`})}
-function loadTimeline(){load("tl","/api/timeline",(()=>{const c=srCalc();return{hours:c.hours,until:c.until}})(),j=>{
-  $("#tlNote").textContent=j.hours+" 小时";
+  ${j.nodes_worse.length?`<div class="h3">变差的节点</div>${pgTbl("cmpN",["节点","平均延迟","失败率"],j.nodes_worse.map(n=>({c:[nodeFlag(n.node)+esc(n.node),`${n.avg_prev} → <b>${n.avg}</b> ms`,`${n.fail_prev}% → <b>${n.fail}%</b>`],dt:{title:"变差的节点 · "+n.node,lines:[["节点",n.node],[`平均延迟(${N[1]} → ${N[0]})`,`${n.avg_prev} → ${n.avg} ms`],[`失败率(${N[1]} → ${N[0]})`,`${n.fail_prev}% → ${n.fail}%`]]}})),{size:6})}`:""}
+  ${j.devices.length?`<div class="h3">流量变化最大的设备</div>${pgTbl("cmpD",["设备",N[0],N[1],"变化"],j.devices.map(d=>({c:[esc(d.name),fmt(d.cur),fmt(d.prev),`<span class="${d.delta>0?"warn":""}">${d.delta>0?"+":"-"}${fmt(Math.abs(d.delta))}</span>`],dt:{title:"设备流量变化 · "+d.name,lines:[["设备",d.name],[N[0],fmt(d.cur)],[N[1],fmt(d.prev)],["变化",(d.delta>0?"+":"-")+fmt(Math.abs(d.delta))]]}})),{size:6})}`:""}
+  ${j.new_hosts.count?`<div class="h3">${N[0]}新出现的域名 <span class="sub">共 ${j.new_hosts.count} 个,流量最多的:</span></div>${pgTbl("cmpH",["域名","流量"],j.new_hosts.top.map(h=>({c:[`<span class="pv">${esc(h.host)}</span>`,fmt(h.bytes)],dt:{title:N[0]+"新出现的域名",lines:[["域名",h.host],["流量",fmt(h.bytes)]],note:"可到「域名」页查询它走什么规则。"}})),{size:8})}`:""}`})}
+/* 故障时间线:默认 24 小时(实时、画得快),可一键扩到 3 / 7 / 14 / 30 天;超过 7 天自动按几小时聚合 */
+S.tlR=(()=>{try{const v=localStorage.getItem("flux.tlR");if(v)return v}catch(e){}return"24"})();
+const TL_P=[["24","24 小时"],["72","3 天"],["168","7 天"],["336","14 天"],["720","30 天"],["page","跟随页面范围"]];
+function tlArgs(){if(S.tlR==="page"){const c=srCalc();return{hours:c.hours,until:c.until}}return{hours:+S.tlR||24}}
+function tlSet(k){S.tlR=k;try{localStorage.setItem("flux.tlR",k)}catch(e){}loadTimeline()}
+function loadTimeline(){seg($("#tlCtl"),TL_P,S.tlR,tlSet);load("tl","/api/timeline",tlArgs(),j=>{
+  $("#tlNote").textContent=j.hours>=48?`${(j.hours/24).toFixed(j.hours%24?1:0)} 天`+(j.step>1?` · 每格 ${j.step} 小时(取该段最差值)`:" · 每格 1 小时"):j.hours+" 小时";
   if(!j.has_wan&&!j.has_tcp&&!j.has_nodes){$("#tlBody").innerHTML='<div class="empty">还没有足够的数据(面板需要运行一段时间)</div>';return}
   const R=j.rows,W=Math.max(320,$("#tlBody").clientWidth||700),L=44,Rr=8,pw=W-L-Rr,n=R.length,bw=pw/n,cx=i=>L+bw*i+bw/2;
   const lane=(title,key,max,col,fmtv,h)=>{const mxv=Math.max(max,...R.map(r=>r[key]||0),1);
     let g=`<text x="2" y="12" class="tll">${title}</text>`;
     R.forEach((r,i)=>{const v=r[key];if(v==null)return;const bh=Math.max(1,(h-18)*v/mxv),hot=r.flags.length>=1&&((key==="loss"&&r.flags.includes("loss"))||(key==="retrans"&&r.flags.includes("retrans"))||(key==="node_fail"&&r.flags.includes("node")));
-      g+=`<rect x="${L+bw*i+1}" y="${h-bh}" width="${Math.max(1,bw-2)}" height="${bh}" rx="1.5" fill="${hot?"#ff9500":col}" opacity="${hot?1:.55}"><title>${r.hour}:00 ${title} ${fmtv(v)}</title></rect>`});
+      g+=`<rect x="${L+bw*i+1}" y="${h-bh}" width="${Math.max(1,bw-2)}" height="${bh}" rx="1.5" fill="${hot?"#ff9500":col}" opacity="${hot?1:.55}"><title>${r.hour}:00${j.step>1?" 起 "+j.step+" 小时":""} ${title} ${fmtv(v)}</title></rect>`});
     return{svg:g,h}};
   const lanes=[lane("ICMP 丢包 %","loss",30,"#0a84ff",v=>v+"%",46),lane("TCP 重传 %","retrans",5,"#af52de",v=>v+"%",46),lane("节点测速失败 %","node_fail",40,"#34c759",v=>v+"%",46),lane("流量","bytes",1,"#8e8e93",fmt,46)];
   let y=0,svg="";lanes.forEach(l=>{svg+=`<g transform="translate(0 ${y})">${l.svg}</g>`;y+=l.h+10});
-  const every=Math.ceil(n/Math.max(2,Math.floor(pw/56)));R.forEach((r,i)=>{if(i%every===0)svg+=`<text x="${cx(i)}" y="${y+10}" text-anchor="middle" class="tll">${r.hour.slice(5,10)==="" ?"":r.hour.slice(8,10)+"日"+r.hour.slice(11)+"时"}</text>`});
+  const every=Math.ceil(n/Math.max(2,Math.floor(pw/56)));R.forEach((r,i)=>{if(i%every===0)svg+=`<text x="${cx(i)}" y="${y+10}" text-anchor="middle" class="tll">${j.step>1?r.hour.slice(5,10):r.hour.slice(8,10)+"日"+r.hour.slice(11)+"时"}</text>`});
   $("#tlBody").innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${y+16}" class="tlsvg">${svg}</svg>
+  ${j.hours<=48&&j.flag_hours>=2&&S.tlR!=="168"&&S.tlR!=="336"&&S.tlR!=="720"?`<div class="msg warn" style="margin-top:8px">这 ${j.hours} 小时里有 ${j.flag_hours} 个小时出现异常。如果是晚高峰等固定钟点反复出现,24 小时看不出规律,建议<a href="#" data-tlr="168">切到 7 天</a>看是不是每天都这样,或<a href="#" data-tlr="720">30 天</a>看长期趋势。</div>`:""}
   ${j.marks.length?`<div class="h3">同时异常的时段与倾向</div>`+j.marks.slice().reverse().map(m=>`<div class="find" data-tlm="${esc(JSON.stringify([m.from,m.to,m.verdict,m.flags]))}"><span class="lv ${m.flags.length>=2?"warn":"info"}">${m.flags.length>=2?"关联":"单项"}</span><div class="t"><b>${m.from.slice(5)}:00${m.to!==m.from?" ~ "+m.to.slice(5)+":59":""}</b><div class="sub">${esc(m.verdict)}</div></div><span class="go">›</span></div>`).join(""):'<div class="sub" style="margin-top:6px">这段时间没有明显的异常时段 ✓</div>'}
   ${j.events.length?`<div class="h3">同期的警告 / 严重告警</div>`+pgTbl("tlE",["时间","内容"],j.events.map(e=>({c:[`<span class="sub">${fmtTs(e.ts)}</span>`,esc(e.title)],dt:{title:"告警 · "+fmtTs(e.ts),lines:[["时间",fmtTs(e.ts)],["级别",e.level],["类型",e.kind],["内容",e.title]]}})),{size:6}):""}`})}
-document.addEventListener("click",e=>{const f=e.target.closest("[data-tlm]");if(!f)return;let a=[];try{a=JSON.parse(f.dataset.tlm)}catch(x){}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-tlr]");if(t){e.preventDefault();tlSet(t.dataset.tlr);return}const f=e.target.closest("[data-tlm]");if(!f)return;let a=[];try{a=JSON.parse(f.dataset.tlm)}catch(x){}
   openKV("同时异常的时段",[["开始",a[0]+":00"],["结束",a[1]+":59"],["异常项",(a[3]||[]).map(k=>({loss:"ICMP 丢包",retrans:"TCP 重传",node:"节点测速失败"}[k]||k)).join("、")],["倾向",a[2]]])});
 function loadWifi(){load("wf","/api/wifi",(()=>{const c=srCalc();return{hours:c.hours,until:c.until}})(),j=>{
   if(!j.available){$("#wfBody").innerHTML=`<div class="empty">${esc(j.hint||"没有无线事件")}</div>`;return}
@@ -2512,7 +2525,7 @@ function srCalc(){const now=Date.now(),m=S.sr.m;let from,to=now;
     label:m==="custom"?`${dtl2s(from)} ~ ${dtl2s(to)}`:"近 "+(SR_P.find(x=>x[0]===m)||[0,"7 天"])[1]}}
 function srPaint(){const c=srCalc();seg($("#srSeg"),SR_P,S.sr.m,k=>{S.sr.m=k;if(k==="custom"&&!S.sr.from){S.sr.from=toLocalIn(Date.now()-864e5);S.sr.to=toLocalIn(Date.now())}srSave();srPaint();if(k!=="custom")loadSecurity()});
   $("#srCustom").style.display=S.sr.m==="custom"?"flex":"none";if(S.sr.m==="custom"){$("#srFrom").value=S.sr.from||"";$("#srTo").value=S.sr.to||""}
-  $("#srNote").textContent=`${c.label}(${dtl2s(c.from)} ~ ${dtl2s(c.to)})· 分流检查 / 目的地按天统计,故障时间线和无线事件最长显示 7 天,AdGuard 顶部统计周期由 AdGuard 自己决定(这里只过滤「最近被拦截」列表)`;
+  $("#srNote").textContent=`${c.label}(${dtl2s(c.from)} ~ ${dtl2s(c.to)})· 分流检查 / 目的地按天统计,无线事件最长显示 7 天(故障时间线在卡片里单独选范围,默认 24 小时),AdGuard 顶部统计周期由 AdGuard 自己决定(这里只过滤「最近被拦截」列表)`;
   $("#lkRange").textContent=c.label}
 function srSave(){try{localStorage.setItem(SR_K,JSON.stringify(S.sr))}catch(e){}}
 $("#srGo").onclick=()=>{S.sr.from=$("#srFrom").value;S.sr.to=$("#srTo").value;if(!S.sr.from){$("#srNote").textContent="请先选开始时间";return}srSave();srPaint();loadSecurity()};
