@@ -1046,6 +1046,9 @@ q_nodegeo = _q(lambda con, p: nodegeo.api(con))
 
 
 def p_nodegeo_ignore(body):
+    if body.get("server"):          # 忽略 / 恢复共用同一入口地址的全部节点
+        n = _wcon(lambda con: nodegeo.set_ignore_server(con, str(body.get("server"))[:200], bool(body.get("on", True))))
+        return {"ok": True, "count": n}
     node = str(body.get("node") or "")[:120]
     if not node:
         return {"ok": False, "error": "缺少节点名"}
@@ -1104,7 +1107,7 @@ def _audit(path, body):
     elif path == "/api/devmerge":
         detail = f"{'合并' if body.get('on', True) else '拆分'}:{str(body.get('alias') or '')[:40]} → {str(body.get('main') or '')[:40]}(只改归并显示,原始记录不动)"
     elif path == "/api/nodegeo/ignore":
-        detail = f"{'忽略' if body.get('on', True) else '恢复提示'}节点 {str(body.get('node') or '')[:40]}(节点服务器登记地与节点名地区不符的安全提示;登记在中国大陆的属重点关注)"
+        detail = f"{'忽略' if body.get('on', True) else '恢复提示'}" + (f"共用入口 {str(body.get('server'))[:40]} 的全部节点" if body.get("server") else f"节点 {str(body.get('node') or '')[:40]}") + f"(节点服务器登记地与节点名地区不符的安全提示;登记在中国大陆的属重点关注)"
     try:
         _wcon(lambda con: alerts.note(con, "audit", path, t, detail))
     except Exception:

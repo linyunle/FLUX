@@ -31,6 +31,7 @@ CDN_WORDS = ("cloudflare", "akamai", "fastly", "cloudfront", "gcore", "cdn", "ed
 LV_NAME = {"high": "重点关注", "mid": "需核对", "low": "多半是 CDN / 中转"}
 LV_RANK = {"high": 0, "mid": 1, "low": 2}
 IGN_KEY = "nodegeo_ignore"
+MAX_IGN = 400
 
 
 def name_cc(name):
@@ -51,7 +52,7 @@ def _kv_get(con, k, d):
 
 def ignored(con):
     v = _kv_get(con, IGN_KEY, [])
-    return [str(x) for x in v][:200] if isinstance(v, list) else []
+    return [str(x) for x in v][:400] if isinstance(v, list) else []
 
 
 def set_ignore(con, node, on):
@@ -64,6 +65,22 @@ def set_ignore(con, node, on):
     with con:
         con.execute("INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (IGN_KEY, json.dumps(lst, ensure_ascii=False)))
     return lst
+
+
+def set_ignore_server(con, remote, on):
+    """忽略 / 恢复「共用同一个入口地址」的全部节点(中转机场常见:几十个节点同一个入口 IP)。返回影响的节点数。"""
+    remote = str(remote or "")
+    if not remote:
+        return 0
+    names = [n for (n,) in con.execute("SELECT node FROM nodeinfo WHERE remote=?", (remote,))][:200]
+    lst = ignored(con)
+    if on:
+        lst += [n for n in names if n not in lst]
+    else:
+        lst = [x for x in lst if x not in names]
+    with con:
+        con.execute("INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (IGN_KEY, json.dumps(lst[:400], ensure_ascii=False)))
+    return len(names)
 
 
 def level_of(ncc, rcc, asn):
@@ -115,6 +132,11 @@ def scan(con, with_ok=False):
             continue
         out.append({"node": node, "name_cc": ncc, "reg_cc": rcc, "asn": asn, "remote": remote, "level": lv, "level_name": LV_NAME.get(lv, ""),
                     "ignored": node in ign, "why": _why(lv, ncc, rcc, asn, ccn) if lv else ""})
+    cnt = {}
+    for r in out:
+        cnt[r["remote"]] = cnt.get(r["remote"], 0) + 1
+    for r in out:
+        r["shared"] = cnt[r["remote"]]
     out.sort(key=lambda r: (LV_RANK.get(r["level"], 9), r["ignored"], r["node"]))
     return out
 

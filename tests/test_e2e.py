@@ -323,6 +323,8 @@ try:
     ok(isinstance(ng.get("rows"), list) and "cn" in ng and "available" in ng, "节点登记地:接口可用")
     c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": True})
     ok(c == 200 and "测试节点" in r["ignored"], "节点登记地:可忽略")
+    c, r = post("/api/nodegeo/ignore", {"server": "203.0.113.9", "on": True})
+    ok(c == 200 and r["count"] == 0, "节点登记地:按入口批量忽略接口可用")
     c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": False})
     ok(c == 200 and "测试节点" not in r["ignored"], "节点登记地:可恢复")
     gj = None

@@ -818,6 +818,11 @@ def test_v046():
         assert sm["cn"] == 0 and sm["ignored"] == 1
         nodegeo.set_ignore(con, "香港 01", False)
         assert nodegeo.summary(con)["cn"] == 1
+        con.execute("INSERT INTO nodeinfo(node,remote) VALUES('香港 09','1.1.1.1')")        # 同一入口 1.1.1.1 的两个节点
+        assert [x["shared"] for x in nodegeo.scan(con) if x["remote"] == "1.1.1.1"] == [2, 2]
+        assert nodegeo.set_ignore_server(con, "1.1.1.1", True) == 2 and set(nodegeo.ignored(con)) == {"香港 01", "香港 09"}
+        assert nodegeo.summary(con)["cn"] == 0
+        assert nodegeo.set_ignore_server(con, "1.1.1.1", False) == 2 and nodegeo.ignored(con) == [] and nodegeo.set_ignore_server(con, "", True) == 0
     finally:
         geo.lookup = old
     assert "node_geo" in alerts.DEFAULT_RULES and alerts.KINDS["node_geo"]
