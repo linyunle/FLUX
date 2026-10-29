@@ -920,6 +920,29 @@ def test_v047_5():
     devices.set_merge(con, A, B, False); devices.set_merge(con, A, C, False)
 
 
+def test_v048_2():
+    """对比里的节点失败率:qoe.n 只数成功次数,失败率 = fails / (n + fails),不能超过 100%。"""
+    import os, tempfile, time
+    from app import analysis, config, db
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db()
+    cur = time.strftime("%Y-%m-%d %H"); prv = time.strftime("%Y-%m-%d %H", time.localtime(time.time() - 9 * 86400))
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (prv, "好节点", 20, 20 * 100, 0, 0))
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (cur, "好节点", 20, 20 * 100, 0, 0))
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (prv, "变差的", 20, 20 * 100, 0, 0))
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (cur, "变差的", 6, 6 * 400, 0, 14))     # 20 次里 14 次失败
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (prv, "死了的", 20, 20 * 100, 0, 0))
+    con.execute("INSERT INTO qoe(hour,node,n,sum_d,sum_sq,fails) VALUES(?,?,?,?,?,?)", (cur, "死了的", 0, 0, 0, 30))
+    con.commit()
+    w = {x["node"]: x for x in analysis.compare(con, 7)["nodes_worse"]}
+    assert set(w) == {"变差的", "死了的"}, w
+    assert w["变差的"]["fail"] == 70.0 and w["变差的"]["avg"] == 400 and w["变差的"]["avg_prev"] == 100, w
+    assert w["死了的"]["fail"] == 100.0 and w["死了的"]["avg"] == 0, w
+    assert all(x["fail"] <= 100 for x in w.values())
+    tl = analysis.timeline(con, 24)
+    assert max(r["node_fail"] or 0 for r in tl["rows"]) <= 100
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

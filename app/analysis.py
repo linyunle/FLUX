@@ -90,8 +90,9 @@ def compare(con, days=7, cur_end=None, prev_end=None):
     def nodes(rng):
         res = {}
         for node, n, sd, fails in con.execute("SELECT node, SUM(n), SUM(sum_d), SUM(fails) FROM qoe WHERE substr(hour,1,10)>=? AND substr(hour,1,10)<=? GROUP BY node", rng):
-            if n and n >= 10:
-                res[node] = {"avg": round(sd / max(1, n - fails)), "fail": round((fails or 0) * 100 / n, 1), "n": n}
+            tests = (n or 0) + (fails or 0)        # qoe.n 只数成功的测速,失败另记在 fails
+            if tests >= 10:
+                res[node] = {"avg": round(sd / n) if n else None, "fail": round((fails or 0) * 100 / tests, 1), "n": tests}
         return res
     na, nb = nodes(cur), nodes(prev)
     chg = []
@@ -99,10 +100,13 @@ def compare(con, days=7, cur_end=None, prev_end=None):
         o = nb.get(n_)
         if not o:
             continue
-        dd = v["avg"] - o["avg"]
-        if (o["avg"] and dd * 100 / o["avg"] >= 30 and dd >= 30) or v["fail"] - o["fail"] >= 10:
-            chg.append({"node": n_, "avg": v["avg"], "avg_prev": o["avg"], "fail": v["fail"], "fail_prev": o["fail"]})
-    out["nodes_worse"] = sorted(chg, key=lambda x: -(x["avg"] - x["avg_prev"]))[:30]
+        va, oa = v["avg"], o["avg"]
+        dd = (va - oa) if (va is not None and oa is not None) else 0
+        if (oa and dd * 100 / oa >= 30 and dd >= 30) or v["fail"] - o["fail"] >= 10:
+            if va is None:        # 本期一次都没测通:延迟显示为 0,以失败率为准
+                va = 0
+            chg.append({"node": n_, "avg": va, "avg_prev": oa or 0, "fail": v["fail"], "fail_prev": o["fail"]})
+    out["nodes_worse"] = sorted(chg, key=lambda x: (-(x["fail"] - x["fail_prev"]), -(x["avg"] - x["avg_prev"])))[:30]
 
     ipm = dict(con.execute("SELECT ip, mac FROM ipmap").fetchall())
 
@@ -171,8 +175,9 @@ def timeline(con, hours=48, until=None):
     ret = {h: round(rt * 100 / o, 2) for h, o, rt in con.execute("SELECT hour, out, retrans FROM tcp WHERE hour>=? AND hour<=?", (first, last)) if o and o >= 500}
     q = {}
     for h, n, sd, fails in con.execute("SELECT hour, SUM(n), SUM(sum_d), SUM(fails) FROM qoe WHERE hour>=? AND hour<=? GROUP BY hour", (first, last)):
-        if n:
-            q[h] = {"fail": round((fails or 0) * 100 / n, 1), "avg": round(sd / max(1, n - fails))}
+        tests = (n or 0) + (fails or 0)
+        if tests:
+            q[h] = {"fail": round((fails or 0) * 100 / tests, 1), "avg": round(sd / n) if n else 0}
     tr = dict(con.execute("SELECT hour, SUM(up+down) FROM hourly WHERE hour>=? AND hour<=? GROUP BY hour", (first, last)).fetchall())
     base_avg = sorted(v["avg"] for v in q.values() if v["avg"])
     med = base_avg[len(base_avg) // 2] if base_avg else 0
