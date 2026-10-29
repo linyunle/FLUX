@@ -159,6 +159,43 @@ def _disks():
     return out[:12]
 
 
+def dev_map():
+    """{"sda": ["/music(fuseblk)", ...]}:当前挂载的块设备 → 挂载点。USB 盘符每次开机可能互换,
+    日志里只写 sda 看不出是哪块盘,用这个翻译成挂载点。只含容器里看得到的挂载。"""
+    out = {}
+    try:
+        lines = _rd(PROC + "/mounts").splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        f = ln.split()
+        if len(f) < 3 or not f[0].startswith("/dev/"):
+            continue
+        m = re.match(r"/dev/(sd[a-z]+|nvme\d+n\d+|mmcblk\d+|vd[a-z]+)", f[0])
+        if not m:
+            continue
+        mp = f[1].replace("\\040", " ")
+        mp = mp[5:] if mp.startswith("/host/") else mp
+        lab = f"{mp}({f[2]})"
+        if lab not in out.setdefault(m.group(1), []):
+            out[m.group(1)].append(lab)
+    return out
+
+
+def annotate_dev(msg):
+    """把日志里的 `dev sda` / `device sda1` 后面补上这块盘当前挂载在哪,如 `dev sda〔现为 /music(fuseblk)〕`。"""
+    if "sd" not in msg and "nvme" not in msg and "mmc" not in msg and "vd" not in msg:
+        return msg
+    mp = dev_map()
+    if not mp:
+        return msg
+
+    def rep(m):
+        base = re.match(r"sd[a-z]+|nvme\d+n\d+|mmcblk\d+|vd[a-z]+", m.group(2)).group(0)
+        return f"{m.group(1)}{m.group(2)}〔现为 {'、'.join(mp[base][:2])}〕" if base in mp else m.group(0)
+    return re.sub(r"\b(dev |device )((?:sd[a-z]+|nvme\d+n\d+|mmcblk\d+|vd[a-z]+)\d*(?:p\d+)?)", rep, msg, count=1)
+
+
 def sample():
     now = time.time()
     cpu = _cpu()

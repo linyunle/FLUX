@@ -300,7 +300,7 @@ def check(con, cfg, now):
     late = [x for x in hit if x not in early]
 
     def fmt(rows):
-        return "\n".join(f"{time.strftime('%H:%M:%S', time.localtime(x[0]))} [{SEV[x[2]]}] {x[3] + ': ' if x[3] else ''}{x[4][:160]}" for x in rows[:5])
+        return "\n".join(f"{time.strftime('%H:%M:%S', time.localtime(x[0]))} [{SEV[x[2]]}] {x[3] + ': ' if x[3] else ''}{_ann(x[4][:160])}" for x in rows[:5])
     if early:
         alerts.note(con, "syslog_crit", "syslog-boot", f"开机阶段路由器日志出现 {len(early)} 条严重信息(开机后 {boot_min} 分钟内,未推送)",
                     fmt(early) + "\n(开机时磁盘 / USB 刚上电的偶发错误很常见;如果运行中也出现,再留意。可在「设置 → 告警 → 路由器日志严重信息」调整)", level="info", now=now)
@@ -312,6 +312,15 @@ def check(con, cfg, now):
         alerts.fire(con, cfg, "syslog_crit", "warn", "syslog", title, detail, now)
     else:
         alerts.note(con, "syslog_crit", "syslog", title, detail, level="warn", now=now)
+
+
+def _ann(msg):
+    """磁盘错误里的盘符补上当前挂载点(USB 盘符会变);任何异常都原样返回。"""
+    try:
+        from . import sysinfo
+        return sysinfo.annotate_dev(msg)
+    except Exception:
+        return msg
 
 
 def silence(con, now=None):

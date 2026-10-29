@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
+from . import tidy, netstat, agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -22,8 +22,12 @@ def _web():
     return web
 
 
-def _f(level, title, detail=""):
-    return {"level": level, "title": title, "detail": detail}
+def _f(level, title, detail="", act=None):
+    """act = {"label": 按钮文字, "url": POST 接口, "body": 请求体}:前端在这一项旁边显示一个按钮。"""
+    d = {"level": level, "title": title, "detail": detail}
+    if act:
+        d["act"] = act
+    return d
 
 
 def _kv(con, k, d=None):
@@ -150,16 +154,30 @@ def selfcheck(con, now=None):
         out.append(_f("warn", "宽带质量没有数据", "探测线程没有产出样本。看面板日志里「宽带质量探测出错」。"))
     elif wn["at"] and wn["mode"] == "tcp":
         out.append(_f("info", "宽带质量在用 TCP 探测", "容器没有 ICMP 权限,退回用 TCP 53 的连接耗时,丢包判断会粗一些。"))
+    # 近 15 分钟 TCP 重传率:够样本且正常(< 2%)时,网关 ICMP 丢包基本是运营商限速,不再提示;偏高才当作真问题
+    seg = [x for x in list(netstat.SERIES) if x[0] >= now - 900]
+    out_seg, rt_seg = sum(x[1] for x in seg), sum(x[2] for x in seg)
+    rt_rate = rt_seg * 100 / out_seg if out_seg >= 2000 else None
     for t, v in (wn.get("targets") or {}).items():
         if v.get("silent"):
             out.append(_f("info", f"{t} 不回应 ICMP", "这个探测目标从没回应过(被运营商或对方屏蔽),不参与丢包判断。可以忽略。"))
         elif v.get("gw") and v["n"] >= 12 and v["loss"] >= 20:
-            out.append(_f("info", f"到网关的 ICMP 丢包 {v['loss']}%", "运营商常对 PPPoE 对端的 ICMP 限速,不一定是真丢包。对照「TCP 重传率」和「告警」里的 TCP 重传提醒来判断线路是否真的有问题。"))
+            if rt_rate is None:
+                out.append(_f("info", f"到网关的 ICMP 丢包 {v['loss']}%", "运营商常对 PPPoE 对端的 ICMP 限速,不一定是真丢包。对照「TCP 重传率」和「告警」里的 TCP 重传提醒来判断线路是否真的有问题。"))
+            elif rt_rate >= 2:
+                out.append(_f("warn", f"到网关丢包 {v['loss']}%,TCP 重传率也偏高({rt_rate:.1f}%)", "两项同时异常,线路很可能真的有问题:检查光猫 / 网线 / PPPoE 拨号,必要时联系运营商。"))
     try:
+        muted = set(tidy.sub_muted(con))
         for p in providers.fetch():
             at = providers.parse_ts(p["updated"])
+            if p["name"] in muted:
+                continue
             if at and p["has_info"] and now - at > 72 * 3600:
-                out.append(_f("warn", f"订阅「{p['name']}」{int((now - at) // 86400)} 天没更新", "官方用量/到期数据会停在旧值;到 nikki 里手动更新一次看报什么错。"))
+                out.append(_f("warn", f"订阅「{p['name']}」{int((now - at) // 86400)} 天没更新", "官方用量/到期数据会停在旧值;到 nikki 里手动更新一次看报什么错。已经不用这个订阅的话,可以停用提醒(「订阅长时间没更新」告警和这条自检都不再提它)。",
+                              {"label": "不再提醒这个订阅", "url": "/api/submute", "body": {"name": p["name"], "on": True}}))
+        if muted:
+            out.append(_f("info", f"已停用 {len(muted)} 个订阅的「没更新」提醒", "、".join(sorted(muted))[:120],
+                          {"label": "全部恢复提醒", "url": "/api/submute", "body": {"clear": True}}))
     except Exception:
         pass
     named = devices.stored_names(con)
@@ -196,7 +214,9 @@ def selfcheck(con, now=None):
                 m = re.search(r"dev (sd[a-z]+)|device (sd[a-z]+)", r[0]) if r else None
                 n = con.execute("SELECT COUNT(*) FROM syslog WHERE ts>=? AND tag='kernel' AND (msg LIKE '%I/O error, dev %' OR msg LIKE '%EXT4-fs error%')", (int(now) - 86400,)).fetchone()[0] if r else 0
                 if m:
-                    hint = f"同时内核有 {n} 条磁盘错误({m.group(1) or m.group(2)}),很可能是这块硬盘或它的 USB 连接出了问题(之前就有过因此重启)。可以先把它拔掉、不在开机时挂载,观察是否还重启。"
+                    dv = m.group(1) or m.group(2)
+                    mpl = sysinfo.dev_map().get(re.match(r"sd[a-z]+", dv).group(0)) if re.match(r"sd[a-z]+", dv) else None
+                    hint = f"同时内核有 {n} 条磁盘错误({dv}{'，现在挂载的是 ' + '、'.join(mpl[:2]) if mpl else ''}),很可能是这块硬盘或它的 USB 连接出了问题(之前就有过因此重启)。可以先把它拔掉、不在开机时挂载,观察是否还重启。"
             except Exception:
                 pass
             out.append(_f("bad" if rb >= 4 else "warn", f"最近 24 小时路由器重启了 {rb} 次", hint or "看「告警」时间线里的「路由器重启」,再对照路由器日志里重启前的最后几条;常见原因是硬盘 / USB 故障、供电或过热。"))
@@ -224,8 +244,19 @@ def selfcheck(con, now=None):
         if nl["cfg"]["on"]:
             e24 = sum(v for k, v in nl["by_24h"].items() if k.endswith(":错误"))
             if e24 >= 10:
-                tm = nikkilog.top_messages(con, int(now) - 86400, 1)
+                tm = nikkilog.top_messages(con, int(now) - 86400, 1, 3)   # 只在「错误」里挑最多的,不被直连超时这类警告顶替
                 out.append(_f("warn", f"最近 24 小时 nikki 日志有 {e24} 条错误", (f"最多的是:{tm[0]['example'][:90]}(×{tm[0]['n']})。" if tm else "") + "到「设置 → 内核与插件日志」查看;诊断包里附了汇总和最近的明细。"))
+            nz = tidy.noise(con, int(now) - 86400)
+            names = devices.stored_names(con)
+            for x in [r for r in nz["rows"] if not r["ignored"] and r["n"] >= 30][:3]:
+                who = names.get(x["src"].lower()) or x["src"]
+                out.append(_f("info", f"「{who}」24 小时内直连 {x['host']} 失败 {x['n']} 次",
+                              "同一设备反复连同一个地址超时,多半是它自己的云服务暂时不通或被屏蔽,不是面板的问题;会把 nikki 日志顶满。确认没问题可以忽略这一项(只是不再提醒,不影响日志)。",
+                              {"label": "忽略这一项", "url": "/api/noise/ignore", "body": {"key": x["key"], "on": True}}))
+            ig = [r for r in nz["rows"] if r["ignored"]]
+            if ig:
+                out.append(_f("info", f"已忽略 {len(ig)} 项设备直连失败", "、".join(f"{r['src']}→{r['host']}" for r in ig[:3]),
+                              {"label": "全部恢复提醒", "url": "/api/noise/ignore", "body": {"clear": True}}))
             if not nl["rows"] and not nl["mode"]["core"] and not nl["mode"]["app"]:
                 out.append(_f("info", "还没有收到 nikki 日志", "启动后需要一会儿;如果一直没有,看「设置 → 内核与插件日志」里的提示(要在 compose 里只读挂载 /var/log/nikki)。"))
     except Exception:
@@ -339,6 +370,7 @@ def _ext(con, m, full, now, logs=False, dom=False):
         fmt = lambda r: f"{time.strftime('%m-%d %H:%M:%S', time.localtime(r['ts']))} [{r['lv']}] {mm(r['msg'])[:240]}"
         out["nikki_log"] = dict(st, cfg={k: cfg[k] for k in ("on", "level", "days", "max_rows", "dir_eff")},
                                 top_warn_error_24h=[dict(x, example=mm(x["example"])) for x in nikkilog.top_messages(con, since)],
+                                noise_top=[{"src": m(r["src"]), "host": mm(r["host"]), "n": r["n"], "ignored": r["ignored"]} for r in tidy.noise(con, since)["rows"][:8]],
                                 recent_core_warn_and_above=[fmt(r) for r in nikkilog.query(con, "core", 4, "", 60)],
                                 recent_plugin=[fmt(r) for r in nikkilog.query(con, "app", 7, "", 60)])
         if logs:

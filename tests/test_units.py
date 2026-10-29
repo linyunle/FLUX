@@ -958,7 +958,7 @@ def test_v048_4():
         con.execute("INSERT INTO kv(k,v) VALUES('syslog',?)", (json.dumps({"on": True}),))
     import importlib; importlib.reload(alerts)   # 前面的用例会替换 alerts.fire/_allow 且不还原,这里恢复真实实现
     cfg = alerts.load_cfg(con)
-    assert cfg["rules"]["syslog_crit"]["boot_min"] == 10
+    assert cfg["rules"]["syslog_crit"]["boot_min"] == 30
     now = time.time()
     syslog._state["sys_last"] = None
     syslog.check(con, cfg, now)       # 第一次只记基线
@@ -984,6 +984,58 @@ def test_v048_4():
         assert "开机阶段" not in [r[0] for r in con.execute("SELECT title FROM alerts WHERE kind='syslog_crit' ORDER BY id")][-1]
     finally:
         sysinfo.STATE.clear(); sysinfo.STATE.update(old)
+
+
+def test_v049():
+    """v0.49:盘符翻译、设备直连失败归并与忽略、订阅停用、诊断包对比。"""
+    import os, tempfile, time
+    from app import config, db, sysinfo, tidy, syslog
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db()
+    # 盘符 → 挂载点
+    old = sysinfo._rd
+    sysinfo._rd = lambda p: "/dev/sda1 /host/music fuseblk rw 0 0\n/dev/sdb2 /host/sdb2 ext4 rw 0 0\ntmpfs /tmp tmpfs rw 0 0\n" if p.endswith("/mounts") else old(p)
+    try:
+        assert sysinfo.dev_map()["sda"] == ["/music(fuseblk)"]
+        t = sysinfo.annotate_dev("[ 9.1] I/O error, dev sda, sector 5")
+        assert "dev sda〔现为 /music(fuseblk)〕" in t, t
+        assert "〔" not in sysinfo.annotate_dev("I/O error, dev sdz, sector 5")
+        assert "sdb2〔现为 /sdb2(ext4)〕" in sysinfo.annotate_dev("EXT4-fs error (device sdb2): x")
+        assert syslog._ann("hello") == "hello"
+    finally:
+        sysinfo._rd = old
+    # 设备直连失败归并
+    now = int(time.time())
+    with con:
+        for i in range(40):
+            con.execute("INSERT INTO nklog(ts,src,lvl,msg) VALUES(?,?,?,?)", (now - i, "core", 4, "[TCP] dial DIRECT (match IPCIDR/1.2.3.4/32) 192.168.1.5:%d --> i.example.cn:443 error: i/o timeout" % (3000 + i)))
+        con.execute("INSERT INTO nklog(ts,src,lvl,msg) VALUES(?,?,?,?)", (now, "core", 4, "[TCP] dial DIRECT (match X) 192.168.1.6:1 --> b.example.cn:80 error: x"))
+    nz = tidy.noise(con, now - 100)
+    assert nz["rows"][0]["key"] == "192.168.1.5|i.example.cn" and nz["rows"][0]["n"] == 40 and nz["ign_n"] == 0
+    tidy.set_noise(con, "192.168.1.5|i.example.cn", True)
+    nz = tidy.noise(con, now - 100)
+    assert nz["rows"][0]["ignored"] and nz["ign_n"] == 40
+    tidy.set_noise(con, "192.168.1.5|i.example.cn", False)
+    assert tidy.noise_ignored(con) == []
+    tidy.set_sub_mute(con, "红杏云", True)
+    assert tidy.sub_muted(con) == ["红杏云"]
+    tidy.set_sub_mute(con, "红杏云", False)
+    assert tidy.sub_muted(con) == []
+    # 诊断包对比
+    a = {"flux_diag": 1, "created": "t1", "version": "v1", "selfcheck": [{"level": "warn", "title": "24 小时有 31 条错误"}, {"level": "info", "title": "老问题"}], "rss_mb": 60,
+         "db": {"rows": {"syslog": 10}}, "alerts_recent": [{"kind": "syslog_crit", "level": "warn"}]}
+    b = {"flux_diag": 1, "created": "t2", "version": "v2", "selfcheck": [{"level": "bad", "title": "24 小时有 332 条错误"}, {"level": "warn", "title": "新问题"}], "rss_mb": 80,
+         "db": {"rows": {"syslog": 30}}, "alerts_recent": [{"kind": "syslog_crit", "level": "warn"}] * 3}
+    r = tidy.compare(a, b)
+    assert [x["title"] for x in r["finds"]["added"]] == ["新问题"] and [x["title"] for x in r["finds"]["gone"]] == ["老问题"]
+    assert r["finds"]["changed"][0]["worse"] is True
+    m = {x["name"]: x for x in r["metrics"]}
+    assert m["面板占用内存"]["delta"] == 20 and m["路由器日志条数"]["delta"] == 20
+    assert r["alerts"] == [{"kind": "syslog_crit", "a": 1, "b": 3}]
+    try:
+        tidy.compare({}, b); assert False
+    except ValueError:
+        pass
 
 
 if __name__ == "__main__":

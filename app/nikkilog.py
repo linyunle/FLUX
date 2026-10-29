@@ -329,10 +329,10 @@ def clear(con):
 NORM = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b|\b[0-9a-f]{8,}\b|\d+")
 
 
-def top_messages(con, since, n=10):
-    """近 24 小时 警告及以上 的日志按「去掉数字 / IP」后的样子合并,看哪类问题最多。"""
+def top_messages(con, since, n=10, max_lvl=4):
+    """近 24 小时 警告及以上 的日志按「去掉数字 / IP」后的样子合并,看哪类问题最多;max_lvl=3 只看「错误」及以上。"""
     cnt, sample = {}, {}
-    for src, lvl, msg in con.execute("SELECT src,lvl,msg FROM nklog WHERE ts>=? AND lvl<=4", (since,)):
+    for src, lvl, msg in con.execute("SELECT src,lvl,msg FROM nklog WHERE ts>=? AND lvl<=?", (since, max_lvl)):
         k = (src, NORM.sub("#", msg)[:160])
         cnt[k] = cnt.get(k, 0) + 1
         sample.setdefault(k, (lvl, msg))

@@ -1045,6 +1045,35 @@ def p_devmerge(body):
 q_nodegeo = _q(lambda con, p: nodegeo.api(con))
 
 
+def p_noise_ignore(body):
+    from . import tidy
+    if body.get("clear"):
+        for k in _wcon(lambda con: tidy.noise_ignored(con)):
+            _wcon(lambda con, k=k: tidy.set_noise(con, k, False))
+        return {"ok": True}
+    key = str(body.get("key") or "")[:200]
+    if "|" not in key:
+        raise ValueError("缺少 key")
+    return {"ok": True, "ignored": _wcon(lambda con: tidy.set_noise(con, key, bool(body.get("on", True))))}
+
+
+def p_submute(body):
+    from . import tidy
+    if body.get("clear"):
+        for k in _wcon(lambda con: tidy.sub_muted(con)):
+            _wcon(lambda con, k=k: tidy.set_sub_mute(con, k, False))
+        return {"ok": True}
+    name = str(body.get("name") or "")[:100]
+    if not name:
+        raise ValueError("缺少订阅名")
+    return {"ok": True, "muted": _wcon(lambda con: tidy.set_sub_mute(con, name, bool(body.get("on", True))))}
+
+
+def p_diag_compare(body):
+    from . import tidy
+    return tidy.compare(body.get("a"), body.get("b"))
+
+
 def p_nodegeo_ignore(body):
     if body.get("server"):          # 忽略 / 恢复共用同一入口地址的全部节点
         n = _wcon(lambda con: nodegeo.set_ignore_server(con, str(body.get("server"))[:200], bool(body.get("on", True))))
@@ -1249,7 +1278,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -1307,7 +1336,7 @@ POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_ni
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)"})
+AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)", "/api/noise/ignore": "忽略 / 恢复「设备直连失败」自检提示", "/api/submute": "停用 / 恢复订阅「没更新」提醒"})
 
 
 _ctx = threading.local()

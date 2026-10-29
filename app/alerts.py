@@ -82,7 +82,7 @@ DEFAULT_RULES = {
     "wan_ip": {"on": True, "cool_min": 60},
     "wan_loss": {"on": True, "pct": 50, "retrans_pct": 2, "cool_min": 30},
     "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
-    "syslog_crit": {"on": True, "boot_min": 10, "cool_min": 60},
+    "syslog_crit": {"on": True, "boot_min": 30, "cool_min": 60},
     "ups_onbatt": {"on": True, "cool_min": 5},
     "ups_low": {"on": True, "pct": 20, "cool_min": 30},
     "ups_lost": {"on": True, "after_min": 10, "cool_min": 360},

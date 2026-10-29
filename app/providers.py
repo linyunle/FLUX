@@ -174,9 +174,14 @@ def check_stale(con, cfg, now):
         ps = fetch()
     except Exception:
         return
+    try:
+        from . import tidy
+        muted = set(tidy.sub_muted(con))
+    except Exception:
+        muted = set()
     for p in ps:
         at = parse_ts(p["updated"])
-        if not at or not p["has_info"]:
+        if not at or not p["has_info"] or p["name"] in muted:
             continue
         age = now - at
         if age >= r["hours"] * 3600 and alerts._allow("sub_stale", p["name"], r["cool_min"], now):
