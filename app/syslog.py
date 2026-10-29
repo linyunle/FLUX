@@ -288,9 +288,26 @@ def check(con, cfg, now):
     if not hit:
         return
     r = cfg["rules"]["syslog_crit"]
-    lines = "\n".join(f"{time.strftime('%H:%M:%S', time.localtime(x[0]))} [{SEV[x[2]]}] {x[3] + ': ' if x[3] else ''}{x[4][:160]}" for x in hit[:5])
-    title = f"路由器日志出现 {len(hit)} 条严重信息"
-    detail = f"{lines}\n(完整日志在「设置 → 路由器系统日志」)"
+    # 开机后前 N 分钟内的严重日志(磁盘 / USB 刚上电时的偶发读错误等)只记进时间线、不推送
+    boot_min = int(r.get("boot_min") or 0)
+    try:
+        from . import sysinfo
+        up = int(sysinfo.STATE.get("uptime") or 0)
+    except Exception:
+        up = 0
+    boot_ts = now - up if up > 0 else 0
+    early = [x for x in hit if boot_min > 0 and boot_ts and x[0] - boot_ts < boot_min * 60]
+    late = [x for x in hit if x not in early]
+
+    def fmt(rows):
+        return "\n".join(f"{time.strftime('%H:%M:%S', time.localtime(x[0]))} [{SEV[x[2]]}] {x[3] + ': ' if x[3] else ''}{x[4][:160]}" for x in rows[:5])
+    if early:
+        alerts.note(con, "syslog_crit", "syslog-boot", f"开机阶段路由器日志出现 {len(early)} 条严重信息(开机后 {boot_min} 分钟内,未推送)",
+                    fmt(early) + "\n(开机时磁盘 / USB 刚上电的偶发错误很常见;如果运行中也出现,再留意。可在「设置 → 告警 → 路由器日志严重信息」调整)", level="info", now=now)
+    if not late:
+        return
+    title = f"路由器日志出现 {len(late)} 条严重信息"
+    detail = f"{fmt(late)}\n(完整日志在「设置 → 路由器系统日志」)"
     if r["on"] and alerts._allow("syslog_crit", "syslog", r["cool_min"], now):
         alerts.fire(con, cfg, "syslog_crit", "warn", "syslog", title, detail, now)
     else:

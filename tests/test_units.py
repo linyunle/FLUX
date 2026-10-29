@@ -948,6 +948,44 @@ def test_v048_2():
     assert max(r["node_fail"] or 0 for r in tl["rows"]) <= 100
 
 
+def test_v048_4():
+    """开机后前 N 分钟的路由器日志严重信息只记时间线、不推送。"""
+    import os, tempfile, time, json
+    from app import alerts, config, db, syslog, sysinfo
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db")
+    db.init_db(); con = db.open_db()
+    with con:
+        con.execute("INSERT INTO kv(k,v) VALUES('syslog',?)", (json.dumps({"on": True}),))
+    import importlib; importlib.reload(alerts)   # 前面的用例会替换 alerts.fire/_allow 且不还原,这里恢复真实实现
+    cfg = alerts.load_cfg(con)
+    assert cfg["rules"]["syslog_crit"]["boot_min"] == 10
+    now = time.time()
+    syslog._state["sys_last"] = None
+    syslog.check(con, cfg, now)       # 第一次只记基线
+    def add(ts, msg):
+        with con:
+            con.execute("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", (int(ts), "r", 2, "kernel", msg))
+    old = dict(sysinfo.STATE)
+    try:
+        sysinfo.STATE["uptime"] = 223                  # 开机 223 秒:日志时间在开机后 3 分钟内
+        add(now - 20, "I/O error, dev sda, sector 1 op 0x0:(READ)")
+        syslog.check(con, cfg, now)
+        titles = [r[0] for r in con.execute("SELECT title FROM alerts WHERE kind='syslog_crit'")]
+        assert len(titles) == 1 and "开机阶段" in titles[0] and "未推送" in titles[0], titles
+        sysinfo.STATE["uptime"] = 7200                 # 运行两小时后再出现:照常提醒
+        add(now + 5, "I/O error, dev sda, sector 2 op 0x0:(READ)")
+        syslog.check(con, cfg, now + 10)
+        titles = [r[0] for r in con.execute("SELECT title FROM alerts WHERE kind='syslog_crit' ORDER BY id")]
+        assert len(titles) == 2 and "开机阶段" not in titles[1], titles
+        cfg["rules"]["syslog_crit"]["boot_min"] = 0    # 填 0 = 不限制
+        sysinfo.STATE["uptime"] = 100
+        add(now + 20, "I/O error, dev sda, sector 3 op 0x0:(READ)")
+        syslog.check(con, cfg, now + 30)
+        assert "开机阶段" not in [r[0] for r in con.execute("SELECT title FROM alerts WHERE kind='syslog_crit' ORDER BY id")][-1]
+    finally:
+        sysinfo.STATE.clear(); sysinfo.STATE.update(old)
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

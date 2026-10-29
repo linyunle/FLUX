@@ -82,7 +82,7 @@ DEFAULT_RULES = {
     "wan_ip": {"on": True, "cool_min": 60},
     "wan_loss": {"on": True, "pct": 50, "retrans_pct": 2, "cool_min": 30},
     "sub_stale": {"on": True, "hours": 48, "cool_min": 1440},
-    "syslog_crit": {"on": True, "cool_min": 60},
+    "syslog_crit": {"on": True, "boot_min": 10, "cool_min": 60},
     "ups_onbatt": {"on": True, "cool_min": 5},
     "ups_low": {"on": True, "pct": 20, "cool_min": 30},
     "ups_lost": {"on": True, "after_min": 10, "cool_min": 360},
@@ -93,7 +93,7 @@ DEFAULT_RULES = {
 }
 # 阈值范围(防止填出离谱的值)
 LIMITS = {"retrans_pct": (0, 100), "min_mb": (0.1, 1048576), "factor": (1.2, 1000), "cool_min": (1, 10080), "fails": (1, 50),
-          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "cn": (0, 1), "hours": (6, 720), "after_min": (1, 1440)}
+          "pct": (0.5, 100), "count": (10, 100000), "after_sec": (30, 86400), "c": (30, 120), "drop": (5, 90), "days": (1, 90), "grace_min": (1, 1440), "all": (0, 1), "cn": (0, 1), "boot_min": (0, 60), "hours": (6, 720), "after_min": (1, 1440)}
 CHANNEL_TYPES = {"bark": "Bark", "telegram": "Telegram", "wecom": "企业微信机器人", "feishu": "飞书机器人",
                  "ntfy": "ntfy", "webhook": "通用 Webhook(JSON)"}
 DEFAULT_CFG = {"rules": DEFAULT_RULES, "channels": [], "quiet": {"on": False, "start": "23:00", "end": "07:00"}, "disks": {}}
