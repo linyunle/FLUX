@@ -1630,7 +1630,7 @@ function cmSys(sy){const h=sy.hw||{},p=sy.params||{},st=sy.storage||{},c=sy.cfg|
   const mb=b=>b==null?"未知":(b/1048576).toFixed(1)+" MB";
   const kv=[["运行档位",sy.tier_name+(sy.forced?"(手动固定)":"(自动)")],["选择依据",(sy.reasons||[]).join(";")||"–"],["硬件",`${h.arch||"?"} · ${h.cpu||"?"} 核 · 主机内存 ${h.mem_mb==null?"未知":h.mem_mb+" MB"}${h.limit_mb?" · 容器上限 "+h.limit_mb+" MB":""} · 数据盘剩余 ${h.disk_free_mb==null?"未知":h.disk_free_mb+" MB"}`],
     ["采样频率",`连接明细每 ${p.every} 秒;路由器连接表每 ${p.ct} 秒;历史按 ${p.res} 分钟一条`],["保留期",`历史 ${p.hist} 天 · 事件 ${p.events} 天 · 快照前 ${p.pre} 秒 / 后 ${p.post} 秒 · ${p.snap_rows?"快照含 "+p.snap_rows+" 条连接":"快照只含汇总和 Top(轻量档)"}`],
-    ["占用",`历史 ${st.minute_rows??"–"} 行 · 事件 ${st.events??"–"} 个 · 快照 ${st.snaps??"–"} 个(${mb(st.snap_bytes)}) · 估算合计 ${mb(st.est_bytes)} / 预算 ${c.budget_mb} MB`],
+    ["占用",`历史 ${st.minute_rows??"–"} 行 · 事件 ${st.events??"–"} 个 · 快照 ${st.snaps??"–"} 个(${mb(st.snap_bytes)}) · 实际内容合计约 ${mb(st.est_bytes)}(不含 SQLite 文件里未回收的空闲页)/ 预算 ${c.budget_mb} MB`],
     ["基线",`已为 ${sy.anom?sy.anom.baseline_devs:0} 台设备建立基线 · 判定 ${p.baseline==="lite"?"仅整体基线(轻量)":"按小时基线"}`],["最近一次写历史",sy.last_flush?cmT(sy.last_flush):"尚未"]];
   return `<details id="cmSysD" ${CM.open?"open":""} style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><label class="sub">档位 <select id="cmTier" ${ro?"disabled":""}><option value="auto">自动</option><option value="high">高性能</option><option value="standard">标准</option><option value="light">轻量</option></select></label>

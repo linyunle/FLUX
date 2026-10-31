@@ -247,11 +247,13 @@ def flush(bucket, rows, rcol, now):
 
 # ---------------------------------------------------------------- 预算与清理
 def storage(con):
-    mn = con.execute("SELECT COUNT(*) FROM conn_dev_min").fetchone()[0]
-    ev = con.execute("SELECT COUNT(*) FROM conn_event").fetchone()[0]
+    # 按实际内容长度统计(每行另加固定字段和索引开销约 90 字节),比固定估算准
+    mn, mb = con.execute("SELECT COUNT(*), COALESCE(SUM(length(top)+length(dev)),0) FROM conn_dev_min").fetchone()
+    ev, eb = con.execute("SELECT COUNT(*), COALESCE(SUM(length(title)+length(evidence)+length(diag)+length(dev)+length(kind)),0) FROM conn_event").fetchone()
     sn, sb = con.execute("SELECT COUNT(*), COALESCE(SUM(size),0) FROM conn_snap").fetchone()
-    est = mn * 160 + ev * 2000 + sb          # 分钟行按约 160 字节估算
-    return {"minute_rows": mn, "events": ev, "snaps": sn, "snap_bytes": sb, "est_bytes": est, "budget_bytes": CFG["budget_mb"] * 1048576}
+    est = mb + mn * 90 + eb + ev * 120 + sb
+    return {"minute_rows": mn, "events": ev, "snaps": sn, "snap_bytes": sb, "est_bytes": est, "budget_bytes": CFG["budget_mb"] * 1048576,
+            "min_row_bytes": int(mb / mn + 90) if mn else 0}
 
 
 def prune(con, now):
@@ -289,7 +291,7 @@ def prune(con, now):
             d -= 1
             with con:
                 n = con.execute("DELETE FROM conn_dev_min WHERE ts<?", (int(now) - d * 86400,)).rowcount
-            st["est_bytes"] -= n * 160
+            st["est_bytes"] -= n * (st.get("min_row_bytes") or 250)
         STATE["storage_note"] = (STATE["storage_note"] + ";" if STATE["storage_note"] else "") + f"新增数据超出 {CFG['budget_mb']} MB 预算,已清理旧快照 / 缩短历史"
     return st
 
