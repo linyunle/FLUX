@@ -1303,6 +1303,35 @@ def test_v052_connanom():
     con.close()
 
 
+def test_v053_unreplied_and_reopen():
+    """v0.53.3:「无回应」只算 TCP(UDP 单向很常见);同类事件刚结束又出现时接着原事件记。"""
+    import os, tempfile, time, importlib
+    from app import config, db, connmon, connhist
+    importlib.reload(connhist)
+    d = tempfile.mkdtemp(); p = os.path.join(d, "ct")
+    ln = "ipv4 2 udp 17 29 src=192.168.1.5 dst=8.8.8.%d sport=%d dport=53 packets=1 bytes=60 [UNREPLIED] src=8.8.8.%d dst=192.168.1.5 sport=53 dport=%d packets=0 bytes=0 mark=0 zone=0 use=2\n"
+    open(p, "w").write("".join(ln % (i, 4000 + i, i, 4000 + i) for i in range(5))
+                       + "ipv4 2 tcp 6 30 SYN_SENT src=192.168.1.5 dst=1.2.3.4 sport=40000 dport=80 packets=1 bytes=60 [UNREPLIED] src=1.2.3.4 dst=192.168.1.5 sport=80 dport=40000 packets=0 bytes=0 mark=0 zone=0 use=2\n")
+    old = connmon.CT_PATH; connmon.CT_PATH = p
+    try:
+        connmon.read_ct(None, {"192.168.1.5"}, time.time())
+    finally:
+        connmon.CT_PATH = old
+    c = connmon.CT["dev"]["192.168.1.5"]
+    assert c["unreplied"] == 6 and c["tcp_unreplied"] == 1 and c["udp"] == 5
+    config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "r.db"); db.init_db(); con = db.open_db()
+    now = time.time()
+    e1 = connhist.trigger("dev", "conn_anom", "attention", "t", {}, now)
+    connhist.resolve("dev", "conn_anom", now + 100)
+    e2 = connhist.trigger("dev", "conn_anom", "suspect", "t", {}, now + 400)
+    assert e1 == e2 and len(connhist.events(con, "dev", 24, 10, now + 500)) == 1
+    assert connhist.events(con, "dev", 24, 10, now + 500)[0]["level"] == "suspect"
+    connhist.resolve("dev", "conn_anom", now + 500)
+    e3 = connhist.trigger("dev", "conn_anom", "attention", "t", {}, now + 500 + 1000)   # 超过 15 分钟 → 新事件
+    assert e3 != e1
+    con.close()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

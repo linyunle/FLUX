@@ -198,9 +198,9 @@ def detect(dev, now, rows, ct_ok):
     elif conf == "low":
         miss.append("没有可靠的历史基线,无法判断 TCP / UDP 比例和目标是否偏离习惯")
     if ct_ok:
-        bad = cur[6] + cur[7]
-        if bad >= max(30, 0.3 * conns):
-            add("failures", f"正在握手 {cur[6]} 个、对端无回应 {cur[7]} 个(当前共 {conns} 个连接)")
+        bad = max(cur[6], cur[7])           # 两者描述的是同一类 TCP 连接,取大不相加;UDP 没回应不算
+        if bad >= max(30, 0.3 * tcp):
+            add("failures", f"TCP 正在握手 {cur[6]} 个、TCP 对端无回应 {cur[7]} 个(当前 TCP 共 {tcp} 个;UDP 没回应很常见,不计入)")
         if rows:
             un = {}
             tot = 0

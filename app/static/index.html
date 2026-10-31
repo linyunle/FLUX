@@ -261,6 +261,7 @@ body.priv .pv{filter:blur(6px);transition:filter .15s}body.priv .pv:hover{filter
 @media(max-width:820px){#filters #viewSeg{order:-2}#filters #btnPriv{order:-1}}
 /* 手机:所有会实时变化的块高度固定,内容变化不再把页面顶来顶去 */
 .tile .v,.tile .s,.tile .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cmBody .tile .s{white-space:normal}
 #rtDev tr,#rtNode tr,#rtHost tr{height:34px}#rtDev td,#rtNode td,#rtHost td{white-space:nowrap}.pager{height:36px;box-sizing:border-box;flex:none}
 @media(max-width:820px){html,body{overflow-anchor:none}.gcard{min-height:0!important}}
 .stk #tStyle,.stk #tSplit,.stk #tblToggle,.stk #tLegend{display:none}
@@ -1643,7 +1644,7 @@ function cmPaint(o,sy){const el=$("#cmBody"),m=o.metrics;
   const tiles=tile("有连接的设备",m.devices,"")+tile("活跃连接",m.conns,"")+tile("TCP",m.tcp,"")+tile("UDP",m.udp,"")+tile("新建连接 / 秒",m.new_per_s,"")+tile("异常设备",m.abnormal,`可疑 ${m.levels.suspect} · 关注 ${m.levels.attention} · 无法判断 ${m.levels.unknown}`)+tile("1 小时内事件",m.events_1h,"");
   const top=o.top.length?`<div class="scroll"><table><thead><tr><th>设备</th><th class="n">连接</th><th class="n">TCP / UDP</th><th class="n">相对平时</th><th>级别</th><th>触发信号</th></tr></thead><tbody>`+o.top.map(d=>`<tr class="click" data-cmdev="${esc(d.dev)}"><td class="k">${esc(d.name)}</td><td class="n">${d.conns}</td><td class="n">${d.tcp} / ${d.udp}</td><td class="n" title="${d.base_p50==null?"这台设备历史不足,没有基线":"平时同一时段中位 "+d.base_p50+",P95 "+d.base_p95}">${d.dev_pct==null?'<span class="sub">无基线</span>':d.dev_pct+"%"}</td><td>${lvChip(d.level)} <span class="sub">可信度${CONF[d.conf]||"低"}</span></td><td class="sub">${esc(d.signals.join("、")||"–")}</td></tr>`).join("")+"</tbody></table></div>":'<div class="empty">此刻没有设备有连接数据</div>';
   const evs=o.events.length?o.events.map(e=>`<div class="ev click" data-cmev="${e.id}" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="sub">${cmT(e.ts_start)}</span> ${lvChip(e.level)} <b>${esc(e.name)}</b> ${esc(e.title)} <span class="sub">${e.status==="open"?"进行中":"已结束"}</span></div>`).join(""):'<div class="empty">最近 7 天没有异常事件</div>';
-  el.innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">${esc(o.tier_name)}档运行 · 数据 ${o.at?Math.max(0,Math.round(Date.now()/1000-o.at))+" 秒前":"暂无"}。级别只是对比这台设备自己平时习惯的参考,<b>不是攻击判定</b>;「无法判断」表示证据不足,不会硬下结论。</div>${warn}<div class="tiles" style="position:static;margin-bottom:8px">${tiles}</div>
+  el.innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">${esc(o.tier_name)}档运行${o.tier_note?"("+esc(o.tier_note.replace(/^当前为.档:/,""))+")":""} · 数据 ${o.at?Math.max(0,Math.round(Date.now()/1000-o.at))+" 秒前":"暂无"}。级别只是对比这台设备自己平时习惯的参考,<b>不是攻击判定</b>;「无法判断」表示证据不足,不会硬下结论。</div>${warn}<div class="tiles" style="position:static;margin-bottom:8px">${tiles}</div>
   <div class="h3">设备 TOP <span class="sub">按当前连接数,点一行进入这台设备的诊断页</span></div>${top}<div class="h3" style="margin-top:12px">最近异常事件 <span class="sub">点一条看诊断详情</span></div>${evs}${cmSys(sy)}`;
   const t=$("#cmTier");if(t){t.value=sy.forced?sy.cfg.tier:"auto";$("#cmSave").onclick=async()=>{const m=$("#cmMsg");try{await post("/api/connmon/cfg",{tier:t.value,budget_mb:+$("#cmBud").value||300,hist:+$("#cmHist").value||0,events:+$("#cmEvd").value||0});m.className="msg ok";m.textContent="已保存,下一分钟起生效";cmLoad()}catch(e){m.className="msg err";m.textContent=e.message}}}}
 /* 设备诊断页 */

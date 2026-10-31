@@ -1105,12 +1105,11 @@ def q_conns_overview(con, p):
     sysd = connhist.system(con)
     degraded = [x for x in (st["degraded"], sysd["storage_note"], sysd["snap_skipped"], ("路由器连接表读不到:状态类证据无法判断" if st["ct_ok"] is False else ""),
                             ("连接太多,明细只保留了一部分" if st["trunc"] else ""), ("历史写入出错:" + sysd["err"] if sysd["err"] else "")) if x]
-    if sysd["tier"] != "high":
-        degraded.append(f"当前为{sysd['tier_name']}档:" + ("、".join(sysd["reasons"]) or "按资源自动选择"))
+    tier_note = (f"当前为{sysd['tier_name']}档:" + ("、".join(sysd["reasons"]) or "按资源自动选择")) if sysd["tier"] != "high" else ""
     return {"on": st["on"], "at": int(connmon.SNAP["at"]) or None,
             "metrics": {"devices": len(ds), "conns": sum(d["conns"] for d in ds.values()), "tcp": tcp, "udp": udp, "new_per_s": round(sum(d["new"] for d in ds.values()) / itv, 1),
                         "abnormal": ov["attention"] + ov["suspect"] + ov["unknown"], "levels": ov, "events_1h": n1h},
-            "top": top, "events": evs, "degraded": degraded, "tier": sysd["tier"], "tier_name": sysd["tier_name"]}
+            "top": top, "events": evs, "degraded": degraded, "tier_note": tier_note, "tier": sysd["tier"], "tier_name": sysd["tier_name"]}
 
 
 def q_conns_system(con, p):

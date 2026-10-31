@@ -187,7 +187,7 @@ def read_ct(col, known, now):
         k = keyc.get(e["src"])
         if k is None:
             k = keyc[e["src"]] = (col.neigh.key(e["src"]) if col else e["src"])
-        d = dev.setdefault(k, {"tcp": 0, "udp": 0, "states": {}, "unreplied": 0})
+        d = dev.setdefault(k, {"tcp": 0, "udp": 0, "states": {}, "unreplied": 0, "tcp_unreplied": 0})
         if e["proto"] == "tcp":
             d["tcp"] += 1
             d["states"][e["state"] or "?"] = d["states"].get(e["state"] or "?", 0) + 1
@@ -195,6 +195,8 @@ def read_ct(col, known, now):
             d["udp"] += 1
         if e["unreplied"]:
             d["unreplied"] += 1
+            if e["proto"] == "tcp":
+                d["tcp_unreplied"] += 1      # 只有 TCP 没回应才可能是连接失败;UDP 单向(DNS / mDNS / QUIC 被丢弃等)很常见
     CT.update(map=m, dev=dev, other=other)
     STATE.update(ct_ok=True, ct_err="", ct_at=now, ct_n=len(m), ct_trunc=trunc)
 
@@ -298,7 +300,7 @@ def _build(conns, col, now, kindf):
         e = cmap.get(f"{rw[R_PROTO]}|{rw[R_SRC]}|{rw[R_SPORT]}|{rw[R_DPORT]}") if ct_ok else None
         if e:
             rw[R_STATE] = e[0] or ("UDP" if rw[R_PROTO] == "udp" else "")
-            rw[R_UNREP] = e[2]
+            rw[R_UNREP] = bool(e[2]) and rw[R_PROTO] == "tcp"
             rw[R_LINK] = "已确认"
         elif ct_ok:
             rw[R_STATE], rw[R_LINK] = "", "未关联"
@@ -397,7 +399,7 @@ def snapshot(dev="", proto="", q="", state="", node="", sort="age", limit=300, l
         for k, d in sorted(dstat.items(), key=lambda x: -x[1]["conns"])[:50]:
             c = ct_dev.get(k) or {}
             devs.append({"key": k, "name": label(k), "conns": d["conns"], "tcp": d["tcp"], "udp": d["udp"], "new": d["new"], "closed": d["closed"],
-                         "syn_sent": (c.get("states") or {}).get("SYN_SENT", 0), "unreplied": c.get("unreplied", 0), "ct_tcp": c.get("tcp"), "ct_udp": c.get("udp")})
+                         "syn_sent": (c.get("states") or {}).get("SYN_SENT", 0), "unreplied": c.get("tcp_unreplied", 0), "ct_tcp": c.get("tcp"), "ct_udp": c.get("udp")})
     cd = ct_dev.get(dev) if dev else None
     return {"ok": True, "at": int(at), "age": int(now - at) if at else None, "on": STATE["on"],
             "status": {k: STATE[k] for k in ("interval", "ms", "total", "kept", "trunc", "err", "degraded", "ct_ok", "ct_err", "ct_n", "ct_trunc")} | {"ct_at": int(STATE["ct_at"])},

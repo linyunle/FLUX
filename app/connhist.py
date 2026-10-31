@@ -189,7 +189,7 @@ def record(now, dstat, ct_dev, rows, rcol):
         a["closed"] += d["closed"]
         c = ct_dev.get(dev) or {}
         a["syn"] = max(a["syn"], (c.get("states") or {}).get("SYN_SENT", 0))
-        a["unrep"] = max(a["unrep"], c.get("unreplied", 0))
+        a["unrep"] = max(a["unrep"], c.get("tcp_unreplied", 0))
     # 异常前的环形缓冲
     keep = max(4, int(p["pre"] / max(1, p["every"])) + 3)
     for dev, d in dstat.items():
@@ -197,7 +197,7 @@ def record(now, dstat, ct_dev, rows, rcol):
         if r is None or r.maxlen != keep:
             r = RING[dev] = collections.deque(r or (), maxlen=keep)
         c = ct_dev.get(dev) or {}
-        r.append((int(now), d["conns"], d["tcp"], d["udp"], d["new"], d["closed"], (c.get("states") or {}).get("SYN_SENT", 0), c.get("unreplied", 0)))
+        r.append((int(now), d["conns"], d["tcp"], d["udp"], d["new"], d["closed"], (c.get("states") or {}).get("SYN_SENT", 0), c.get("tcp_unreplied", 0)))
     for dev in [k for k, r in RING.items() if k not in dstat and r and now - r[-1][0] > 600]:
         del RING[dev]
 
@@ -328,6 +328,17 @@ def trigger(dev, kind, level, title, evidence, now=None, rows=None, rcol=None, d
                                     (a["level"], json.dumps(evidence, ensure_ascii=False), json.dumps(diag or {}, ensure_ascii=False), a["id"]))
                     return a["id"]
                 p = params()
+                # 刚结束不久(15 分钟内)的同类事件又出现:接着原来的事件记,不另开一条,避免一台设备反复抖动刷出一串事件
+                prev = con.execute("SELECT id,level FROM conn_event WHERE dev=? AND kind=? AND status='closed' AND ts_end>=? ORDER BY id DESC LIMIT 1",
+                                   (dev, kind, int(now) - 900)).fetchone()
+                if prev:
+                    lv = level if {"unknown": 0, "attention": 1, "suspect": 2}.get(level, 0) > {"unknown": 0, "attention": 1, "suspect": 2}.get(prev[1], 0) else prev[1]
+                    with con:
+                        con.execute("UPDATE conn_event SET ts_end=0, status='open', level=?, evidence=?, diag=? WHERE id=?",
+                                    (lv, json.dumps(evidence, ensure_ascii=False), json.dumps(diag or {}, ensure_ascii=False), prev[0]))
+                    ACTIVE[(dev, kind)] = {"id": prev[0], "dev": dev, "kind": kind, "level": lv, "start": now, "last": now, "post_until": now,
+                                           "pre": [], "at": None, "post": [], "done": True}
+                    return prev[0]
                 with con:
                     cur = con.execute("INSERT INTO conn_event(ts_start,ts_end,dev,kind,level,title,evidence,diag,status) VALUES(?,?,?,?,?,?,?,?,?)",
                                       (int(now), 0, dev, kind, level, title[:200], json.dumps(evidence, ensure_ascii=False), json.dumps(diag or {}, ensure_ascii=False), "open"))
