@@ -15,6 +15,7 @@ STATE = {"on": True, "err": "", "checks": 0, "base_at": 0.0, "base_devs": 0, "at
 BASE = {}          # dev -> 基线
 LEVEL = {}         # dev -> 最近一次判定 {level, conf, score, signals, at}
 PENDING = []       # 新出现的「高度可疑」事件,交给告警模块推送
+NOTES = []         # 新开的「需要关注 / 无法判断」事件,只写时间线、不推送
 _streak = {}       # dev -> 连续成立次数
 _clear = {}        # dev -> 开始恢复正常的时间
 _emit = {}         # dev -> 上次写事件的 (level, 时间)
@@ -294,6 +295,9 @@ def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
                 if level == "suspect":
                     PENDING.append({"id": eid, "dev": dev, "title": title, "diag": dg})
                     del PENDING[:-50]
+                elif connhist.LAST["new"]:
+                    NOTES.append({"id": eid, "dev": dev, "title": title, "diag": dg})
+                    del NOTES[:-50]
             _emit[dev] = (level, now)
         for dev in [k for k in LEVEL if k not in dstat]:
             LEVEL.pop(dev, None)

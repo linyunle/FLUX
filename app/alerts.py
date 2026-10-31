@@ -499,7 +499,13 @@ def check_anom(con, cfg, now):
     from . import connanom
     r = cfg["rules"].get("conn_anom") or DEFAULT_RULES["conn_anom"]
     items, connanom.PENDING[:] = list(connanom.PENDING), []
+    notes, connanom.NOTES[:] = list(connanom.NOTES), []
     cache = None
+    for it in notes:
+        cache = cache or _dev_names(con)
+        dg = it["diag"]
+        note(con, "conn_anom", it["dev"], f"连接行为{it['title']}:{_dev_label(con, it['dev'], cache)}",
+             dg["phenomenon"] + "\n证据:" + ";".join(dg["evidence"][:3]) + "\n详情:连接监控中心 → 事件 #" + str(it["id"]), "note", now)
     for it in items:
         cache = cache or _dev_names(con)
         name = _dev_label(con, it["dev"], cache)

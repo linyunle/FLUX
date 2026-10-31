@@ -1646,6 +1646,7 @@ function cmPaint(o,sy){const el=$("#cmBody"),m=o.metrics;
   const evs=o.events.length?o.events.map(e=>`<div class="ev click" data-cmev="${e.id}" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="sub">${cmT(e.ts_start)}</span> ${lvChip(e.level)} <b>${esc(e.name)}</b> ${esc(e.title)} <span class="sub">${e.status==="open"?"进行中":"已结束"}</span></div>`).join(""):'<div class="empty">最近 7 天没有异常事件</div>';
   el.innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">${esc(o.tier_name)}档运行${o.tier_note?"("+esc(o.tier_note.replace(/^当前为.档:/,""))+")":""} · 数据 ${o.at?Math.max(0,Math.round(Date.now()/1000-o.at))+" 秒前":"暂无"}。级别只是对比这台设备自己平时习惯的参考,<b>不是攻击判定</b>;「无法判断」表示证据不足,不会硬下结论。</div>${warn}<div class="tiles" style="position:static;margin-bottom:8px">${tiles}</div>
   <div class="h3">设备 TOP <span class="sub">按当前连接数,点一行进入这台设备的诊断页</span></div>${top}<div class="h3" style="margin-top:12px">最近异常事件 <span class="sub">点一条看诊断详情</span></div>${evs}${cmSys(sy)}`;
+  document.querySelectorAll("#cmBody .tile").forEach(t=>{if(t.querySelector(".l").textContent==="异常设备"&&m.abnormal>0){const c=m.levels.suspect>0?"var(--bad)":"var(--warn)";t.style.borderColor=c;t.querySelector(".v").style.color=c}});
   const t=$("#cmTier");if(t){t.value=sy.forced?sy.cfg.tier:"auto";$("#cmSave").onclick=async()=>{const m=$("#cmMsg");try{await post("/api/connmon/cfg",{tier:t.value,budget_mb:+$("#cmBud").value||300,hist:+$("#cmHist").value||0,events:+$("#cmEvd").value||0});m.className="msg ok";m.textContent="已保存,下一分钟起生效";cmLoad()}catch(e){m.className="msg err";m.textContent=e.message}}}}
 /* 设备诊断页 */
 const CD={dev:"",min:60,metric:"conns",from:"",to:"",lv:"",rows:[],evs:[]};
@@ -1696,7 +1697,7 @@ function cePaint(d){const g=d.diag||{},sn=d.snapshot,ul=a=>(a&&a.length)?`<ul st
 document.addEventListener("click",e=>{const v=e.target.closest("[data-cmev]");if(v){openCE(+v.dataset.cmev);return}const t=e.target.closest("#cmm [data-cmdev]");if(t)openCD(t.dataset.cmdev)});
 $("#cmX").onclick=()=>$("#cmm").classList.remove("open");$("#cdX").onclick=()=>$("#cdm").classList.remove("open");$("#ceX").onclick=()=>$("#cem").classList.remove("open");
 $("#tConn").style.cursor="pointer";$("#tConn").title="点击打开连接监控中心";$("#tConn").onclick=openCM;$("#dvCM").onclick=openCM;
-async function cmBadge(){try{if(document.hidden)return;const o=await get("/api/conns/overview");const m=o.metrics;const s=$("#tConnS");if(m&&m.abnormal>0){s.dataset.ab=1;s.title="有设备连接行为异常,点击查看"}else delete s.dataset.ab;CM.ab=m?m.abnormal:0;updConnSub()}catch(e){}}
+async function cmBadge(){try{if(document.hidden)return;const o=await get("/api/conns/overview");const m=o.metrics;const s=$("#tConnS");CM.ab=m?m.abnormal:0;CM.sus=m?m.levels.suspect:0;const tc=$("#tConn");const col=CM.ab>0?(CM.sus>0?"var(--bad)":"var(--warn)"):"";tc.style.borderColor=col;s.style.color=col;s.title=CM.ab>0?"有设备连接行为异常,点击查看":"";updConnSub()}catch(e){}}
 function updConnSub(){const s=$("#tConnS");if(!S.rt)return;s.textContent=`直连 ${S.rt.conns.direct} · 代理 ${S.rt.conns.proxy}`+(CM.ab?` · ⚠ 异常 ${CM.ab}`:"")}
 setInterval(cmBadge,20000);setTimeout(cmBadge,3000);
 

@@ -106,9 +106,10 @@ def _enabled():
 
 
 def _mem_pressure():
-    """容器内存用量 / 上限(cgroup v2 或 v1);读不到返回 None。"""
-    for cur, mx in (("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max"),
-                    ("/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.limit_in_bytes")):
+    """容器内存用量 / 上限(cgroup v2 或 v1);读不到返回 None。
+    和 docker stats 一样扣掉可回收的文件缓存(inactive_file):SQLite 读写会把缓存撑到接近上限,那不是真正的内存紧张。"""
+    for cur, mx, st, key in (("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.stat", "inactive_file"),
+                             ("/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.limit_in_bytes", "/sys/fs/cgroup/memory/memory.stat", "total_inactive_file")):
         try:
             with open(cur) as f:
                 c = int(f.read().strip())
@@ -116,6 +117,14 @@ def _mem_pressure():
                 m = f.read().strip()
             if m == "max" or int(m) <= 0 or int(m) > 1 << 50:
                 return None
+            try:
+                with open(st) as f:
+                    for ln in f:
+                        if ln.startswith(key + " "):
+                            c = max(0, c - int(ln.split()[1]))
+                            break
+            except (OSError, ValueError):
+                pass
             return c / int(m)
         except (OSError, ValueError):
             continue

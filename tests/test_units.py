@@ -1275,10 +1275,18 @@ def test_v052_connanom():
         connanom.check(t, ds, {}, mkrows(ds["dev1"]["conns"]), rcol, True, label=lambda k: "设备一")
     assert connanom.STATE["err"] == "", connanom.STATE["err"]
     assert connanom.LEVEL["dev1"]["level"] in ("suspect", "attention")
+    assert connanom.PENDING or connanom.NOTES                       # 新事件要么推送、要么写时间线
     ev = connhist.events(con, "dev1", 24, 10, now + 100)
     assert any(e["kind"] == "conn_anom" for e in ev)
     e = [x for x in ev if x["kind"] == "conn_anom"][0]
     assert connhist.event_detail(con, e["id"])["diag"]["advice"]
+    if connanom.NOTES and not connanom.PENDING:                         # 需要关注:只写时间线,不推送
+        importlib.reload(__import__("app.alerts", fromlist=["x"]))
+        from app import alerts as _al
+        sent0 = []; _al.fire = lambda *a, **k: sent0.append(a)
+        _al.check_anom(con, _al.load_cfg(con), now)
+        assert not sent0 and connanom.NOTES == [] and con.execute("SELECT COUNT(*) FROM alerts WHERE kind='conn_anom'").fetchone()[0] >= 1
+        importlib.reload(_al)
     # 恢复:连续正常超过 120 秒 → 事件结束
     for i in range(6, 40):
         t = now + i * 10

@@ -30,6 +30,7 @@ TIERS = {
 }
 ORDER = ["light", "standard", "high"]
 CFG = {"tier": "auto", "budget_mb": 300, "hist": 0, "events": 0}   # 0 = 用档位默认
+LAST = {"new": False}   # 最近一次 trigger 是否新开了事件(False = 更新 / 接着原事件)
 STATE = {"tier": "standard", "since": 0.0, "cand": "", "cand_since": 0.0, "reasons": [], "hw": {}, "hw_at": 0.0, "eval_at": 0.0,
          "err": "", "last_flush": 0, "flush_n": 0, "prune_at": 0.0, "snap_skipped": "", "storage_note": ""}
 _lock = threading.Lock()
@@ -318,6 +319,7 @@ def trigger(dev, kind, level, title, evidence, now=None, rows=None, rcol=None, d
             from . import db
             con = db.open_db()
             try:
+                LAST["new"] = False
                 if a:
                     a["last"] = now
                     rank = {"unknown": 0, "attention": 1, "suspect": 2}
@@ -343,6 +345,7 @@ def trigger(dev, kind, level, title, evidence, now=None, rows=None, rcol=None, d
                     cur = con.execute("INSERT INTO conn_event(ts_start,ts_end,dev,kind,level,title,evidence,diag,status) VALUES(?,?,?,?,?,?,?,?,?)",
                                       (int(now), 0, dev, kind, level, title[:200], json.dumps(evidence, ensure_ascii=False), json.dumps(diag or {}, ensure_ascii=False), "open"))
                 eid = cur.lastrowid
+                LAST["new"] = True
             finally:
                 con.close()
             snap_at = None
