@@ -315,6 +315,8 @@ try:
         assert "设备 TOP" in t or "已关闭" in t
         pg.click("#cmm summary"); pg.wait_for_timeout(300)
         assert "运行档位" in pg.inner_text("#cmBody") and pg.locator("#cmTier").count()==1
+        pg.wait_for_timeout(11500)
+        assert pg.evaluate("document.querySelector('#cmSysD').open") and pg.locator("#cmTier").count()==1, "系统状态展开后不会被自动刷新收起"
         pg.click("#cmX"); assert not pg.evaluate("document.querySelector('#cmm').classList.contains('open')")
         pg.evaluate("document.querySelector('#tConn').click()"); pg.wait_for_timeout(1200)
         assert pg.evaluate("document.querySelector('#cmm').classList.contains('open')"), "点主面板连接数卡片打开监控中心"

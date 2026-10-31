@@ -1622,8 +1622,9 @@ function cmChart(box,rows,ser,evs){
   const bw=Math.max(3,pw/rows.length);g+=rows.map(r=>`<rect x="${X(r.ts)-bw/2}" y="${T}" width="${bw}" height="${ph}" fill="transparent"><title>${esc(cmT(r.ts)+" "+ser.map(x=>x.n+" "+(r[x.k]||0)).join(" · "))}</title></rect>`).join("");
   box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="连接趋势">${g}</svg><div class="sub" style="margin-top:2px">${ser.map(x=>`<span style="margin-right:12px"><i style="display:inline-block;width:10px;height:3px;background:${x.c};vertical-align:middle;margin-right:4px"></i>${x.n}</span>`).join("")}${(evs||[]).length?'<span>虚线 = 异常事件开始</span>':""}</div>`}
 /* 总览 */
-const CM={t:0,j:null};
-async function openCM(){$("#cmm").classList.add("open");await cmLoad();clearInterval(CM.t);CM.t=setInterval(()=>{if(!$("#cmm").classList.contains("open")){clearInterval(CM.t);return}cmLoad()},10000)}
+const CM={t:0,j:null,open:false};
+document.addEventListener("toggle",e=>{if(e.target.id==="cmSysD")CM.open=e.target.open},true);
+async function openCM(){CM.open=false;$("#cmm").classList.add("open");await cmLoad();clearInterval(CM.t);CM.t=setInterval(()=>{if(!$("#cmm").classList.contains("open")){clearInterval(CM.t);return}if(CM.open)return;cmLoad()},10000)}
 async function cmLoad(){const el=$("#cmBody");try{const [o,sy]=await Promise.all([get("/api/conns/overview"),get("/api/conns/system")]);CM.j=o;cmPaint(o,sy)}catch(e){el.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
 function cmSys(sy){const h=sy.hw||{},p=sy.params||{},st=sy.storage||{},c=sy.cfg||{},ro=document.documentElement.dataset.vro==="1";
   const mb=b=>b==null?"未知":(b/1048576).toFixed(1)+" MB";
@@ -1631,7 +1632,7 @@ function cmSys(sy){const h=sy.hw||{},p=sy.params||{},st=sy.storage||{},c=sy.cfg|
     ["采样频率",`连接明细每 ${p.every} 秒;路由器连接表每 ${p.ct} 秒;历史按 ${p.res} 分钟一条`],["保留期",`历史 ${p.hist} 天 · 事件 ${p.events} 天 · 快照前 ${p.pre} 秒 / 后 ${p.post} 秒 · ${p.snap_rows?"快照含 "+p.snap_rows+" 条连接":"快照只含汇总和 Top(轻量档)"}`],
     ["占用",`历史 ${st.minute_rows??"–"} 行 · 事件 ${st.events??"–"} 个 · 快照 ${st.snaps??"–"} 个(${mb(st.snap_bytes)}) · 估算合计 ${mb(st.est_bytes)} / 预算 ${c.budget_mb} MB`],
     ["基线",`已为 ${sy.anom?sy.anom.baseline_devs:0} 台设备建立基线 · 判定 ${p.baseline==="lite"?"仅整体基线(轻量)":"按小时基线"}`],["最近一次写历史",sy.last_flush?cmT(sy.last_flush):"尚未"]];
-  return `<details style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
+  return `<details id="cmSysD" ${CM.open?"open":""} style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><label class="sub">档位 <select id="cmTier" ${ro?"disabled":""}><option value="auto">自动</option><option value="high">高性能</option><option value="standard">标准</option><option value="light">轻量</option></select></label>
   <label class="sub">存储预算 <input id="cmBud" type="number" min="20" max="20000" value="${c.budget_mb}" style="width:80px" ${ro?"disabled":""}> MB</label>
   <label class="sub">历史天数 <input id="cmHist" type="number" min="0" max="90" value="${c.hist}" style="width:60px" ${ro?"disabled":""}></label><label class="sub">事件天数 <input id="cmEvd" type="number" min="0" max="365" value="${c.events}" style="width:60px" ${ro?"disabled":""}></label>
