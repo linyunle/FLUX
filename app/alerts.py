@@ -24,6 +24,7 @@ KINDS = {
     "retrans_high": "重传率偏高",
     "conn_many": "连接数异常",
     "conn_event": "连接异常事件",
+    "conn_anom": "连接行为异常",
     "api_down": "nikki 失联",
     "api_up": "nikki 恢复",
     "quota": "套餐用量",
@@ -65,6 +66,7 @@ DEFAULT_RULES = {
     "node_down": {"on": True, "fails": 3, "cool_min": 60},
     "retrans_high": {"on": True, "pct": 5, "cool_min": 30},
     "conn_many": {"on": True, "count": 500, "cool_min": 60},
+    "conn_anom": {"on": True, "cool_min": 60},
     "api_down": {"on": True, "after_sec": 120, "cool_min": 30},
     "quota": {"on": True, "pct": 80, "cool_min": 1440},
     "group_policy": {"on": True, "cool_min": 1440},
@@ -492,6 +494,23 @@ def check_conns(con, cfg, now):
                  + (f"\n此刻的连接构成:{extra}\n(代理连接看不到真实目标 IP,只有域名;完整明细在「设备 → 连接明细」)" if extra else ""), now)
 
 
+def check_anom(con, cfg, now):
+    """连接行为异常:「高度可疑」才推送;「需要关注」只写进时间线(由 connanom 记录事件,这里补时间线)。"""
+    from . import connanom
+    r = cfg["rules"].get("conn_anom") or DEFAULT_RULES["conn_anom"]
+    items, connanom.PENDING[:] = list(connanom.PENDING), []
+    cache = None
+    for it in items:
+        cache = cache or _dev_names(con)
+        name = _dev_label(con, it["dev"], cache)
+        dg = it["diag"]
+        body = dg["phenomenon"] + "\n证据:" + ";".join(dg["evidence"][:4]) + "\n" + dg["conclusion"] + "\n详情:设备 → 连接事件 #" + str(it["id"])
+        if r.get("on") and _allow("conn_anom", it["dev"], r.get("cool_min", 60), now):
+            fire(con, cfg, "conn_anom", "warn", it["dev"], f"连接行为高度可疑:{name}", body, now)
+        else:
+            note(con, "conn_anom", it["dev"], f"连接行为高度可疑:{name}", body, "note", now)
+
+
 def check_api(con, cfg, now):
     global _api_bad_since, _api_fired
     r = cfg["rules"]["api_down"]
@@ -686,7 +705,7 @@ def check_quota(con, cfg, now):
 
 
 CHECKS = [("new_device", check_new_device), ("traffic_spike", check_traffic_spike), ("node_down", check_nodes),
-          ("retrans_high", check_retrans), ("conn_many", check_conns), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("node_geo", check_node_geo), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry), ("docker", check_docker)]
+          ("retrans_high", check_retrans), ("conn_many", check_conns), ("conn_anom", check_anom), ("api_down", check_api), ("quota", check_quota)] + [("sys", check_sys), ("group_policy", groups.check), ("node_degrade", check_degrade), ("geo_new", check_geo_new), ("node_geo", check_node_geo), ("quota_forecast", check_forecast), ("quota_expire", check_quota_expire), ("prov", check_providers), ("probe", check_probe), ("presence", check_presence), ("wan", check_wan), ("sub_stale", check_sub_stale), ("syslog", check_syslog), ("ups", check_ups), ("expiry", check_expiry), ("docker", check_docker)]
 
 
 def evaluate(con, now=None):

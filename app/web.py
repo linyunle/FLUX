@@ -1058,7 +1058,7 @@ def q_conns(con, p):
 
 def q_conns_trend(con, p):
     from . import connhist
-    return connhist.trend(con, one(p, "dev"), int(one(p, "minutes", "60") or 60))
+    return connhist.trend(con, one(p, "dev"), int(one(p, "minutes", "60") or 60), since=int(one(p, "since", "0") or 0) or None, until=int(one(p, "until", "0") or 0) or None)
 
 
 def q_conns_events(con, p):
@@ -1079,9 +1079,48 @@ def q_conns_event(con, p):
     return d
 
 
+def q_conns_overview(con, p):
+    """主面板:核心指标 + 设备 TOP(带基线偏离和级别)+ 最近异常事件 + 降级提示。"""
+    from . import connhist, connanom
+    now = time.time()
+    cache = alerts._dev_names(con)
+    with connmon._lock:
+        ds = {k: dict(v) for k, v in connmon.DEVSTAT.items()}
+    st = connmon.STATE
+    tcp, udp = sum(d["tcp"] for d in ds.values()), sum(d["udp"] for d in ds.values())
+    itv = max(1, st["interval"])
+    lv = connanom.LEVEL
+    top = []
+    for k, d in sorted(ds.items(), key=lambda kv: -kv[1]["conns"])[:10]:
+        p50, p95, _n, conf, why = connanom.ref(k, now)
+        l = lv.get(k) or {}
+        top.append({"dev": k, "name": alerts._dev_label(con, k, cache), "conns": d["conns"], "tcp": d["tcp"], "udp": d["udp"], "new": d["new"], "closed": d["closed"],
+                    "base_p50": p50, "base_p95": p95, "dev_pct": (round(d["conns"] * 100 / p50) if p50 else None), "conf": l.get("conf") or conf,
+                    "level": l.get("level") or "normal", "signals": [connanom.SIG[x][0] for x in l.get("signals", [])]})
+    evs = connhist.events(con, "", 24 * 7, 8)
+    for e in evs:
+        e["name"] = alerts._dev_label(con, e["dev"], cache)
+    n1h = con.execute("SELECT COUNT(*) FROM conn_event WHERE ts_start>=?", (int(now) - 3600,)).fetchone()[0]
+    ov = connanom.overview()
+    sysd = connhist.system(con)
+    degraded = [x for x in (st["degraded"], sysd["storage_note"], sysd["snap_skipped"], ("路由器连接表读不到:状态类证据无法判断" if st["ct_ok"] is False else ""),
+                            ("连接太多,明细只保留了一部分" if st["trunc"] else ""), ("历史写入出错:" + sysd["err"] if sysd["err"] else "")) if x]
+    if sysd["tier"] != "high":
+        degraded.append(f"当前为{sysd['tier_name']}档:" + ("、".join(sysd["reasons"]) or "按资源自动选择"))
+    return {"on": st["on"], "at": int(connmon.SNAP["at"]) or None,
+            "metrics": {"devices": len(ds), "conns": sum(d["conns"] for d in ds.values()), "tcp": tcp, "udp": udp, "new_per_s": round(sum(d["new"] for d in ds.values()) / itv, 1),
+                        "abnormal": ov["attention"] + ov["suspect"] + ov["unknown"], "levels": ov, "events_1h": n1h},
+            "top": top, "events": evs, "degraded": degraded, "tier": sysd["tier"], "tier_name": sysd["tier_name"]}
+
+
 def q_conns_system(con, p):
-    from . import connhist
-    return connhist.system(con)
+    from . import connhist, connanom
+    out = connhist.system(con)
+    cache = alerts._dev_names(con)
+    out["anom"] = {"overview": connanom.overview(), "baseline_devs": len(connanom.BASE), "err": connanom.STATE["err"], "checks": connanom.STATE["checks"],
+                   "devices": [dict(v, dev=k, name=alerts._dev_label(con, k, cache), signal_names=[connanom.SIG[x][0] for x in v["signals"]])
+                               for k, v in sorted(connanom.LEVEL.items(), key=lambda kv: -kv[1]["score"])[:50]]}
+    return out
 
 
 def p_connmon_cfg(body):
@@ -1237,7 +1276,7 @@ q_wan = _q(lambda con, p: {**wan.snapshot(), "hours": wan.hours(con, 24)})
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo, "/api/nodegeo": q_nodegeo, "/api/devmerge": q_devmerge,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/apps/hosts": q_apphosts, "/api/syslog/groups": _q(lambda con, p: syslog.groups(con, int(one(p, "level", "3") or 3), int(one(p, "hours", "24") or 24), one(p, "q"))), "/api/apps/unknown": q_appunknown, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/conns": _q(q_conns), "/api/conns/trend": _q(q_conns_trend), "/api/conns/events": _q(q_conns_events), "/api/conns/event": _q(q_conns_event), "/api/conns/system": _q(q_conns_system), "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/devices/new": _q(lambda con, p: {"days": int(one(p, "days", "14") or 14), "rows": devices.new_devices(con, int(one(p, "days", "14") or 14))}), "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/apps/hosts": q_apphosts, "/api/syslog/groups": _q(lambda con, p: syslog.groups(con, int(one(p, "level", "3") or 3), int(one(p, "hours", "24") or 24), one(p, "q"))), "/api/apps/unknown": q_appunknown, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/conns": _q(q_conns), "/api/conns/trend": _q(q_conns_trend), "/api/conns/events": _q(q_conns_events), "/api/conns/event": _q(q_conns_event), "/api/conns/system": _q(q_conns_system), "/api/conns/overview": _q(q_conns_overview), "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/devices/new": _q(lambda con, p: {"days": int(one(p, "days", "14") or 14), "rows": devices.new_devices(con, int(one(p, "days", "14") or 14))}), "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST

@@ -37,7 +37,7 @@ TCP_CN = {"ESTABLISHED": "已建立", "SYN_SENT": "正在连接", "SYN_RECV": "�
 
 
 RCOL = {"id": R_ID, "dev": R_DEV, "src": R_SRC, "sport": R_SPORT, "proto": R_PROTO, "dst": R_DST, "dport": R_DPORT, "host": R_HOST, "node": R_NODE,
-        "start": R_START, "up": R_UP, "down": R_DOWN, "state": R_STATE, "link": R_LINK}
+        "start": R_START, "up": R_UP, "down": R_DOWN, "state": R_STATE, "link": R_LINK, "unrep": R_UNREP}
 
 
 def nip(s):
@@ -233,6 +233,8 @@ def feed(conns, col, now, kindf):
             rows, dstat = SNAP["rows"], {k: dict(v) for k, v in DEVSTAT.items()}
         connhist.record(now, dstat, CT["dev"], rows, RCOL)
         connhist.tick(now, dstat, CT["dev"])
+        from . import connanom
+        connanom.check(now, dstat, CT["dev"], rows, RCOL, bool(STATE["ct_ok"]))
     except Exception as e:
         connhist.STATE["err"] = f"{type(e).__name__}: {e}"[:120]
     STATE["ms"] = round(ms, 1)

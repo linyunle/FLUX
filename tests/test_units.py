@@ -1198,6 +1198,111 @@ def test_v051_connhist():
     con.close()
 
 
+def test_v052_connanom():
+    """v0.52:基线、14 类信号、四级判定与可信度、事件生命周期、诊断结构、告警推送。"""
+    import os, tempfile, time, importlib, json
+    from app import config, db, connhist, connanom
+    importlib.reload(connhist); importlib.reload(connanom)
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "a.db"); db.init_db(); con = db.open_db()
+    connhist.STATE.update(tier="high", since=1.0)
+    now = float(int(time.time() // 60) * 60)
+    # 基线:3 天、同一小时稳定在 ~20 个连接
+    hr = time.localtime(now).tm_hour
+    with con:
+        for i in range(1, 3 * 1440):
+            ts = int(now) - i * 60
+            if time.localtime(ts).tm_hour == hr:
+                con.execute("INSERT INTO conn_dev_min(ts,dev,conns,tcp,udp,new,closed,syn,unrep,top) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (ts, "dev1", 18 + i % 5, 15, 5, 4, 4, 0, 0, json.dumps({"d": [["a.com", 5]], "p": [], "n": []})))
+    connanom.compute_base(con, "dev1", now)
+    b = connanom.BASE["dev1"]
+    assert b["n"] > 100 and b["hours"][hr][2] <= 23 and "a.com" in b["hosts"]
+    p50, p95, n95, conf, why = connanom.ref("dev1", now)
+    assert p95 <= 23 and conf in ("medium", "high") and "同一小时" in why
+    p50, p95, n95, conf, why = connanom.ref("nobody", now)
+    assert p95 is None and conf == "low" and "保守" in why
+    R = {"dev": 0, "dst": 1, "host": 2, "dport": 3, "proto": 4, "node": 5, "start": 6, "up": 7, "down": 8, "state": 9, "link": 10, "unrep": 11}
+    def mk(n, host="a.com", port="443", node="HK", unrep=False):
+        return [["dev1", "", host, port, "tcp", node, now - 10, 1, 1, "ESTABLISHED", "已确认", unrep] for _ in range(n)]
+    def feed_ring(dev, series, t0):
+        connhist.RING[dev] = __import__("collections").deque(maxlen=50)
+        for i, (c, new, closed, syn, un) in enumerate(series):
+            connhist.RING[dev].append((int(t0 + i * 10), c, c, 0, new, closed, syn, un))
+    # 正常
+    feed_ring("dev1", [(20, 3, 3, 0, 0)] * 6, now - 60)
+    sig, miss, why, conf = connanom.detect("dev1", now, [[None, now - 10, "", "a.com", "443", "", "HK"]] * 20, True)
+    assert sig == [] and connanom.grade(sig, conf, True)[0] == "normal"
+    # 突增 + 持续高 + 偏离习惯
+    feed_ring("dev1", [(20, 3, 3, 0, 0)] * 3 + [(400, 300, 5, 0, 0)] * 3, now - 60)
+    rows = [[None, now - 10, "", "a.com", "443", "", "HK"]] * 400
+    sig, miss, why, conf = connanom.detect("dev1", now, rows, True)
+    ids = {s["id"] for s in sig}
+    assert {"sudden_growth", "new_rate", "habit_dev"} <= ids, ids
+    lv, sc = connanom.grade(sig, conf, True)
+    assert lv == "suspect" and sc >= 5
+    # 新设备 + 无连接表:不硬下结论
+    feed_ring("newdev", [(20, 3, 3, 0, 0)] * 3 + [(450, 3, 3, 0, 0)] * 3, now - 60)
+    sig, miss, why, conf = connanom.detect("newdev", now, [[None, now - 10, "", "x.com", "443", "", "HK"]] * 450, False)
+    assert conf == "low" and any("连接表" in m for m in miss) and any("基线" in m for m in miss)
+    assert connanom.grade(sig, conf, False)[0] in ("unknown", "attention")
+    assert connanom.grade([{"weight": 2}] * 3, "low", False)[0] == "suspect"
+    # 其他信号
+    feed_ring("dev1", [(300, 5, 5, 0, 0)] * 30, now - 290)
+    rs = [[None, now - 4000, "9.9.%d.%d" % (i // 250, i % 250), "h%d.com" % i, "6881", "", "HK"] for i in range(300)]
+    ids = {s["id"] for s in connanom.detect("dev1", now, rs, True)[0]}
+    assert {"long_unreleased", "many_ips", "many_domains", "port_focus", "sustained_high"} <= ids, ids
+    feed_ring("dev1", [(100, 1, 1, 60, 10)] * 6, now - 60)
+    rs = [[None, now - 5, "", "a.com", "443", "无回应", "HK"] for _ in range(100)]
+    ids = {s["id"] for s in connanom.detect("dev1", now, rs, True)[0]}
+    assert {"failures", "node_anom"} <= ids, ids
+    feed_ring("dev1", [(60, 200, 190, 0, 0)] * 6, now - 60)
+    ids = {s["id"] for s in connanom.detect("dev1", now, [], True)[0]}
+    assert "short_conns" in ids
+    # 诊断结构
+    dg = connanom.diagnose("设备1", "attention", connanom.detect("dev1", now, [], True)[0], [], "x", conf="high", conns=60)
+    assert all(k in dg for k in ("phenomenon", "evidence", "causes", "insufficient", "conclusion", "advice")) and "因果" in dg["conclusion"]
+    # check():连续 2 次才开事件,恢复后结束;高度可疑进入推送队列
+    class Row(list): pass
+    rcol = R
+    def mkrows(n): return [["dev1", "", "9.9.9.9", "443", "tcp", "HK", now - 10, 1, 1, "ESTABLISHED", "已确认", False] for _ in range(n)]
+    connhist.RING.clear(); connanom.LEVEL.clear(); connanom.PENDING.clear()
+    connanom.STATE["base_at"] = now
+    ds = {"dev1": {"conns": 450, "tcp": 450, "udp": 0, "new": 400, "closed": 5}}
+    for i in range(6):
+        t = now + i * 10
+        connhist.RING.setdefault("dev1", __import__("collections").deque(maxlen=50)).append((int(t), 450 if i >= 3 else 20, 450 if i >= 3 else 20, 0, 400 if i >= 3 else 3, 5, 0, 0))
+        ds["dev1"]["conns"] = 450 if i >= 3 else 20
+        connanom.check(t, ds, {}, mkrows(ds["dev1"]["conns"]), rcol, True, label=lambda k: "设备一")
+    assert connanom.STATE["err"] == "", connanom.STATE["err"]
+    assert connanom.LEVEL["dev1"]["level"] in ("suspect", "attention")
+    ev = connhist.events(con, "dev1", 24, 10, now + 100)
+    assert any(e["kind"] == "conn_anom" for e in ev)
+    e = [x for x in ev if x["kind"] == "conn_anom"][0]
+    assert connhist.event_detail(con, e["id"])["diag"]["advice"]
+    # 恢复:连续正常超过 120 秒 → 事件结束
+    for i in range(6, 40):
+        t = now + i * 10
+        connhist.RING["dev1"].append((int(t), 20, 20, 0, 3, 3, 0, 0))
+        ds["dev1"]["conns"] = 20
+        connanom.check(t, ds, {}, mkrows(20), rcol, True, label=lambda k: "设备一")
+    assert ("dev1", "conn_anom") not in connhist.ACTIVE
+    # 告警推送:只有高度可疑进 PENDING,按规则 fire / note
+    importlib.reload(__import__("app.alerts", fromlist=["x"]))
+    from app import alerts
+    sent = []
+    alerts.fire = lambda *a, **k: sent.append(a[2:5])
+    connanom.PENDING.append({"id": 7, "dev": "dev1", "title": "t", "diag": {"phenomenon": "p", "evidence": ["e"], "conclusion": "c"}})
+    cfg = alerts.load_cfg(con)
+    alerts.check_anom(con, cfg, now)
+    assert sent and sent[0][:2] == ("conn_anom", "warn") and connanom.PENDING == []
+    cfg["rules"]["conn_anom"]["on"] = False
+    connanom.PENDING.append({"id": 8, "dev": "dev1", "title": "t", "diag": {"phenomenon": "p", "evidence": ["e"], "conclusion": "c"}})
+    alerts.check_anom(con, cfg, now + 1)
+    assert len(sent) == 1
+    importlib.reload(alerts)
+    con.close()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

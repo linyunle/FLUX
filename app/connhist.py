@@ -413,22 +413,29 @@ def _write_snap(a):
 
 
 # ---------------------------------------------------------------- 查询
-def trend(con, dev="", minutes=60, now=None, maxpts=240):
-    """设备(或全网)连接数趋势。点太多时按时间段聚合:连接数取最大,新增 / 关闭取合计。"""
+def trend(con, dev="", minutes=60, now=None, maxpts=240, since=None, until=None):
+    """设备(或全网)连接数趋势。点太多时按时间段聚合:连接数取最大,新增 / 关闭取合计。since / until 为自定义时间范围(秒级时间戳)。"""
     now = now or time.time()
-    minutes = max(5, min(60 * 24 * 30, int(minutes)))
-    since = int(now) - minutes * 60
-    if dev:
-        rows = con.execute("SELECT ts,conns,tcp,udp,new,closed,syn,unrep FROM conn_dev_min WHERE dev=? AND ts>=? ORDER BY ts", (dev, since)).fetchall()
+    if since:
+        until = int(until or now)
+        since = int(since)
+        if until <= since:
+            until = since + 300
+        minutes = max(5, min(60 * 24 * 90, (until - since) // 60))
     else:
-        rows = con.execute("SELECT ts,SUM(conns),SUM(tcp),SUM(udp),SUM(new),SUM(closed),SUM(syn),SUM(unrep) FROM conn_dev_min WHERE ts>=? GROUP BY ts ORDER BY ts", (since,)).fetchall()
+        minutes = max(5, min(60 * 24 * 30, int(minutes)))
+        since, until = int(now) - minutes * 60, int(now) + 60
+    if dev:
+        rows = con.execute("SELECT ts,conns,tcp,udp,new,closed,syn,unrep FROM conn_dev_min WHERE dev=? AND ts>=? AND ts<=? ORDER BY ts", (dev, since, until)).fetchall()
+    else:
+        rows = con.execute("SELECT ts,SUM(conns),SUM(tcp),SUM(udp),SUM(new),SUM(closed),SUM(syn),SUM(unrep) FROM conn_dev_min WHERE ts>=? AND ts<=? GROUP BY ts ORDER BY ts", (since, until)).fetchall()
     step = max(1, -(-len(rows) // maxpts)) if rows else 1
     out = []
     for i in range(0, len(rows), step):
         g = rows[i:i + step]
         out.append({"ts": g[0][0], "conns": max(x[1] for x in g), "tcp": max(x[2] for x in g), "udp": max(x[3] for x in g),
                     "new": sum(x[4] for x in g), "closed": sum(x[5] for x in g), "syn": max(x[6] for x in g), "unrep": max(x[7] for x in g)})
-    return {"dev": dev, "minutes": minutes, "res_min": params()["res"], "step": step, "rows": out}
+    return {"dev": dev, "minutes": minutes, "since": since, "until": until, "res_min": params()["res"], "step": step, "rows": out}
 
 
 def _ev_row(r):

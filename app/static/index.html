@@ -2176,7 +2176,7 @@ let NKAPI="",NKUI={host:"",port:"",path:""};
 function nkPanelUrl(){try{const u=new URL(NKAPI),h=NKUI.host||location.hostname,p=NKUI.port||u.port,pa=NKUI.path||"/ui/";return location.protocol+"//"+(h.includes(":")&&!h.startsWith("[")?"["+h+"]":h)+(p?":"+p:"")+pa}catch(e){return""}}
 function nuFill(){$("#nuHost").value=NKUI.host;$("#nuPort").value=NKUI.port;$("#nuPath").value=NKUI.path;$("#nuPrev").textContent="当前链接:"+(nkPanelUrl()||"(未读到 nikki API 端口)");$("#nuMsg").textContent=""}
 $("#nuSave").onclick=async()=>{const m=$("#nuMsg");m.className="msg";try{const j=await post("/api/nikkiui",{host:$("#nuHost").value,port:$("#nuPort").value,path:$("#nuPath").value});NKUI=j;nuFill();m.className="msg ok";m.textContent="已保存"}catch(e){m.className="msg err";m.textContent=e.message}};
-const MUTABLE=["wan_loss","retrans_high","conn_many","traffic_spike","node_degrade","sub_stale","sys_temp","sys_mem","sys_conntrack","geo_new"];
+const MUTABLE=["wan_loss","retrans_high","conn_many","conn_anom","traffic_spike","node_degrade","sub_stale","sys_temp","sys_mem","sys_conntrack","geo_new"];
 function alertActs(r){const a=[];
   if(r.kind==="sub_stale"&&nkPanelUrl())a.push(`<a href="${esc(nkPanelUrl())}" target="_blank" rel="noopener" data-aact="nk">在 nikki 里更新订阅 ↗</a>`);
   if(MUTABLE.includes(r.kind)&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="mute" data-k="${esc(r.kind)}">不再提醒这类</a>`);
@@ -2248,6 +2248,7 @@ const RULE_META=[
  ["node_down","节点故障 / 恢复","正在使用的节点(近 6 小时有流量或当前被选中),nikki 对它的测速连续失败",[["fails","连续失败","次"],["cool_min","同一节点间隔","分钟"]]],
  ["retrans_high","TCP 重传率偏高","最近 5 分钟路由器整体的 TCP 重传率(不分设备)",[["pct","阈值","%"],["cool_min","间隔","分钟"]]],
  ["conn_many","连接数异常","单台设备的并发连接数",[["count","连接数","个"],["cool_min","同一设备间隔","分钟"]]],
+ ["conn_anom","连接行为异常","对比设备平时习惯,高度可疑才推送",[["cool_min","同一设备间隔","分钟"]]],
  ["api_down","nikki 失联","面板连不上 nikki 的 API",[["after_sec","持续","秒"],["cool_min","间隔","分钟"]]],
  ["node_degrade","节点变差","正在使用的节点,近 24 小时评分比过去一周平时低了阈值以上,且评分低于 70(评分见「订阅」页)",[["drop","下降","分"],["cool_min","同一节点间隔","分钟"]]],
  ["node_geo","节点登记地不符","节点服务器 IP 登记的国家与节点名里的地区对不上时提醒;登记在中国大陆(名字却写境外)是重点关注(警告级)。多半是中转 / CDN 的只记录在回看里。可在「安全 → 回看 → 节点所在地」里忽略某个节点;「只提醒大陆」=1 时只推登记在大陆的。这个开关管记录和推送",[["cn","只提醒登记在大陆的(0 = 全部不符的,1 = 只大陆)",""],["cool_min","同一节点间隔","分钟"]]],
