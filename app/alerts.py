@@ -23,6 +23,7 @@ KINDS = {
     "node_up": "节点恢复",
     "retrans_high": "重传率偏高",
     "conn_many": "连接数异常",
+    "conn_event": "连接异常事件",
     "api_down": "nikki 失联",
     "api_up": "nikki 恢复",
     "quota": "套餐用量",
@@ -476,6 +477,16 @@ def check_conns(con, cfg, now):
                 extra = connmon.brief(key)
             except Exception:
                 extra = ""
+            try:
+                from . import connhist, connmon
+                with connmon._lock:
+                    rows = list(connmon.SNAP["rows"])
+                eid = connhist.trigger(key, "conn_many", "attention", f"并发连接数 {v['conns']}(阈值 {int(r['count'])})",
+                                       {"conns": v["conns"], "threshold": int(r["count"]), "summary": extra}, now, rows, connmon.RCOL)
+                if eid:
+                    note(con, "conn_event", key, f"连接异常事件 #{eid}:{name}", f"并发连接 {v['conns']};现场快照在「设备 → 连接事件」", "note", now)
+            except Exception:
+                pass
             fire(con, cfg, "conn_many", "warn", key, f"连接数异常:{name}",
                  f"这台设备此刻有 {v['conns']} 个并发连接(阈值 {int(r['count'])})。常见原因:BT/PT 下载、扫描类软件、被入侵的设备。"
                  + (f"\n此刻的连接构成:{extra}\n(代理连接看不到真实目标 IP,只有域名;完整明细在「设备 → 连接明细」)" if extra else ""), now)

@@ -36,6 +36,10 @@ TCP_CN = {"ESTABLISHED": "已建立", "SYN_SENT": "正在连接", "SYN_RECV": "�
 (R_ID, R_DEV, R_SRC, R_SPORT, R_PROTO, R_DST, R_DPORT, R_HOST, R_NODE, R_RULE, R_START, R_UP, R_DOWN, R_KIND, R_DNS, R_STATE, R_LINK, R_UNREP) = range(18)
 
 
+RCOL = {"id": R_ID, "dev": R_DEV, "src": R_SRC, "sport": R_SPORT, "proto": R_PROTO, "dst": R_DST, "dport": R_DPORT, "host": R_HOST, "node": R_NODE,
+        "start": R_START, "up": R_UP, "down": R_DOWN, "state": R_STATE, "link": R_LINK}
+
+
 def nip(s):
     """IPv6 统一成压缩写法(conntrack 里是补零的长写法,nikki / 邻居表里是压缩写法)。"""
     s = (s or "").strip()
@@ -61,13 +65,21 @@ def load_cfg(con):
     c = _kv_get(con, "connmon", {}) or {}
     STATE["on"] = bool(c.get("on", True)) if isinstance(c, dict) else True
     STATE["cfg_at"] = time.time()
-    return {"on": STATE["on"]}
+    from . import connhist
+    connhist.load_cfg(c if isinstance(c, dict) else {})
+    return {"on": STATE["on"], **connhist.cfg_out()}
 
 
 def save_cfg(con, body):
-    from .insight import _kv_set
-    on = bool(body.get("on", True))
-    _kv_set(con, "connmon", {"on": on})
+    from .insight import _kv_get, _kv_set
+    from . import connhist
+    old = _kv_get(con, "connmon", {}) or {}
+    on = bool(body.get("on", old.get("on", True)))
+    new = {"on": on}
+    for k in ("tier", "budget_mb", "hist", "events"):
+        new[k] = body[k] if k in body else old.get(k, "auto" if k == "tier" else 0)
+    _kv_set(con, "connmon", new)
+    connhist.load_cfg(new)
     STATE["on"] = on
     STATE["cfg_at"] = time.time()
     if not on:
@@ -76,7 +88,7 @@ def save_cfg(con, body):
             DEVSTAT.clear()
             _prev.clear()
             CT.update(map={}, dev={}, other=0)
-    return {"on": on}
+    return {"on": on, **connhist.cfg_out()}
 
 
 def _enabled():
@@ -200,6 +212,10 @@ def feed(conns, col, now, kindf):
     """realtime 循环每次读到连接后调用。自己限速、自己兜底异常。"""
     if not _enabled():
         return
+    from . import connhist
+    base = connhist.params()["every"]
+    if STATE["interval"] < base:
+        STATE["interval"] = base
     if now - STATE["at"] < STATE["interval"]:
         return
     t0 = time.perf_counter()
@@ -209,6 +225,16 @@ def feed(conns, col, now, kindf):
     except Exception as e:
         STATE["err"] = f"{type(e).__name__}: {e}"[:120]
     ms = (time.perf_counter() - t0) * 1000
+    try:
+        from . import connhist
+        connhist.SLOW.append(ms)
+        connhist.evaluate(now, _mem_pressure())
+        with _lock:
+            rows, dstat = SNAP["rows"], {k: dict(v) for k, v in DEVSTAT.items()}
+        connhist.record(now, dstat, CT["dev"], rows, RCOL)
+        connhist.tick(now, dstat, CT["dev"])
+    except Exception as e:
+        connhist.STATE["err"] = f"{type(e).__name__}: {e}"[:120]
     STATE["ms"] = round(ms, 1)
     STATE["at"] = now
     # 耗时自适应:一次超过 150ms 就把间隔翻倍(最多 30 秒),连续 5 次都很快才一点点回到基础间隔,避免来回抖动
@@ -218,8 +244,8 @@ def feed(conns, col, now, kindf):
         STATE["interval"] = min(30, STATE["interval"] * 2)
     elif ms < 40:
         STATE["fast"] += 1
-        if STATE["fast"] >= 5 and STATE["interval"] > BASE_EVERY:
-            STATE["interval"] = max(BASE_EVERY, STATE["interval"] // 2)
+        if STATE["fast"] >= 5 and STATE["interval"] > base:
+            STATE["interval"] = max(base, STATE["interval"] // 2)
             STATE["fast"] = 0
     else:
         STATE["fast"] = 0
@@ -227,10 +253,12 @@ def feed(conns, col, now, kindf):
 
 def _build(conns, col, now, kindf):
     press = _mem_pressure()
-    cap = MAX_ROWS
+    from . import connhist
+    tp = connhist.params()
+    cap = min(MAX_ROWS, tp["rows"])
     STATE["degraded"] = ""
     if press is not None and press > 0.9:
-        cap = MAX_ROWS_LOW
+        cap = min(cap, MAX_ROWS_LOW)
         STATE["degraded"] = f"容器内存已用 {int(press * 100)}%,连接明细上限降到 {MAX_ROWS_LOW} 条"
     ptype = dict(col.ptype) if col else {}
     rows, srcs = [], set()
@@ -258,7 +286,7 @@ def _build(conns, col, now, kindf):
                      dst, str(m.get("destinationPort") or ""), host, node, ((r + "," + p) if p else r)[:80],
                      _start_ts(cn.get("start")), int(cn.get("upload") or 0), int(cn.get("download") or 0), kindf(node, ptype),
                      str(m.get("dnsMode") or ""), "", "", False])
-    if now - STATE["ct_at"] >= CT_EVERY:
+    if now - STATE["ct_at"] >= tp["ct"]:
         known = set(srcs)
         if col:
             known |= set(col.neigh.map)

@@ -1099,13 +1099,13 @@ def test_v050_connmon():
         at = connmon.STATE["at"]; connmon.feed([], Col(), now + 1, kind)
         assert connmon.STATE["at"] == at and connmon.snapshot(now=now)["summary"]["total"] == 4
         # 新增 / 关闭
-        connmon.feed(conns[:2], Col(), now + 5, kind)
-        st = connmon.snapshot(now=now + 5)["devices"]
+        connmon.feed(conns[:2], Col(), now + 12, kind)
+        st = connmon.snapshot(now=now + 12)["devices"]
         assert sum(x["closed"] for x in st) == 2
         # 读不到 conntrack:降级,不报错
         connmon.CT_PATH = os.path.join(d, "none"); connmon.STATE["ct_at"] = 0.0
-        connmon.feed(conns, Col(), now + 20, kind)
-        j2 = connmon.snapshot(now=now + 20)
+        connmon.feed(conns, Col(), now + 30, kind)
+        j2 = connmon.snapshot(now=now + 30)
         assert j2["status"]["ct_ok"] is False and all(r["link"] == "无法判断" and r["state"] == "" for r in j2["rows"])
     finally:
         connmon.CT_PATH = old
@@ -1118,6 +1118,84 @@ def test_v050_connmon():
     connmon.feed(conns, Col(), now + 100, kind)
     assert connmon.snapshot()["rows"] == []
     connmon.save_cfg(con, {"on": True})
+
+
+def test_v051_connhist():
+    """v0.51:档位判定与滞回、分钟历史、事件与前后快照、预算清理。"""
+    import os, tempfile, time, importlib
+    from app import config, db, connhist
+    importlib.reload(connhist)
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "h.db"); db.init_db()
+    # 硬件 → 基础档位
+    assert connhist.base_tier({"cpu": 4, "mem_mb": 12000})[0] == "high"
+    assert connhist.base_tier({"cpu": 4, "mem_mb": 2000})[0] == "standard"
+    assert connhist.base_tier({"cpu": 4, "mem_mb": 1000})[0] == "light"
+    assert connhist.base_tier({"cpu": 1, "mem_mb": 8000})[0] == "light"
+    assert connhist.base_tier({"cpu": 4, "mem_mb": None})[0] == "standard"
+    # 滞回:第一次直接采用;压力出现后 5 分钟 + 停留 10 分钟才降档
+    hw = {"arch": "x", "cpu": 4, "mem_mb": 12000, "limit_mb": None, "disk_free_mb": 50000, "load1": 0.1}
+    connhist.STATE.update(hw=hw, hw_at=time.time() + 99999, since=0.0, eval_at=0.0, cand="")
+    t0 = 1_000_000.0
+    assert connhist.evaluate(t0) == "high"
+    assert connhist.evaluate(t0 + 60, 0.95) == "high"              # 刚出现压力
+    assert connhist.evaluate(t0 + 400, 0.95) == "high"             # 满 5 分钟但停留不足 10 分钟
+    assert connhist.evaluate(t0 + 700, 0.95) == "standard"         # 都满足 → 降一档
+    assert connhist.evaluate(t0 + 800, None) == "standard"         # 压力解除,要先等候选稳定
+    assert connhist.evaluate(t0 + 1000, None) == "standard"        # 候选才 200 秒
+    assert connhist.evaluate(t0 + 1250, None) == "standard"        # 候选够久但停留不足 10 分钟(降档在 t0+700)
+    assert connhist.evaluate(t0 + 1400, None) == "high"
+    connhist.load_cfg({"tier": "light"}); assert connhist.evaluate(t0 + 5000) == "light" and connhist.params()["snap_rows"] == 0
+    connhist.load_cfg({"tier": "auto", "hist": 2, "events": 5}); assert connhist.params()["hist"] == 2 and connhist.params()["events"] == 5
+    connhist.load_cfg({"tier": "high", "budget_mb": 300}); connhist.evaluate(t0 + 9000)
+    assert connhist.STATE["tier"] == "high"
+    # 分钟历史:窗口翻页时写库
+    R = {"dev": 0, "dst": 1, "host": 2, "dport": 3, "proto": 4, "node": 5, "start": 6, "up": 7, "down": 8, "state": 9, "link": 10}
+    rows = [["a", "h%d.com" % (i % 3), "", "443", "tcp", "HK", 0, 1, 2, "ESTABLISHED", "已确认"] for i in range(10)]
+    now = (int(time.time() // 60) * 60) - 600
+    ds = {"a": {"conns": 10, "tcp": 10, "udp": 0, "new": 3, "closed": 1}}
+    ctd = {"a": {"states": {"SYN_SENT": 2}, "unreplied": 1}}
+    connhist.STATE["tier"] = "high"
+    connhist.record(now + 5, ds, ctd, rows, R)
+    connhist.record(now + 65, ds, ctd, rows, R)                       # 翻页 → 写上一分钟
+    assert connhist.STATE["err"] == "", connhist.STATE["err"]
+    con = db.open_db()
+    tr = connhist.trend(con, "a", 60, now + 100)
+    assert len(tr["rows"]) == 1 and tr["rows"][0]["conns"] == 10 and tr["rows"][0]["syn"] == 2
+    assert connhist.trend(con, "", 60, now + 100)["rows"][0]["new"] == 3
+    # 事件 + 快照
+    for i in range(5):
+        connhist.record(now + 100 + i * 4, ds, ctd, rows, R)
+    eid = connhist.trigger("a", "conn_many", "attention", "测试", {"x": 1}, now + 120, rows, R)
+    assert eid and connhist.trigger("a", "conn_many", "suspect", "测试", {"x": 2}, now + 125, rows, R) == eid   # 同类合并并升级
+    ev = connhist.events(con, "a", 24, 10, now + 130)
+    assert len(ev) == 1 and ev[0]["level"] == "suspect" and ev[0]["level_name"] == "高度可疑"
+    for i in range(3):
+        connhist.record(now + 130 + i * 4, ds, ctd, rows, R); connhist.tick(now + 130 + i * 4, ds, ctd)
+    assert connhist.event_detail(con, eid)["snapshot_pending"] is True
+    connhist.tick(now + 120 + 181, ds, ctd)                              # 后 180 秒结束 → 写快照
+    det = connhist.event_detail(con, eid)
+    assert det["snapshot"]["at"]["rows"] and det["snapshot"]["pre"] and det["snapshot"]["post"] and det["snapshot_pending"] is False
+    assert det["snapshot"]["at"]["tops"]["d"][0][1] >= 3
+    connhist.tick(now + 120 + 181 + 400, ds, ctd)                       # 长时间无新触发 → 结束
+    assert connhist.event_detail(con, eid)["status"] == "closed"
+    assert connhist.event_detail(con, 9999) is None
+    # 预算:超出就清旧快照
+    connhist.CFG["budget_mb"] = 1
+    with con:
+        for i in range(30):
+            con.execute("INSERT INTO conn_event(ts_start,dev,kind) VALUES(?,?,?)", (int(now) + i, "a", "k"))
+            con.execute("INSERT OR REPLACE INTO conn_snap(event_id,ts,size,payload) VALUES(?,?,?,?)", (100 + i, int(now) + i, 90000, "{}"))
+    st = connhist.prune(con, now + 200)
+    assert st["snap_bytes"] <= 1048576 * 0.5 + 90000 and connhist.STATE["storage_note"]
+    # 保留期:过期事件被删
+    with con:
+        con.execute("UPDATE conn_event SET ts_start=1 WHERE id=?", (eid,))
+    connhist.prune(con, now + 200)
+    assert connhist.event_detail(con, eid) is None
+    # 磁盘不足:不写快照
+    connhist.STATE["hw"] = dict(hw, disk_free_mb=100); connhist.STATE["hw_at"] = time.time() + 99999
+    assert "不足" in (connhist.system(con)["storage_note"] or "不足")
+    con.close()
 
 
 if __name__ == "__main__":
