@@ -308,6 +308,38 @@ try:
             assert "连接明细" in pg.inner_text("#cnTitle") and pg.locator("#cnDev").count()==0, "单台设备不显示设备选择"
             pg.click("#cnX"); pg.evaluate("S.dd='';loadDevicesTab()")
         print("PASS 连接明细弹窗")
+        # 连接监控中心 / 设备诊断页 / 事件详情
+        pg.evaluate("S.tab='devices';S.dd='';showTab();loadDevicesTab()"); pg.wait_for_timeout(600)
+        pg.click("#dvCM"); pg.wait_for_timeout(1500)
+        t = pg.inner_text("#cmBody"); assert ("有连接的设备" in t and "系统状态" in t) or "已关闭" in t, t[:200]
+        assert "设备 TOP" in t or "已关闭" in t
+        pg.click("#cmm summary"); pg.wait_for_timeout(300)
+        assert "运行档位" in pg.inner_text("#cmBody") and pg.locator("#cmTier").count()==1
+        pg.click("#cmX"); assert not pg.evaluate("document.querySelector('#cmm').classList.contains('open')")
+        pg.evaluate("document.querySelector('#tConn').click()"); pg.wait_for_timeout(1200)
+        assert pg.evaluate("document.querySelector('#cmm').classList.contains('open')"), "点主面板连接数卡片打开监控中心"
+        pg.click("#cmX")
+        pg.evaluate("openCD((S.devices[0]||{key:'x'}).key)"); pg.wait_for_timeout(1200)
+        assert "异常事件" in pg.inner_text("#cdBody") and pg.locator("#cdRange button").count()==6
+        pg.click("#cdRange button[data-k='c']"); pg.wait_for_timeout(200)
+        assert pg.is_visible("#cdFrom"); pg.click("#cdApply"); pg.wait_for_timeout(800)
+        pg.click("#cdRange button[data-k='1440']"); pg.wait_for_timeout(800)
+        pg.click("#cdMetric button[data-k='fail']"); pg.wait_for_timeout(300)
+        with pg.expect_download() as dl: pg.click("#cdCsv")
+        assert dl.value.suggested_filename.endswith(".csv")
+        pg.click("#cdX")
+        pg.evaluate("""cePaint({id:1,dev:'x',name:'测试设备',level:'suspect',level_name:'高度可疑',title:'t',ts_start:1790000000,ts_end:0,status:'open',evidence:{},
+          diag:{phenomenon:'现象A',evidence:['证据1'],causes:['原因1'],insufficient:['缺基线'],conclusion:'结论,相关不等于因果',advice:['建议1'],confidence:'low'},
+          snapshot:{pre:[[1789999990,10,10,0,1,1,0,0],[1790000000,400,400,0,300,2,0,0]],post:[[1790000010,380,380,0,5,5,0,0]],at:{ts:1790000000,rows:[['tcp','a.com','443','HK','ESTABLISHED',5,100,'已确认']],tops:{d:[['a.com',3]],p:[['443/tcp',3]],n:[['HK',3]]}}},snapshot_pending:false});$('#cem').classList.add('open')""")
+        pg.wait_for_timeout(300)
+        t = pg.inner_text("#ceBody")
+        for k in ("异常现象","关键证据","可能原因","证据不足项","诊断结论","建议排查方向","现场快照","a.com"): assert k in t, k
+        with pg.expect_download() as dl: pg.click("#ceTxt")
+        assert dl.value.suggested_filename.endswith(".txt")
+        with pg.expect_download() as dl: pg.click("#ceJson")
+        assert dl.value.suggested_filename.endswith(".json")
+        pg.click("#ceX")
+        print("PASS 连接监控中心 / 设备诊断 / 事件详情")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

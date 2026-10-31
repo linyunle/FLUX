@@ -641,7 +641,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-devices" style="display:none">
   <div id="devListView"><div class="card" id="newDevCard" style="display:none"><h2>新设备 <span class="seg" id="ndDays" role="group" aria-label="范围"></span><span class="sp"></span><span class="sub" id="ndNote"></span></h2><div id="ndBody"></div></div>
-  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span><button id="dvConns" title="此刻全网的连接:协议 / 目标 / 端口 / 状态 / 节点">全网连接</button></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
+  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span><button id="dvCM" title="核心指标 / 设备 TOP / 异常事件 / 系统状态">连接监控中心</button><button id="dvConns" title="此刻全网的连接:协议 / 目标 / 端口 / 状态 / 节点">全网连接</button></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
   <div id="devDetail" style="display:none">
     <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddConns" title="这台设备此刻的每条连接:协议 / 目标 / 端口 / 状态 / 节点">连接明细</button><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div><div id="ddMerge" style="margin-top:8px"></div></div>
     <div class="tiles" id="ddTiles"></div>
@@ -986,6 +986,9 @@ uci commit dhcp
 <div class="sub" style="margin-bottom:8px;line-height:1.7">下面是一段写好说明的文字:把它整段发给 AI(ChatGPT / Claude 等),它会按「域名关键字=应用名|类别」回一份规则;把回复存成 .txt 文件,再到 <b>设置 → 应用特征库 → 导入规则文件</b> 导入,保存后新的流量就能识别了。里面只有域名和流量,没有设备名 / IP / 密码。</div>
 <textarea id="unkTxt" rows="14" readonly style="width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre"></textarea><div class="msg" id="unkMsg"></div></div></div>
 <div class="modal" id="cnm"><div class="box" style="max-width:1040px"><h3><span id="cnTitle"></span><span class="sp"></span><button id="cnX" aria-label="关闭">✕</button></h3><div id="cnBody"></div></div></div>
+<div class="modal" id="cmm"><div class="box" style="max-width:1040px"><h3><span>连接监控中心</span><span class="sp"></span><button id="cmX" aria-label="关闭">✕</button></h3><div id="cmBody"><div class="sub">读取中…</div></div></div></div>
+<div class="modal" id="cdm"><div class="box" style="max-width:1040px"><h3><span id="cdTitle"></span><span class="sp"></span><button id="cdX" aria-label="关闭">✕</button></h3><div id="cdBody"></div></div></div>
+<div class="modal" id="cem"><div class="box" style="max-width:860px"><h3><span id="ceTitle"></span><span class="sp"></span><button id="ceX" aria-label="关闭">✕</button></h3><div id="ceBody"></div></div></div>
 <div class="modal" id="kvm"><div class="box" style="max-width:620px"><h3><span id="kvTitle"></span><span class="sp"></span><button id="kvCopy">复制详情</button><button id="kvX" aria-label="关闭">✕</button></h3><div id="kvBody"></div></div></div>
 <div class="modal" id="dtl"><div class="box"><h3><span id="dtlTitle"></span><span class="sp"></span><button id="dtlCopy">复制详情</button><button id="dtlX" aria-label="关闭">✕</button></h3><div id="dtlLive"></div><div class="sub" id="dtlRange" style="margin-top:2px"></div><div id="dtlBody"></div><div id="dtlAct" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div></div>
 
@@ -1598,6 +1601,103 @@ document.addEventListener("click",e=>{const c=e.target.closest("#cnm [data-cnq]"
   const d=e.target.closest("#cnm [data-cndev]");if(d){CN.dev=d.dataset.cndev;$("#cnTitle").textContent="连接明细 · "+cnName(CN.dev);const sel=$("#cnDev");if(sel)sel.value=CN.dev;cnLoad()}});
 $("#cnX").onclick=()=>$("#cnm").classList.remove("open");
 $("#dvConns").onclick=()=>openConns("");$("#ddConns").onclick=()=>openConns(S.dd);
+/* ===== v0.53 连接监控中心 / 设备诊断页 / 事件详情 ===== */
+const CLV={normal:["正常","var(--good)"],attention:["需要关注","var(--warn)"],suspect:["高度可疑","var(--bad)"],unknown:["无法判断","var(--muted)"]};
+const lvChip=l=>{const x=CLV[l]||CLV.normal;return `<span class="chip" style="color:${x[1]};border-color:${x[1]}">${x[0]}</span>`};
+const cmT=ts=>ts?new Date(ts*1000).toLocaleString("zh-CN",{hour12:false,month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"–";
+const cmHM=(ts,long)=>{const d=new Date(ts*1000),p=n=>String(n).padStart(2,"0");return (long?p(d.getMonth()+1)+"-"+p(d.getDate())+" ":"")+p(d.getHours())+":"+p(d.getMinutes())};
+const CONF={high:"高",medium:"中",low:"低"};
+function dlBlob(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:type||"text/plain"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+const csvCell=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+const safeName=s=>String(s||"").replace(/[^\w一-龥.-]+/g,"_").slice(0,40);
+function cmChart(box,rows,ser,evs){
+  const W=Math.max(320,box.clientWidth||700),H=190,L=44,R=8,T=8,B=22,pw=W-L-R,ph=H-T-B;
+  if(!rows.length){box.innerHTML='<div class="empty">这个时间段没有历史数据(只统计面板运行期间、且设备有连接的时段)</div>';return}
+  const mx=Math.max(1,...rows.flatMap(r=>ser.map(x=>r[x.k]||0)));const step=Math.pow(10,Math.floor(Math.log10(mx)));const max=Math.ceil(mx/step*2)/2*step||1;
+  const t0=rows[0].ts,t1=rows[rows.length-1].ts,span=Math.max(1,t1-t0),X=ts=>L+pw*(ts-t0)/span,Y=v=>T+ph-ph*v/max,long=span>86400;
+  let g="";for(let i=0;i<=3;i++){const y=T+ph-ph*i/3;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${Math.round(max*i/3)}</text>`}
+  for(let i=0;i<=4;i++){const ts=t0+span*i/4;g+=`<text x="${L+pw*i/4}" y="${H-6}" text-anchor="${i===0?"start":i===4?"end":"middle"}">${cmHM(ts,long)}</text>`}
+  (evs||[]).filter(e=>e.ts_start>=t0&&e.ts_start<=t1).forEach(e=>{const x=X(e.ts_start),c=(CLV[e.level]||CLV.attention)[1];g+=`<line x1="${x}" x2="${x}" y1="${T}" y2="${T+ph}" stroke="${c}" stroke-dasharray="4 3"><title>${esc(cmT(e.ts_start)+" "+e.title)}</title></line>`});
+  for(const x of ser){const pts=rows.map(r=>[X(r.ts),Y(r[x.k]||0)]);if(pts.length>1)g+=`<polyline fill="none" stroke="${x.c}" stroke-width="2" stroke-linejoin="round" points="${pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>`;else g+=`<circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="3" fill="${x.c}"/>`}
+  const bw=Math.max(3,pw/rows.length);g+=rows.map(r=>`<rect x="${X(r.ts)-bw/2}" y="${T}" width="${bw}" height="${ph}" fill="transparent"><title>${esc(cmT(r.ts)+" "+ser.map(x=>x.n+" "+(r[x.k]||0)).join(" · "))}</title></rect>`).join("");
+  box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="连接趋势">${g}</svg><div class="sub" style="margin-top:2px">${ser.map(x=>`<span style="margin-right:12px"><i style="display:inline-block;width:10px;height:3px;background:${x.c};vertical-align:middle;margin-right:4px"></i>${x.n}</span>`).join("")}${(evs||[]).length?'<span>虚线 = 异常事件开始</span>':""}</div>`}
+/* 总览 */
+const CM={t:0,j:null};
+async function openCM(){$("#cmm").classList.add("open");await cmLoad();clearInterval(CM.t);CM.t=setInterval(()=>{if(!$("#cmm").classList.contains("open")){clearInterval(CM.t);return}cmLoad()},10000)}
+async function cmLoad(){const el=$("#cmBody");try{const [o,sy]=await Promise.all([get("/api/conns/overview"),get("/api/conns/system")]);CM.j=o;cmPaint(o,sy)}catch(e){el.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+function cmSys(sy){const h=sy.hw||{},p=sy.params||{},st=sy.storage||{},c=sy.cfg||{},ro=document.documentElement.dataset.vro==="1";
+  const mb=b=>b==null?"未知":(b/1048576).toFixed(1)+" MB";
+  const kv=[["运行档位",sy.tier_name+(sy.forced?"(手动固定)":"(自动)")],["选择依据",(sy.reasons||[]).join(";")||"–"],["硬件",`${h.arch||"?"} · ${h.cpu||"?"} 核 · 主机内存 ${h.mem_mb==null?"未知":h.mem_mb+" MB"}${h.limit_mb?" · 容器上限 "+h.limit_mb+" MB":""} · 数据盘剩余 ${h.disk_free_mb==null?"未知":h.disk_free_mb+" MB"}`],
+    ["采样频率",`连接明细每 ${p.every} 秒;路由器连接表每 ${p.ct} 秒;历史按 ${p.res} 分钟一条`],["保留期",`历史 ${p.hist} 天 · 事件 ${p.events} 天 · 快照前 ${p.pre} 秒 / 后 ${p.post} 秒 · ${p.snap_rows?"快照含 "+p.snap_rows+" 条连接":"快照只含汇总和 Top(轻量档)"}`],
+    ["占用",`历史 ${st.minute_rows??"–"} 行 · 事件 ${st.events??"–"} 个 · 快照 ${st.snaps??"–"} 个(${mb(st.snap_bytes)}) · 估算合计 ${mb(st.est_bytes)} / 预算 ${c.budget_mb} MB`],
+    ["基线",`已为 ${sy.anom?sy.anom.baseline_devs:0} 台设备建立基线 · 判定 ${p.baseline==="lite"?"仅整体基线(轻量)":"按小时基线"}`],["最近一次写历史",sy.last_flush?cmT(sy.last_flush):"尚未"]];
+  return `<details style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><label class="sub">档位 <select id="cmTier" ${ro?"disabled":""}><option value="auto">自动</option><option value="high">高性能</option><option value="standard">标准</option><option value="light">轻量</option></select></label>
+  <label class="sub">存储预算 <input id="cmBud" type="number" min="20" max="20000" value="${c.budget_mb}" style="width:80px" ${ro?"disabled":""}> MB</label>
+  <label class="sub">历史天数 <input id="cmHist" type="number" min="0" max="90" value="${c.hist}" style="width:60px" ${ro?"disabled":""}></label><label class="sub">事件天数 <input id="cmEvd" type="number" min="0" max="365" value="${c.events}" style="width:60px" ${ro?"disabled":""}></label>
+  <button id="cmSave" ${ro?"disabled":""}>保存</button><span class="sub">天数 0 = 跟随档位默认;档位切换要持续 5 分钟、且每次至少停留 10 分钟,避免来回抖动</span></div><div id="cmMsg" class="msg" style="margin-top:6px"></div></details>`}
+function cmPaint(o,sy){const el=$("#cmBody"),m=o.metrics;
+  if(!o.on){el.innerHTML='<div class="empty">连接明细采集已关闭(「全网连接」弹窗底部可重新开启)。</div>'+cmSys(sy);return}
+  const warn=o.degraded.map(w=>`<div class="msg err" style="margin-bottom:6px">⚠ ${esc(w)}</div>`).join("");
+  const tiles=tile("有连接的设备",m.devices,"")+tile("活跃连接",m.conns,"")+tile("TCP",m.tcp,"")+tile("UDP",m.udp,"")+tile("新建连接 / 秒",m.new_per_s,"")+tile("异常设备",m.abnormal,`可疑 ${m.levels.suspect} · 关注 ${m.levels.attention} · 无法判断 ${m.levels.unknown}`)+tile("1 小时内事件",m.events_1h,"");
+  const top=o.top.length?`<div class="scroll"><table><thead><tr><th>设备</th><th class="n">连接</th><th class="n">TCP / UDP</th><th class="n">相对平时</th><th>级别</th><th>触发信号</th></tr></thead><tbody>`+o.top.map(d=>`<tr class="click" data-cmdev="${esc(d.dev)}"><td class="k">${esc(d.name)}</td><td class="n">${d.conns}</td><td class="n">${d.tcp} / ${d.udp}</td><td class="n" title="${d.base_p50==null?"这台设备历史不足,没有基线":"平时同一时段中位 "+d.base_p50+",P95 "+d.base_p95}">${d.dev_pct==null?'<span class="sub">无基线</span>':d.dev_pct+"%"}</td><td>${lvChip(d.level)} <span class="sub">可信度${CONF[d.conf]||"低"}</span></td><td class="sub">${esc(d.signals.join("、")||"–")}</td></tr>`).join("")+"</tbody></table></div>":'<div class="empty">此刻没有设备有连接数据</div>';
+  const evs=o.events.length?o.events.map(e=>`<div class="ev click" data-cmev="${e.id}" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="sub">${cmT(e.ts_start)}</span> ${lvChip(e.level)} <b>${esc(e.name)}</b> ${esc(e.title)} <span class="sub">${e.status==="open"?"进行中":"已结束"}</span></div>`).join(""):'<div class="empty">最近 7 天没有异常事件</div>';
+  el.innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">${esc(o.tier_name)}档运行 · 数据 ${o.at?Math.max(0,Math.round(Date.now()/1000-o.at))+" 秒前":"暂无"}。级别只是对比这台设备自己平时习惯的参考,<b>不是攻击判定</b>;「无法判断」表示证据不足,不会硬下结论。</div>${warn}<div class="tiles" style="position:static;margin-bottom:8px">${tiles}</div>
+  <div class="h3">设备 TOP <span class="sub">按当前连接数,点一行进入这台设备的诊断页</span></div>${top}<div class="h3" style="margin-top:12px">最近异常事件 <span class="sub">点一条看诊断详情</span></div>${evs}${cmSys(sy)}`;
+  const t=$("#cmTier");if(t){t.value=sy.forced?sy.cfg.tier:"auto";$("#cmSave").onclick=async()=>{const m=$("#cmMsg");try{await post("/api/connmon/cfg",{tier:t.value,budget_mb:+$("#cmBud").value||300,hist:+$("#cmHist").value||0,events:+$("#cmEvd").value||0});m.className="msg ok";m.textContent="已保存,下一分钟起生效";cmLoad()}catch(e){m.className="msg err";m.textContent=e.message}}}}
+/* 设备诊断页 */
+const CD={dev:"",min:60,metric:"conns",from:"",to:"",lv:"",rows:[],evs:[]};
+const CD_M={conns:[[{k:"conns",c:"var(--accent)",n:"连接数"},{k:"tcp",c:"var(--up)",n:"TCP"},{k:"udp",c:"var(--down)",n:"UDP"}]],flow:[[{k:"new",c:"var(--good)",n:"新建(每分钟合计)"},{k:"closed",c:"var(--warn)",n:"关闭(每分钟合计)"}]],fail:[[{k:"syn",c:"var(--bad)",n:"正在握手"},{k:"unrep",c:"var(--warn)",n:"对端无回应"}]]};
+function openCD(dev){CD.dev=dev;CD.lv="";CD.from=CD.to="";$("#cdTitle").textContent="设备连接诊断 · "+cnName(dev);
+  $("#cdBody").innerHTML=`<div id="cdCtl" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="seg" id="cdRange"></span><span class="seg" id="cdMetric"></span>
+    <span id="cdCust" style="display:none;gap:6px;align-items:center"><input type="datetime-local" id="cdFrom" aria-label="开始时间"> – <input type="datetime-local" id="cdTo" aria-label="结束时间"><button id="cdApply">应用</button></span>
+    <span class="sp"></span><button id="cdConns">当前连接明细</button><button id="cdCsv">导出 CSV</button></div><div id="cdChart" class="chartbox"></div><div id="cdInfo" class="sub" style="margin:4px 0 8px"></div>
+    <div class="h3" style="display:flex;gap:8px;align-items:center">异常事件 <select id="cdLv" aria-label="按级别筛选"><option value="">全部级别</option><option value="suspect">高度可疑</option><option value="attention">需要关注</option><option value="unknown">无法判断</option></select></div><div id="cdEvs"></div>`;
+  seg($("#cdRange"),[["5","5 分钟"],["15","15 分钟"],["60","1 小时"],["360","6 小时"],["1440","24 小时"],["c","自定义"]],String(CD.min),k=>{if(k==="c"){CD.min="c";$("#cdCust").style.display="flex";const n=new Date(),p=new Date(n-3600e3),f=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);$("#cdFrom").value=$("#cdFrom").value||f(p);$("#cdTo").value=$("#cdTo").value||f(n);return}CD.min=+k;$("#cdCust").style.display="none";cdLoad()});
+  seg($("#cdMetric"),[["conns","连接数"],["flow","新建 / 关闭"],["fail","失败 / 无回应"]],CD.metric,k=>{CD.metric=k;cdChart()});
+  $("#cdApply").onclick=cdLoad;$("#cdLv").onchange=e=>{CD.lv=e.target.value;cdEvs()};$("#cdConns").onclick=()=>openConns(CD.dev);$("#cdCsv").onclick=cdCsv;
+  $("#cdm").classList.add("open");cdLoad()}
+async function cdLoad(){try{const a={dev:CD.dev};if(CD.min==="c"){const f=Date.parse($("#cdFrom").value)/1000,t=Date.parse($("#cdTo").value)/1000;if(!f||!t||t<=f){$("#cdInfo").textContent="请选择有效的开始和结束时间";return}a.since=Math.floor(f);a.until=Math.floor(t)}else a.minutes=CD.min;
+    const [t,e]=await Promise.all([get("/api/conns/trend",a),get("/api/conns/events",{dev:CD.dev,hours:24*30,limit:200})]);CD.rows=t.rows;CD.t=t;CD.evs=e.rows;cdChart();cdEvs()}catch(er){$("#cdInfo").innerHTML=`<span class="msg err">${esc(er.message)}</span>`}}
+function cdChart(){const t=CD.t||{rows:[]};cmChart($("#cdChart"),CD.rows,CD_M[CD.metric][0],CD.evs);
+  $("#cdInfo").textContent=`每个点 = ${t.res_min||1} 分钟${t.step>1?"(点太多,已按 "+t.step+" 个一组合并:连接数取最大值,新建 / 关闭取合计)":""} · 共 ${CD.rows.length} 个点。历史只在面板运行期间记录,没有记录的时段是空白,不代表没有连接。`}
+function cdEvs(){const l=CD.evs.filter(e=>!CD.lv||e.level===CD.lv);$("#cdEvs").innerHTML=l.length?l.map(e=>`<div class="ev click" data-cmev="${e.id}" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="sub">${cmT(e.ts_start)}</span> ${lvChip(e.level)} ${esc(e.title)} <span class="sub">${e.status==="open"?"进行中":"已结束"}</span></div>`).join(""):'<div class="empty">近 30 天没有符合条件的事件</div>'}
+function cdCsv(){const h=["时间","连接数","TCP","UDP","新建","关闭","正在握手","对端无回应"];const rows=CD.rows.map(r=>[new Date(r.ts*1000).toISOString(),r.conns,r.tcp,r.udp,r.new,r.closed,r.syn,r.unrep]);
+  dlBlob("flux-conn-"+safeName(cnName(CD.dev))+"-"+ymd(new Date())+".csv","﻿"+[h,...rows].map(r=>r.map(csvCell).join(",")).join("\n"),"text/csv")}
+/* 事件详情 */
+const CE={d:null};
+async function openCE(id){$("#ceTitle").textContent="异常事件 #"+id;$("#ceBody").innerHTML='<div class="sub">读取中…</div>';$("#cem").classList.add("open");
+  try{const d=await get("/api/conns/event",{id});if(d.ok===false){$("#ceBody").innerHTML=`<div class="empty">${esc(d.error)}</div>`;return}CE.d=d;cePaint(d)}catch(e){$("#ceBody").innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+function ceText(d){const g=d.diag||{},L=[];L.push(`FLUX 连接异常诊断  事件 #${d.id}`,`设备:${d.name}`,`级别:${d.level_name}(可信度 ${CONF[g.confidence]||"低"})`,`时间:${cmT(d.ts_start)} ~ ${d.ts_end?cmT(d.ts_end):"进行中"}`,"");
+  if(g.phenomenon)L.push("【异常现象】",g.phenomenon,"");if((g.evidence||[]).length)L.push("【关键证据】",...g.evidence.map(x=>"- "+x),"");if((g.causes||[]).length)L.push("【可能原因】(常见情形,不等于因果)",...g.causes.map(x=>"- "+x),"");
+  if((g.insufficient||[]).length)L.push("【证据不足项】",...g.insufficient.map(x=>"- "+x),"");if(g.conclusion)L.push("【诊断结论】",g.conclusion,"");if((g.advice||[]).length)L.push("【建议排查方向】",...g.advice.map(x=>"- "+x),"");if(g.baseline)L.push("基线说明:"+g.baseline);return L.join("\n")}
+function ceBrief(d){const g=d.diag||{};return `[FLUX] ${d.name} ${d.level_name}:${d.title}(${cmT(d.ts_start)})。${(g.evidence||[]).slice(0,3).join(";")}。${g.conclusion||""}`}
+function cePaint(d){const g=d.diag||{},sn=d.snapshot,ul=a=>(a&&a.length)?`<ul style="margin:4px 0 8px 18px;padding:0">${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:'<div class="sub" style="margin:4px 0 8px">无</div>';
+  const sec=(t,b)=>`<div class="h3">${t}</div>${b}`;
+  let snap="";if(sn){const cols=sn.cols||[],pre=sn.pre||[],post=sn.post||[];
+    const ser=a=>a.map(r=>({ts:r[0],conns:r[1],tcp:r[2],udp:r[3],new:r[4],closed:r[5],syn:r[6],unrep:r[7]}));
+    const line=ser([...pre,...(sn.at?[]:[]),...post]);
+    const tp=sn.at&&sn.at.tops?sn.at.tops:null,rows=sn.at&&sn.at.rows?sn.at.rows:[];
+    snap=sec("现场快照",`<div class="sub">异常前 ${pre.length?Math.round(((sn.at?sn.at.ts:d.ts_start)-pre[0][0]))+" 秒":"–"}、触发时、异常后 ${post.length?Math.round(post[post.length-1][0]-d.ts_start)+" 秒":"–"} 的连接数变化</div><div id="ceChart" class="chartbox" data-r='${esc(JSON.stringify(line))}'></div>`
+      +(tp?`<div class="sub" style="margin:4px 0">触发时 Top 目标:${esc((tp.d||[]).map(x=>x[0]+"×"+x[1]).join("、")||"–")} · Top 端口:${esc((tp.p||[]).map(x=>x[0]+"×"+x[1]).join("、")||"–")} · 节点:${esc((tp.n||[]).map(x=>x[0]+"×"+x[1]).join("、")||"–")}</div>`:"")
+      +(rows.length?`<div class="sub">触发时的连接样本(${rows.length} 条;代理连接没有真实目标 IP,只有域名)</div>`+pgTbl("ceT",["协议","目标","端口","节点","状态","已持续","流量","关联"],rows.map(r=>({c:[String(r[0]||"").toUpperCase(),esc(r[1]||"代理解析"),esc(r[2]||"?"),esc(r[3]),esc(r[4]||"未知"),cnDur(r[5]),fmt(r[6]),esc(r[7])]})),{size:10}):'<div class="sub">这一档位不保存连接样本(只存汇总和 Top)</div>'))}
+  else snap=sec("现场快照",`<div class="sub">${d.snapshot_pending?"正在记录异常后 180 秒的现场,稍后再打开":"没有保存现场快照(可能因磁盘空间不足、存储预算清理或事件较早)"}</div>`);
+  $("#ceBody").innerHTML=`<div style="margin-bottom:6px">${lvChip(d.level)} <b>${esc(d.name)}</b> <span class="sub">${cmT(d.ts_start)} ~ ${d.ts_end?cmT(d.ts_end):"进行中"} · 可信度 ${CONF[g.confidence]||"低"}</span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"><button id="ceCopy">复制摘要</button><button id="ceTxt">导出诊断 TXT</button><button id="ceJson">导出事件 JSON</button><button id="ceDev">进入设备诊断页</button></div>
+  ${g.phenomenon?sec("异常现象",`<div>${esc(g.phenomenon)}</div>`):sec("事件",`<div>${esc(d.title)}</div>`)}${sec("关键证据",ul(g.evidence||(d.evidence&&d.evidence.summary?[d.evidence.summary]:[])))}${sec("可能原因",ul(g.causes))}${sec("证据不足项",ul(g.insufficient))}${sec("诊断结论",`<div>${esc(g.conclusion||"这是基于阈值的连接数告警,没有更多判断依据。")}</div>`)}${sec("建议排查方向",ul(g.advice))}${snap}
+  <div class="sub" style="margin-top:10px">导出内容只含连接统计、目标域名 / IP 和端口,不含密码、订阅链接或密钥。</div>`;
+  const cb=$("#ceChart");if(cb)cmChart(cb,JSON.parse(cb.dataset.r),[{k:"conns",c:"var(--accent)",n:"连接数"},{k:"syn",c:"var(--bad)",n:"正在握手"}],[]);
+  $("#ceCopy").onclick=()=>copyText(ceBrief(d)).then(()=>{$("#ceCopy").textContent="已复制"},()=>{});
+  $("#ceTxt").onclick=()=>dlBlob("flux-diagnosis-"+d.id+"-"+ymd(new Date())+".txt",ceText(d));
+  $("#ceJson").onclick=()=>dlBlob("flux-event-"+d.id+"-"+ymd(new Date())+".json",JSON.stringify(d,null,1),"application/json");
+  $("#ceDev").onclick=()=>{$("#cem").classList.remove("open");openCD(d.dev)}}
+document.addEventListener("click",e=>{const v=e.target.closest("[data-cmev]");if(v){openCE(+v.dataset.cmev);return}const t=e.target.closest("#cmm [data-cmdev]");if(t)openCD(t.dataset.cmdev)});
+$("#cmX").onclick=()=>$("#cmm").classList.remove("open");$("#cdX").onclick=()=>$("#cdm").classList.remove("open");$("#ceX").onclick=()=>$("#cem").classList.remove("open");
+$("#tConn").style.cursor="pointer";$("#tConn").title="点击打开连接监控中心";$("#tConn").onclick=openCM;$("#dvCM").onclick=openCM;
+async function cmBadge(){try{if(document.hidden)return;const o=await get("/api/conns/overview");const m=o.metrics;const s=$("#tConnS");if(m&&m.abnormal>0){s.dataset.ab=1;s.title="有设备连接行为异常,点击查看"}else delete s.dataset.ab;CM.ab=m?m.abnormal:0;updConnSub()}catch(e){}}
+function updConnSub(){const s=$("#tConnS");if(!S.rt)return;s.textContent=`直连 ${S.rt.conns.direct} · 代理 ${S.rt.conns.proxy}`+(CM.ab?` · ⚠ 异常 ${CM.ab}`:"")}
+setInterval(cmBadge,20000);setTimeout(cmBadge,3000);
+
 
 $("#ddBack").onclick=()=>{S.dd="";loadDevicesTab()};
 $("#ddFilter").onclick=()=>{S.devs.clear();S.devs.add(S.dd);S.tab="overview";renderDevList();showTab();refresh()};
@@ -1787,7 +1887,7 @@ $("#sysIfT").onclick=()=>{let c=false;try{c=localStorage.getItem("flux.sysIfC")=
 function loadSys(){const el=$("#sysCard");if(!el||el.offsetParent===null)return;load("sys","/api/sys",{seconds:120},paintSys)}
 function loadRealtime(){if(document.hidden)return;
   load("rt","/api/realtime",{seconds:120,dev:[...S.devs].join(",")},j=>{
-    S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;$("#tConnS").textContent=`直连 ${j.conns.direct} · 代理 ${j.conns.proxy}`;updDetailLive();if(S.tab!=="overview")return;
+    S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;updConnSub();updDetailLive();if(S.tab!=="overview")return;
     if(Date.now()-S.scrollAt<1500)return; /* 正在滑动时不重绘,手机上否则页面会跳 */
     paintRt(j);loadSys();
     S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
