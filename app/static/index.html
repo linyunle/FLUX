@@ -641,9 +641,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-devices" style="display:none">
   <div id="devListView"><div class="card" id="newDevCard" style="display:none"><h2>新设备 <span class="seg" id="ndDays" role="group" aria-label="范围"></span><span class="sp"></span><span class="sub" id="ndNote"></span></h2><div id="ndBody"></div></div>
-  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
+  <div class="card"><h2>设备 <span class="sub">同一台设备的 IPv4 / IPv6 已按 MAC 合并;点一行看这台设备的使用详情,点名字旁的 ✎ 改名</span><span class="sp"></span><span class="seg" id="dvMode" role="group" aria-label="去向"></span><button id="dvConns" title="此刻全网的连接:协议 / 目标 / 端口 / 状态 / 节点">全网连接</button></h2><div class="hideoff"><span>隐藏离线超过</span><select id="hideOff" aria-label="隐藏长期离线的设备"><option value="0">不隐藏</option><option value="3">3 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select><span id="hideOffN"></span></div><div class="scroll" id="devTbl"></div></div></div>
   <div id="devDetail" style="display:none">
-    <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div><div id="ddMerge" style="margin-top:8px"></div></div>
+    <div class="card"><h2><button id="ddBack">← 返回设备列表</button><span id="ddName"></span><span class="sp"></span><button id="ddConns" title="这台设备此刻的每条连接:协议 / 目标 / 端口 / 状态 / 节点">连接明细</button><button id="ddFilter" class="pri">在概览里只看这台设备</button></h2><div class="sub" id="ddInfo"></div><div id="ddMerge" style="margin-top:8px"></div></div>
     <div class="tiles" id="ddTiles"></div>
     <div class="dgrid">
       <div class="card" style="grid-column:span 12"><h2>流量趋势 <span class="legend" id="ddLegend"></span><span class="sp"></span><span class="sub" id="ddTrNote"></span></h2><div class="chartbox" id="ddChart"></div></div>
@@ -985,6 +985,7 @@ uci commit dhcp
 <div class="modal" id="unk"><div class="box" style="max-width:760px"><h3><span>未识别明细 · 导出给 AI 分类</span><span class="sp"></span><button id="unkCopy" class="pri">复制</button><button id="unkDl">下载 .txt</button><button id="unkX" aria-label="关闭">✕</button></h3>
 <div class="sub" style="margin-bottom:8px;line-height:1.7">下面是一段写好说明的文字:把它整段发给 AI(ChatGPT / Claude 等),它会按「域名关键字=应用名|类别」回一份规则;把回复存成 .txt 文件,再到 <b>设置 → 应用特征库 → 导入规则文件</b> 导入,保存后新的流量就能识别了。里面只有域名和流量,没有设备名 / IP / 密码。</div>
 <textarea id="unkTxt" rows="14" readonly style="width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre"></textarea><div class="msg" id="unkMsg"></div></div></div>
+<div class="modal" id="cnm"><div class="box" style="max-width:1040px"><h3><span id="cnTitle"></span><span class="sp"></span><button id="cnX" aria-label="关闭">✕</button></h3><div id="cnBody"></div></div></div>
 <div class="modal" id="kvm"><div class="box" style="max-width:620px"><h3><span id="kvTitle"></span><span class="sp"></span><button id="kvCopy">复制详情</button><button id="kvX" aria-label="关闭">✕</button></h3><div id="kvBody"></div></div></div>
 <div class="modal" id="dtl"><div class="box"><h3><span id="dtlTitle"></span><span class="sp"></span><button id="dtlCopy">复制详情</button><button id="dtlX" aria-label="关闭">✕</button></h3><div id="dtlLive"></div><div class="sub" id="dtlRange" style="margin-top:2px"></div><div id="dtlBody"></div><div id="dtlAct" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div></div>
 
@@ -1542,6 +1543,62 @@ function loadDetail(){
   load("dd_n","/api/summary",{...lim,by:"node"},j=>expTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal],S.ddNodeOpen,r=>trace({...o,node:r.key},["host","node","group","rule"],15)));
   load("dd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ddGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
   load("dd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ddRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
+
+/* ---- 连接明细:此刻每条连接的 协议 / 目标 / 端口 / 状态 / 节点(nikki /connections + conntrack,只读) ---- */
+const CN={dev:"",proto:"",state:"",q:"",node:"",sort:"age",auto:false,t:0,j:null};
+const CN_ST=[["","全部状态"],["ESTABLISHED","已建立"],["SYN_SENT","正在连接"],["SYN_RECV","握手中"],["CLOSE_WAIT","对端已关"],["FIN_WAIT","正在关闭"],["TIME_WAIT","已结束"]];
+const cnDur=n=>n==null?"–":n<90?n+" 秒":n<5400?Math.round(n/60)+" 分钟":n<172800?(n/3600).toFixed(1)+" 小时":Math.round(n/86400)+" 天";
+const cnName=k=>{const d=S.devices.find(x=>x.key===k);return d?devLabel(d):k};
+const CN_LINK={"已确认":"nikki 记录和路由器连接表里,协议、来源端口、目标端口都对得上","未关联":"路由器连接表里暂时没找到对应条目(刚建立、已结束,或没有被 conntrack 记录)","无法判断":"这台路由器的连接表读不到,状态未知"};
+function openConns(dev){CN.dev=dev||"";CN.proto=CN.state=CN.q=CN.node="";CN.sort="age";
+  $("#cnTitle").textContent=CN.dev?"连接明细 · "+cnName(CN.dev):"全网连接明细";
+  $("#cnBody").innerHTML=`<div class="sub" style="margin-bottom:8px;line-height:1.7">此刻的每条连接,数据来自 nikki 的连接记录,状态来自路由器的连接表(conntrack)。<b>走代理的连接路由器看不到真实目标 IP,只有域名</b>(显示为「代理解析」);查不到的字段显示「未知」,不会猜。</div>
+    <div id="cnCtl" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><span class="seg" id="cnProto"></span>
+    <select id="cnState" aria-label="状态">${CN_ST.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select>
+    <select id="cnSort" aria-label="排序"><option value="age">持续最久</option><option value="traffic">流量最大</option><option value="dst">按目标</option></select>
+    ${CN.dev?"":`<select id="cnDev" aria-label="设备"><option value="">全部设备</option>${S.devices.map(d=>`<option value="${esc(d.key)}">${esc(devLabel(d))}</option>`).join("")}</select>`}
+    <input id="cnQ" placeholder="搜索 目标 / 端口 / 节点 / IP" style="min-width:160px;flex:1" autocomplete="off"><button id="cnGo">刷新</button><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="cnAuto"> 自动刷新(5 秒)</label></div>
+    <div id="cnRes"><div class="sub">读取中…</div></div>`;
+  seg($("#cnProto"),[["","全部"],["tcp","TCP"],["udp","UDP"]],CN.proto,k=>{CN.proto=k;cnLoad()});
+  $("#cnState").onchange=e=>{CN.state=e.target.value;cnLoad()};$("#cnSort").onchange=e=>{CN.sort=e.target.value;cnLoad()};
+  const dv=$("#cnDev");if(dv)dv.onchange=e=>{CN.dev=e.target.value;cnLoad()};
+  let tm=0;$("#cnQ").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{CN.q=e.target.value;cnLoad()},300)};
+  $("#cnGo").onclick=cnLoad;$("#cnAuto").checked=CN.auto;$("#cnAuto").onchange=e=>{CN.auto=e.target.checked};
+  $("#cnm").classList.add("open");cnLoad();
+  if(!CN.t)CN.t=setInterval(()=>{if(!$("#cnm").classList.contains("open")){clearInterval(CN.t);CN.t=0;return}if(CN.auto)cnLoad()},5000)}
+async function cnLoad(){const el=$("#cnRes");if(!el)return;
+  try{const j=await get("/api/conns",{dev:CN.dev,proto:CN.proto,state:CN.state,q:CN.q,node:CN.node,sort:CN.sort,limit:1000});CN.j=j;cnPaint(j)}catch(e){el.innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+function cnTarget(r){const t=r.host?esc(r.host)+(r.dst_ip?` <span class="sub">${esc(r.dst_ip)}</span>`:""):(r.dst_ip?esc(r.dst_ip):'<span class="sub">代理解析,路由器看不到</span>');return t}
+function cnPaint(j){const el=$("#cnRes"),s=j.summary,st=j.status,ro=document.documentElement.dataset.vro==="1";
+  const sw=`<label class="sub" style="display:flex;gap:4px;align-items:center;margin-top:10px"><input type="checkbox" id="cnOnOff" ${j.on?"checked":""} ${ro?"disabled":""}> 采集连接明细(关闭后不再记录,只影响这一项功能)</label>`;
+  if(!j.on){el.innerHTML='<div class="empty">连接明细采集已关闭。</div>'+sw;return}
+  if(!j.at){el.innerHTML='<div class="empty">还没有数据(面板刚启动,或没连上 nikki)。几秒后点「刷新」。</div>'+sw;return}
+  const warn=[];if(st.degraded)warn.push(st.degraded);if(st.trunc)warn.push(`连接太多,只保留了 ${st.kept} 条明细(共 ${st.total} 条),统计只覆盖保留的部分`);
+  if(st.ct_ok===false)warn.push("路由器连接表(conntrack)读不到:状态和关联显示「未知」");if(st.ct_trunc)warn.push("连接表条目太多,部分状态未能读取");if(st.err)warn.push("采集出错:"+st.err);
+  const est=(s.states.ESTABLISHED||0),conn=(s.states.SYN_SENT||0)+(s.states.SYN_RECV||0);
+  const tiles=tile("连接数",s.total,`匹配 ${j.matched} 条`)+tile("TCP",s.tcp,"")+tile("UDP",s.udp,"")+tile("已建立",st.ct_ok?est:"未知",st.ct_ok?"TCP":"")+tile("正在连接",st.ct_ok?conn:"未知",st.ct_ok?`对端无回应 ${s.unreplied}`:"");
+  const chips=(arr,pre,key)=>arr.length?`<div class="sub" style="margin:6px 0"><b>${pre}</b> `+arr.map(x=>`<span class="chip" style="${x.k[0]==="("?"":"cursor:pointer;"}margin:0 4px 4px 0" ${x.k[0]==="("?"":`data-cn${key}="${esc(key==="q"&&x.k.includes("/")?x.k.split("/")[0]:x.k)}" title="点一下只看这一项"`}>${esc(x.k)} · ${x.n}</span>`).join("")+"</div>":"";
+  const sv=(j.dev_stat?`<div class="sub">这台设备相比上次刷新:新增 ${j.dev_stat.new} · 关闭 ${j.dev_stat.closed}${j.dev_ct?` · 路由器连接表里 TCP ${j.dev_ct.tcp} / UDP ${j.dev_ct.udp}(含已结束的 TIME_WAIT)`:""}</div>`:"");
+  const devs=j.devices.length?`<div class="h3">设备排行 <span class="sub">点一行只看这台</span></div><div class="scroll"><table><thead><tr><th>设备</th><th class="n">连接</th><th class="n">TCP</th><th class="n">UDP</th><th class="n">新增</th><th class="n">关闭</th><th class="n">正在连接</th><th class="n">对端无回应</th></tr></thead><tbody>`
+    +j.devices.slice(0,10).map(d=>`<tr class="click" data-cndev="${esc(d.key)}"><td class="k">${esc(d.name)}</td><td class="n">${d.conns}</td><td class="n">${d.tcp}</td><td class="n">${d.udp}</td><td class="n">${d.new}</td><td class="n">${d.closed}</td><td class="n">${d.syn_sent||0}</td><td class="n">${d.unreplied||0}</td></tr>`).join("")+"</tbody></table></div>":"";
+  const glob=!CN.dev;
+  const rows=j.rows.map(r=>({c:[...(glob?[esc(r.name)]:[]),r.proto.toUpperCase(),cnTarget(r),esc(r.dport||"?"),esc(r.state_cn||(st.ct_ok===false?"未知":"–")),esc(r.node),cnDur(r.age),fmt(r.up+r.down),esc(r.link)],
+    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["协议 / 端口",r.proto.toUpperCase()+" / "+(r.dport||"?")],
+      ["连接状态",(r.state_cn||"未知")+(r.state?"("+r.state+")":"")+(r.unreplied?" · 对端没有回应":"")],["节点 / 出口",r.node+(r.kind?"("+({direct:"直连",proxy:"代理",reject:"拒绝"}[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["域名解析方式",r.dns||"未知"],
+      ["已持续",cnDur(r.age)],["上行 / 下行",fmt(r.up)+" / "+fmt(r.down)],["关联状态",r.link+":"+(CN_LINK[r.link]||"")]],note:"持续时间来自 nikki 的建立时间;状态来自 conntrack,UDP 没有连接状态。"}}));
+  const head=[...(glob?["设备"]:[]),"协议","目标","端口","状态","节点","持续","流量","关联"];
+  el.innerHTML=`<div class="sub" style="margin-bottom:6px">数据 ${j.age==null?"–":j.age} 秒前 · 刷新间隔 ${st.interval} 秒 · 连接表 ${st.ct_ok?"可用("+st.ct_n+" 条)":st.ct_ok===false?"不可用":"未读取"}</div>`
+    +warn.map(w=>`<div class="msg err" style="margin-bottom:6px">⚠ ${esc(w)}</div>`).join("")+`<div class="tiles" style="margin-bottom:6px">${tiles}</div>`+sv
+    +chips(s.top_dst,"目标最多","q")+chips(s.top_ports,"端口最多","q")+chips(s.top_nodes,"节点","node")+devs
+    +`<div class="h3">连接列表 <span class="sub">${CN.q||CN.proto||CN.state||CN.node?"已筛选 · ":""}点一行看详情;「复制本表 / 导出 CSV」是当前筛选结果</span></div>`
+    +(rows.length?pgTbl("cnT",head,rows,{size:15}):'<div class="empty">没有符合条件的连接</div>')+sw;
+  const o=$("#cnOnOff");if(o)o.onchange=async e=>{try{await post("/api/connmon/cfg",{on:e.target.checked});cnLoad()}catch(er){alert(er.message)}}}
+document.addEventListener("click",e=>{const c=e.target.closest("#cnm [data-cnq]");if(c){CN.q=c.dataset.cnq;$("#cnQ").value=CN.q;cnLoad();return}
+  const n=e.target.closest("#cnm [data-cnnode]");if(n){CN.node=n.dataset.cnnode;cnLoad();return}
+  const d=e.target.closest("#cnm [data-cndev]");if(d){CN.dev=d.dataset.cndev;$("#cnTitle").textContent="连接明细 · "+cnName(CN.dev);const sel=$("#cnDev");if(sel)sel.value=CN.dev;cnLoad()}});
+$("#cnX").onclick=()=>$("#cnm").classList.remove("open");
+$("#dvConns").onclick=()=>openConns("");$("#ddConns").onclick=()=>openConns(S.dd);
+
 $("#ddBack").onclick=()=>{S.dd="";loadDevicesTab()};
 $("#ddFilter").onclick=()=>{S.devs.clear();S.devs.add(S.dd);S.tab="overview";renderDevList();showTab();refresh()};
 const fmtDay=d=>{if(!d)return"–";const t=ymd(new Date());return d===t?"今天":d.slice(5)};

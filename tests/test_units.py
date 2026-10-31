@@ -1038,6 +1038,88 @@ def test_v049():
         pass
 
 
+def test_v050_connmon():
+    """v0.50:连接明细——conntrack 解析、与 nikki 连接关联、汇总、告警正文、诊断包、关闭开关。"""
+    import os, tempfile, time
+    from app import connmon
+    ct = (
+        "ipv4     2 udp      17 55 src=192.168.100.123 dst=192.168.100.1 sport=43077 dport=53 packets=1 bytes=59 src=192.168.100.1 dst=192.168.100.123 sport=53 dport=43077 packets=1 bytes=87 mark=0 zone=0 use=2\n"
+        "ipv6     10 tcp      6 7434 ESTABLISHED src=2409:8a55:e2d3:b950:0d76:4db1:ff41:74ff dst=2409:8c28:6c07:030e:0000:0000:0000:0100 sport=50557 dport=443 packets=1790 bytes=935926 src=2409:8c28:6c07:030e:0000:0000:0000:0100 dst=2409:8a55:e2d3:b950:0d76:4db1:ff41:74ff sport=443 dport=50557 packets=2684 bytes=1559957 [ASSURED] mark=0 zone=0 use=2\n"
+        "ipv4 2 tcp 6 30 SYN_SENT src=192.168.100.5 dst=1.2.3.4 sport=40000 dport=80 packets=1 bytes=60 [UNREPLIED] src=1.2.3.4 dst=192.168.100.5 sport=80 dport=40000 packets=0 bytes=0 mark=0 zone=0 use=2\n"
+        "ipv4 2 icmp 1 29 src=192.168.100.5 dst=8.8.8.8 type=8 code=0 id=1 packets=1 bytes=84 src=8.8.8.8 dst=192.168.100.5 type=0 code=0 id=1 packets=1 bytes=84 mark=0 zone=0 use=2\n"
+        "ipv4 2 tcp 6 99 ESTABLISHED src=172.68.49.102 dst=9.9.9.9 sport=1 dport=443 packets=1 bytes=1 src=9.9.9.9 dst=172.68.49.102 sport=443 dport=1 packets=1 bytes=1 mark=0 zone=0 use=2\n")
+    d = tempfile.mkdtemp(); p = os.path.join(d, "ct"); open(p, "w").write(ct)
+    e = connmon.parse_ct_line(ct.splitlines()[1])
+    assert e["src"] == "2409:8a55:e2d3:b950:d76:4db1:ff41:74ff" and e["state"] == "ESTABLISHED" and e["rb"] == 1559957
+    assert connmon.parse_ct_line(ct.splitlines()[3]) is None        # icmp 不收
+    assert connmon.parse_ct_line(ct.splitlines()[2])["unreplied"] is True
+    assert connmon.parse_ct_line("garbage") is None
+    assert connmon.nip("2409:0:0:0:0:0:0:1") == "2409::1" and connmon.is_fake("198.18.0.5") and not connmon.is_fake("1.2.3.4")
+
+    class Neigh:
+        map = {"192.168.100.123": "aa:aa", "192.168.100.5": "bb:bb"}
+        def key(self, ip): return self.map.get(ip, ip)
+
+    class Col:
+        neigh = Neigh(); ptype = {"HK": "Vless", "直连": "Direct"}
+        def leaf(self, ch): return str(ch[0]) if ch else "UNKNOWN"
+    kind = lambda n, pt: "direct" if n == "直连" else "proxy"
+    now = time.time()
+    conns = [
+        {"id": "1", "metadata": {"network": "tcp", "sourceIP": "2409:8a55:e2d3:b950:d76:4db1:ff41:74ff", "sourcePort": "50557", "destinationIP": "2409:8c28:6c07:30e::100", "destinationPort": "443", "host": "", "remoteDestination": ""}, "chains": ["直连"], "rule": "RuleSet", "rulePayload": "cn_ip", "upload": 5, "download": 9, "start": "2026-10-30T16:11:29.007339908Z"},
+        {"id": "2", "metadata": {"network": "tcp", "sourceIP": "192.168.100.5", "sourcePort": "40000", "destinationIP": "198.18.1.9", "destinationPort": "80", "host": "Slow.Example.com"}, "chains": ["HK"], "rule": "Match", "upload": 1, "download": 0, "start": ""},
+        {"id": "3", "metadata": {"network": "udp", "sourceIP": "192.168.100.123", "sourcePort": "43077", "destinationIP": "192.168.100.1", "destinationPort": "53"}, "chains": ["直连"], "rule": "Match", "upload": 1, "download": 1},
+        {"id": "4", "metadata": {"network": "tcp", "sourceIP": "192.168.100.5", "sourcePort": "40001", "destinationIP": "", "destinationPort": "443", "host": "a.example.com"}, "chains": ["HK"], "rule": "Match"},
+    ]
+    old = connmon.CT_PATH
+    connmon.CT_PATH = p
+    connmon.STATE.update(on=True, cfg_at=time.time(), at=0.0, interval=4, ct_at=0.0)
+    try:
+        connmon.feed(conns, Col(), now, kind)
+        assert connmon.STATE["err"] == "", connmon.STATE["err"]
+        j = connmon.snapshot(label=lambda k: "名:" + k, now=now)
+        assert j["summary"]["total"] == 4 and j["summary"]["tcp"] == 3 and j["summary"]["udp"] == 1
+        by = {r["id"]: r for r in j["rows"]}
+        assert by["1"]["state"] == "ESTABLISHED" and by["1"]["link"] == "已确认" and by["1"]["state_cn"] == "已建立" and by["1"]["dst_ip"] == "2409:8c28:6c07:30e::100"
+        assert by["1"]["dev"] == "aa:aa" or by["1"]["dev"].startswith("2409")        # v6 来源在测试邻居表里没有,按 IP
+        assert by["2"]["dst_ip"] == "" and by["2"]["host"] == "slow.example.com"      # fake-ip 不当作真实目标
+        assert by["2"]["state"] == "SYN_SENT" and by["2"]["unreplied"] and by["2"]["state_cn"] == "无回应"
+        assert by["3"]["state"] == "UDP" and by["4"]["link"] == "未关联" and by["4"]["state"] == ""
+        assert any(x["k"] == "443/tcp" for x in j["summary"]["top_ports"])
+        assert any("(代理解析" in x["k"] or x["k"] == "slow.example.com" for x in j["summary"]["top_dst"])
+        dev5 = connmon.snapshot(dev="bb:bb", label=lambda k: k, now=now)
+        assert dev5["summary"]["total"] == 2 and dev5["dev_ct"]["tcp"] == 1
+        assert connmon.snapshot(proto="udp", now=now)["summary"]["total"] == 1 and connmon.snapshot(q="slow", now=now)["matched"] == 1
+        assert connmon.snapshot(state="SYN_SENT", now=now)["matched"] == 1
+        b = connmon.brief("bb:bb")
+        assert "TCP 2 / UDP 0" in b and "slow.example.com" in b and "没有回应" in b, b
+        dg = connmon.diag(lambda t: t.upper())
+        assert dg["top_devices"][0]["dev"] in ("BB:BB", "2409:8A55:E2D3:B950:D76:4DB1:FF41:74FF") and dg["summary"]["total"] == 4
+        # 限速:间隔内再喂一次不重算
+        at = connmon.STATE["at"]; connmon.feed([], Col(), now + 1, kind)
+        assert connmon.STATE["at"] == at and connmon.snapshot(now=now)["summary"]["total"] == 4
+        # 新增 / 关闭
+        connmon.feed(conns[:2], Col(), now + 5, kind)
+        st = connmon.snapshot(now=now + 5)["devices"]
+        assert sum(x["closed"] for x in st) == 2
+        # 读不到 conntrack:降级,不报错
+        connmon.CT_PATH = os.path.join(d, "none"); connmon.STATE["ct_at"] = 0.0
+        connmon.feed(conns, Col(), now + 20, kind)
+        j2 = connmon.snapshot(now=now + 20)
+        assert j2["status"]["ct_ok"] is False and all(r["link"] == "无法判断" and r["state"] == "" for r in j2["rows"])
+    finally:
+        connmon.CT_PATH = old
+    # 关闭开关:清空数据
+    import json
+    from app import config, db
+    config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db"); db.init_db(); con = db.open_db()
+    connmon.save_cfg(con, {"on": False})
+    assert connmon.snapshot()["rows"] == [] and connmon.STATE["on"] is False
+    connmon.feed(conns, Col(), now + 100, kind)
+    assert connmon.snapshot()["rows"] == []
+    connmon.save_cfg(con, {"on": True})
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

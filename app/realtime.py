@@ -4,7 +4,7 @@ import collections
 import os
 import time
 
-from . import collector, config, netstat
+from . import collector, config, connmon, netstat
 from .util import api_call, log, stop
 
 INTERVAL = max(1, min(10, int(os.environ.get("REALTIME_SEC", "2") or 2)))
@@ -92,6 +92,10 @@ def run():
                     a[1] += du
                     a[2] += dd
             seen, last_t = new_seen, t0
+            try:
+                connmon.feed(conns, col, t0, kind)      # 连接明细(自己限速、自己兜底,出错不影响实时速度)
+            except Exception:
+                pass
             hu, ht = host_mem()
             MEM.append((t0, int(data.get("memory") or 0), hu, ht))
             if not first:

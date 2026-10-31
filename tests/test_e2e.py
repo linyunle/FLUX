@@ -327,6 +327,15 @@ try:
     ok(c == 200 and r["count"] == 0, "节点登记地:按入口批量忽略接口可用")
     c, r = post("/api/nodegeo/ignore", {"node": "测试节点", "on": False})
     ok(c == 200 and "测试节点" not in r["ignored"], "节点登记地:可恢复")
+    cj = get("/api/conns?limit=50")
+    ok(cj["ok"] and isinstance(cj["rows"], list) and "summary" in cj and "status" in cj and "devices" in cj, "连接明细:接口结构")
+    ok(all(("state" in x and "link" in x and "proto" in x) for x in cj["rows"]), "连接明细:每行有协议 / 状态 / 关联")
+    ok(get("/api/conns?proto=udp&limit=5")["summary"]["tcp"] == 0, "连接明细:按协议筛选")
+    c, r = post("/api/connmon/cfg", {"on": False})
+    ok(c == 200 and r["on"] is False and get("/api/conns")["on"] is False and get("/api/conns")["rows"] == [], "连接明细:可关闭")
+    c, r = post("/api/connmon/cfg", {"on": True})
+    ok(c == 200 and r["on"] is True, "连接明细:可重新开启")
+    ok("status" in (get("/api/diag")["ext"].get("connections") or {}), "诊断包:带连接明细段(ext.connections)")
     c, r = post("/api/noise/ignore", {"key": "192.168.9.9|x.example.com", "on": True})
     ok(c == 200 and "192.168.9.9|x.example.com" in r["ignored"], "自检降噪:可忽略设备直连失败")
     c, r = post("/api/noise/ignore", {"clear": True})
@@ -504,7 +513,7 @@ try:
     # ---- v0.26.0 gzip / ETag
     rq_ = urllib.request.Request(B + "/", headers={"Accept-Encoding": "gzip"}); r_ = urllib.request.urlopen(rq_, timeout=5)
     import gzip as _gz
-    raw_ = r_.read(); ok(r_.headers.get("Content-Encoding") == "gzip" and b"<title>" in _gz.decompress(raw_) and len(raw_) < 135000, f"首页:gzip 压缩 {len(raw_)} 字节")
+    raw_ = r_.read(); ok(r_.headers.get("Content-Encoding") == "gzip" and b"<title>" in _gz.decompress(raw_) and len(raw_) < 160000, f"首页:gzip 压缩 {len(raw_)} 字节")
     et_ = r_.headers.get("ETag"); ok(bool(et_) and "no-cache" in r_.headers.get("Cache-Control", ""), "首页:带 ETag,每次向服务器确认")
     try: c304 = urllib.request.urlopen(urllib.request.Request(B + "/", headers={"If-None-Match": et_, "Accept-Encoding": "gzip"}), timeout=5).status
     except urllib.error.HTTPError as e: c304 = e.code

@@ -294,6 +294,20 @@ try:
                 assert pg.locator("#mgGo").is_enabled() and pg.inner_text("#mgGo")=="合并设备"
             pg.evaluate("S.dd='';loadDevicesTab()")
         print("PASS 搜索整行 / 设备合并面板")
+        # 连接明细:全网 + 单台设备,弹窗打开、能筛选、能关闭
+        pg.evaluate("S.tab='devices';S.dd='';showTab();loadDevicesTab()"); pg.wait_for_timeout(800)
+        pg.click("#dvConns"); pg.wait_for_timeout(1500)
+        assert pg.evaluate("document.querySelector('#cnm').classList.contains('open')"), "全网连接弹窗打开"
+        t = pg.inner_text("#cnRes"); assert ("连接数" in t) or ("还没有数据" in t) or ("已关闭" in t), t[:200]
+        pg.fill("#cnQ","zzzz-no-such"); pg.wait_for_timeout(1200)
+        assert "没有符合条件" in pg.inner_text("#cnRes") or "还没有数据" in pg.inner_text("#cnRes")
+        pg.click("#cnX"); assert not pg.evaluate("document.querySelector('#cnm').classList.contains('open')")
+        if pg.evaluate("(S.devices||[]).length"):
+            pg.evaluate("S.dd=S.devices[0].key;loadDevicesTab()"); pg.wait_for_timeout(1200)
+            pg.click("#ddConns"); pg.wait_for_timeout(1500)
+            assert "连接明细" in pg.inner_text("#cnTitle") and pg.locator("#cnDev").count()==0, "单台设备不显示设备选择"
+            pg.click("#cnX"); pg.evaluate("S.dd='';loadDevicesTab()")
+        print("PASS 连接明细弹窗")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:

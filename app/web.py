@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import hmac
 
-from . import agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, lookup, analysis, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health, nodegeo, favicon
+from . import connmon, agh, alerts, auth, airports, appsig, collector, config, db, devices, geo, insight, netstat, realtime, sysinfo, update, backup, groups, advisor, providers, panellog, lookup, analysis, probe, presence, wan, diag, syslog, ups, expiry, dockerapi, listen, nodepurge, wallpaper, dnsx, nikkilog, health, nodegeo, favicon
 from .util import api_call, is_mac, log, stop
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -1045,6 +1045,21 @@ def p_devmerge(body):
 q_nodegeo = _q(lambda con, p: nodegeo.api(con))
 
 
+def q_conns(con, p):
+    cache = alerts._dev_names(con)
+    lim = 300
+    try:
+        lim = int(one(p, "limit", "300") or 300)
+    except ValueError:
+        pass
+    return connmon.snapshot(one(p, "dev"), one(p, "proto"), one(p, "q"), one(p, "state"), one(p, "node"), one(p, "sort", "age"), lim,
+                            label=lambda k: alerts._dev_label(con, k, cache))
+
+
+def p_connmon_cfg(body):
+    return {"ok": True, **_wcon(lambda con: connmon.save_cfg(con, body))}
+
+
 def p_noise_ignore(body):
     from . import tidy
     if body.get("clear"):
@@ -1194,7 +1209,7 @@ q_wan = _q(lambda con, p: {**wan.snapshot(), "hours": wan.hours(con, 24)})
 GET_ROUTES = {"/api/nodescore": q_nodescore, "/api/groups": q_groups, "/api/groups/learn": q_group_learn, "/api/ui": q_ui, "/api/backup": q_backup, "/api/sys": q_sys, "/api/secsum": q_secsum, "/api/geo/status": q_geo_status, "/api/agh": q_agh, "/api/agh/config": q_agh_cfg, "/api/rulehealth": q_rulehealth, "/api/leaks": q_leaks, "/api/heatmap": q_heatmap,
               "/api/quota": q_quota, "/api/report": q_report, "/api/report/config": q_report_cfg, "/api/quality": q_quality, "/api/geo": q_geo, "/api/nodegeo": q_nodegeo, "/api/devmerge": q_devmerge,
               "/api/status": q_status, "/api/summary": q_summary, "/api/modes": q_modes, "/api/days": q_days,
-              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/apps/hosts": q_apphosts, "/api/syslog/groups": _q(lambda con, p: syslog.groups(con, int(one(p, "level", "3") or 3), int(one(p, "hours", "24") or 24), one(p, "q"))), "/api/apps/unknown": q_appunknown, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/devices/new": _q(lambda con, p: {"days": int(one(p, "days", "14") or 14), "rows": devices.new_devices(con, int(one(p, "days", "14") or 14))}), "/api/live": q_live}
+              "/api/hours": q_hours, "/api/domains": q_domains, "/api/trace": q_trace, "/api/protocols": q_protocols, "/api/apps": q_apps, "/api/tunnels": q_tunnels, "/api/qoe": q_qoe, "/api/stack": q_stack, "/api/apprules": q_apprules, "/api/apps/hosts": q_apphosts, "/api/syslog/groups": _q(lambda con, p: syslog.groups(con, int(one(p, "level", "3") or 3), int(one(p, "hours", "24") or 24), one(p, "q"))), "/api/apps/unknown": q_appunknown, "/api/providers": q_providers, "/api/panel": q_panel, "/api/presence": q_presence, "/api/wan": q_wan, "/api/selfcheck": q_selfcheck, "/api/conns": _q(q_conns), "/api/diag": q_diag, "/api/probe": q_probe, "/api/alerts": q_alerts, "/api/alerts/config": q_alert_cfg, "/api/alerts/baseline": q_alert_base, "/api/airports": q_airports, "/api/realtime": q_realtime, "/api/devices": q_devices, "/api/devices/new": _q(lambda con, p: {"days": int(one(p, "days", "14") or 14), "rows": devices.new_devices(con, int(one(p, "days", "14") or 14))}), "/api/live": q_live}
 
 
 # ---------------------------------------------------------------- POST
@@ -1278,7 +1293,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -1336,7 +1351,7 @@ POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_ni
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)", "/api/noise/ignore": "忽略 / 恢复「设备直连失败」自检提示", "/api/submute": "停用 / 恢复订阅「没更新」提醒"})
+AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)", "/api/noise/ignore": "忽略 / 恢复「设备直连失败」自检提示", "/api/submute": "停用 / 恢复订阅「没更新」提醒", "/api/connmon/cfg": "开关「连接明细」采集"})
 
 
 _ctx = threading.local()

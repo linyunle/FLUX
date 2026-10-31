@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import tidy, netstat, agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
+from . import connmon, tidy, netstat, agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -360,6 +360,12 @@ def _ext(con, m, full, now, logs=False, dom=False):
                       "servers": [{"name": s["name"], "addr": m(f"{s['host']}:{s['port']}"), "ms": s["ms"], "note": s["note"], "loss_pct_24h": s["loss_pct"], "avg_ms_24h": s["avg_ms"], "samples_24h": s["n24"]} for s in sv["servers"]]}}
     except Exception as e:
         out["dns"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 当前连接明细(协议 / 目标 / 端口 / 状态 / 节点),按连接数最多的几台设备
+    try:
+        dm3 = domain_masker() if dom else None
+        out["connections"] = connmon.diag((lambda x: mask_domains(m(x), dm3)) if dom else m)
+    except Exception as e:
+        out["connections"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- nikki 内核 / 插件日志
     try:
         st = nikkilog.status(con)

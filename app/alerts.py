@@ -471,8 +471,14 @@ def check_conns(con, cfg, now):
         if v["conns"] >= r["count"] and _allow("conn_many", key, r["cool_min"], now):
             cache = cache or _dev_names(con)
             name = _dev_label(con, key, cache)
+            try:
+                from . import connmon
+                extra = connmon.brief(key)
+            except Exception:
+                extra = ""
             fire(con, cfg, "conn_many", "warn", key, f"连接数异常:{name}",
-                 f"这台设备此刻有 {v['conns']} 个并发连接(阈值 {int(r['count'])})。常见原因:BT/PT 下载、扫描类软件、被入侵的设备。", now)
+                 f"这台设备此刻有 {v['conns']} 个并发连接(阈值 {int(r['count'])})。常见原因:BT/PT 下载、扫描类软件、被入侵的设备。"
+                 + (f"\n此刻的连接构成:{extra}\n(代理连接看不到真实目标 IP,只有域名;完整明细在「设备 → 连接明细」)" if extra else ""), now)
 
 
 def check_api(con, cfg, now):
