@@ -342,6 +342,20 @@ try:
         assert dl.value.suggested_filename.endswith(".json")
         pg.click("#ceX")
         print("PASS 连接监控中心 / 设备诊断 / 事件详情")
+        # 设备 / 域名 / 规则:复制与导出按钮
+        for tab, sels in (("devices", ["#devTbl"]), ("domains", ["#domTbl"]), ("rules", ["#grpTbl", "#ruleTbl"])):
+            pg.evaluate(f"S.tab='{tab}';S.dd='';showTab();refresh()"); pg.wait_for_timeout(1500)
+            for sel in sels:
+                assert pg.locator(f'.tcb[data-tc="{sel}"][data-tm="copy"]').count() == 1, sel + " 复制按钮"
+        pg.evaluate("S.tab='devices';S.dd='';showTab();loadDevicesTab()"); pg.wait_for_timeout(1500)
+        if pg.evaluate("document.querySelectorAll('#devTbl tbody tr').length"):
+            with pg.expect_download() as dl: pg.click('.tcb[data-tc="#devTbl"][data-tm="csv"]')
+            assert dl.value.suggested_filename.endswith(".csv")
+        pg.set_viewport_size({"width": 390, "height": 800}); pg.wait_for_timeout(400)
+        xs = pg.evaluate("[...document.querySelectorAll('#tab-devices .card:nth-of-type(2)>h2 button, #tab-devices .card:nth-of-type(2)>h2 .seg')].map(e=>Math.round(e.getBoundingClientRect().left))")
+        assert xs and min(xs) < 80, f"手机版设备页按钮应靠左: {xs}"
+        pg.set_viewport_size({"width": 1280, "height": 900})
+        print("PASS 表格复制 / 导出按钮与手机版靠左")
         print("PASS 各预设布局独立")
         print("PASS 安全页各卡片都有内容,浏览器无报错")
 finally:
