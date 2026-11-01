@@ -18,8 +18,11 @@ PENDING = []       # 新出现的「高度可疑」事件,交给告警模块推�
 NOTES = []         # 新开的「需要关注 / 无法判断」事件,只写时间线、不推送
 _streak = {}       # dev -> 连续成立次数
 _clear = {}        # dev -> 开始恢复正常的时间
+_weak = {}         # dev -> 只有单个弱信号(权重 1)开始持续的时间
 _emit = {}         # dev -> 上次写事件的 (level, 时间)
 _todo = []         # 待重算基线的设备
+IGN = set()        # 用户选择忽略的 "设备|信号id"("设备|*" = 这台设备一律不提醒)
+_ign_at = [0.0]
 COMMON_PORTS = {"80", "443", "53", "853", "8080", "8443"}
 
 SIG = {
@@ -197,7 +200,9 @@ def detect(dev, now, rows, ct_ok):
         if abs(us - b["udp"]) > 0.4:
             add("proto_drift", f"UDP 占比 {int(us * 100)}%,平时约 {int(b['udp'] * 100)}%")
     elif conf == "low":
-        miss.append("没有可靠的历史基线,无法判断 TCP / UDP 比例和目标是否偏离习惯")
+        bb = BASE.get(dev)
+        miss.append("历史不足 1 天,基线参考价值有限,TCP / UDP 比例和目标是否偏离习惯只能粗略判断" if bb and bb["all"] and bb["all"][0] >= 60
+                    else "没有历史基线,无法判断 TCP / UDP 比例和目标是否偏离习惯")
     if ct_ok:
         bad = max(cur[6], cur[7])           # 两者描述的是同一类 TCP 连接,取大不相加;UDP 没回应不算
         if bad >= max(30, 0.3 * tcp):
@@ -215,7 +220,10 @@ def detect(dev, now, rows, ct_ok):
                     add("node_anom", f"{nn}/{tot} 个无回应连接都走节点「{nd}」")
     else:
         miss.append("读不到路由器连接表,握手失败 / 无回应类证据无法判断")
-    if p95 is not None and conns > 2 * p95 + 20 and conns >= 100:
+    lim = 2 * p95 + 20 if p95 is not None else None
+    two = [x for x in r if cur[0] - x[0] <= 120]
+    # 手机 / 电脑打开一个应用,连接数会在几分钟内冲高再回落,这不算「偏离习惯」;必须连续 2 分钟都高于平时才算
+    if lim is not None and conns >= 100 and len(two) >= 3 and cur[0] - two[0][0] >= 90 and all(x[1] > lim for x in two):
         add("habit_dev", f"当前 {conns} 个连接,这台设备{why.replace('对比这台设备', '')}的 P95 是 {p95}")
     return sig, miss, why, conf
 
@@ -251,6 +259,31 @@ def diagnose(dev_name, level, sig, miss, why, conf, conns):
             "advice": advice[:5], "confidence": conf, "baseline": why}
 
 
+def load_ign(con=None):
+    """从 kv 读忽略名单(60 秒缓存)。"""
+    try:
+        from . import db, tidy
+        c = con or db.open_db(readonly=True)
+        try:
+            IGN.clear()
+            IGN.update(tidy._lst(c, "connmon_ign"))
+        finally:
+            if not con:
+                c.close()
+        _ign_at[0] = time.time()
+    except Exception:
+        _ign_at[0] = time.time()
+
+
+def set_ign(con, dev, signal, on):
+    from . import tidy
+    lst = tidy._toggle(con, "connmon_ign", f"{dev}|{signal or '*'}", on)
+    IGN.clear()
+    IGN.update(lst)
+    _ign_at[0] = time.time()
+    return lst
+
+
 def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
     """每次连接明细刷新后调用。"""
     if not STATE["on"]:
@@ -259,6 +292,8 @@ def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
         STATE["at"] = now
         STATE["checks"] += 1
         refresh_base(now, list(dstat))
+        if time.time() - _ign_at[0] > 60:
+            load_ign()
         by = {}
         for x in rows:
             by.setdefault(x[rcol["dev"]], []).append(x)
@@ -270,9 +305,14 @@ def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
             mine = [[None, x[rcol["start"]], x[rcol["dst"]], x[rcol["host"]], x[rcol["dport"]], _state(x, rcol), x[rcol["node"]]]
                     for x in by.get(dev, [])]
             sig, miss, why, conf = detect(dev, now, mine, ct_ok)
+            if f"{dev}|*" in IGN:
+                sig = []
+            else:
+                sig = [x for x in sig if f"{dev}|{x['id']}" not in IGN]
             level, score = grade(sig, conf, ct_ok)
             LEVEL[dev] = {"level": level, "conf": conf, "score": score, "signals": [s["id"] for s in sig], "at": int(now), "why": why}
             if level == "normal":
+                _weak.pop(dev, None)
                 _streak[dev] = 0
                 t0 = _clear.setdefault(dev, now)
                 if now - t0 >= 120 and (dev, "conn_anom") in connhist.ACTIVE:
@@ -280,6 +320,12 @@ def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
                     _emit.pop(dev, None)
                 continue
             _clear.pop(dev, None)
+            # 只有一个权重 1 的弱信号不立刻开事件,要持续 3 分钟才算;已有事件时照常更新
+            if score < 2 and (dev, "conn_anom") not in connhist.ACTIVE:
+                if now - _weak.setdefault(dev, now) < 180:
+                    continue
+            else:
+                _weak.pop(dev, None)
             _streak[dev] = _streak.get(dev, 0) + 1
             if _streak[dev] < 2:
                 continue

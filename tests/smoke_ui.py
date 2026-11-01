@@ -330,12 +330,13 @@ try:
         with pg.expect_download() as dl: pg.click("#cdCsv")
         assert dl.value.suggested_filename.endswith(".csv")
         pg.click("#cdX")
-        pg.evaluate("""cePaint({id:1,dev:'x',name:'测试设备',level:'suspect',level_name:'高度可疑',title:'t',ts_start:1790000000,ts_end:0,status:'open',evidence:{},
+        pg.evaluate("""cePaint({id:1,dev:'x',kind:'conn_anom',name:'测试设备',level:'suspect',evidence:{signals:[{id:'habit_dev',name:'明显偏离习惯'}]},level_name:'高度可疑',title:'t',ts_start:1790000000,ts_end:0,status:'open',
           diag:{phenomenon:'现象A',evidence:['证据1'],causes:['原因1'],insufficient:['缺基线'],conclusion:'结论,相关不等于因果',advice:['建议1'],confidence:'low'},
           snapshot:{pre:[[1789999990,10,10,0,1,1,0,0],[1790000000,400,400,0,300,2,0,0]],post:[[1790000010,380,380,0,5,5,0,0]],at:{ts:1790000000,rows:[['tcp','a.com','443','HK','ESTABLISHED',5,100,'已确认']],tops:{d:[['a.com',3]],p:[['443/tcp',3]],n:[['HK',3]]}}},snapshot_pending:false});$('#cem').classList.add('open')""")
         pg.wait_for_timeout(300)
         t = pg.inner_text("#ceBody")
         for k in ("异常现象","关键证据","可能原因","证据不足项","诊断结论","建议排查方向","现场快照","a.com"): assert k in t, k
+        assert pg.locator("#ceIgn button").count() == 2, "事件详情有忽略按钮"
         with pg.expect_download() as dl: pg.click("#ceTxt")
         assert dl.value.suggested_filename.endswith(".txt")
         with pg.expect_download() as dl: pg.click("#ceJson")

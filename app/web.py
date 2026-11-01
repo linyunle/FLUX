@@ -1116,10 +1116,23 @@ def q_conns_system(con, p):
     from . import connhist, connanom
     out = connhist.system(con)
     cache = alerts._dev_names(con)
-    out["anom"] = {"overview": connanom.overview(), "baseline_devs": len(connanom.BASE), "err": connanom.STATE["err"], "checks": connanom.STATE["checks"],
+    ign = []
+    for x in sorted(connanom.IGN):
+        d, _, sg = x.rpartition("|")
+        ign.append({"dev": d, "name": alerts._dev_label(con, d, cache), "signal": "" if sg == "*" else sg, "signal_name": connanom.SIG[sg][0] if sg in connanom.SIG else "全部提醒"})
+    out["anom"] = {"ignored": ign, "overview": connanom.overview(), "baseline_devs": len(connanom.BASE), "err": connanom.STATE["err"], "checks": connanom.STATE["checks"],
                    "devices": [dict(v, dev=k, name=alerts._dev_label(con, k, cache), signal_names=[connanom.SIG[x][0] for x in v["signals"]])
                                for k, v in sorted(connanom.LEVEL.items(), key=lambda kv: -kv[1]["score"])[:50]]}
     return out
+
+
+def p_conns_ignore(body):
+    from . import connanom
+    dev = str(body.get("dev") or "")[:120]
+    sig = str(body.get("signal") or "")[:40]
+    if not dev or (sig and sig not in connanom.SIG):
+        return {"ok": False, "error": "参数不对"}
+    return {"ok": True, "ignored": _wcon(lambda con: connanom.set_ign(con, dev, sig, bool(body.get("on", True))))}
 
 
 def p_connmon_cfg(body):
@@ -1359,7 +1372,7 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/conns/ignore": p_conns_ignore, "/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -1417,7 +1430,7 @@ POST_ROUTES.update({"/api/nikkiui": lambda body: _wcon(lambda con: backup.set_ni
     "/api/expiry": lambda body: _wcon(lambda con: {"cfg": expiry.save_cfg(con, body)}),
     "/api/expiry/check": lambda body: {"ok": True, "started": expiry.refresh_async(force=True)},
 })
-AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)", "/api/noise/ignore": "忽略 / 恢复「设备直连失败」自检提示", "/api/submute": "停用 / 恢复订阅「没更新」提醒", "/api/connmon/cfg": "开关「连接明细」采集"})
+AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/clean": "清理 / 压缩数据库", "/api/nklog/cfg": "修改 nikki 日志设置", "/api/nklog/clear": "清空 nikki 日志", "/api/dns/cfg": "修改自定义 DNS 服务器", "/api/wallpaper": "修改登录页壁纸", "/api/wallpaper/cfg": "修改壁纸自动更换设置", "/api/wallpaper/refresh": "立即更换登录页壁纸", "/api/sys/temp": "修改主温度传感器", "/api/nodes/purge": "清理已不存在的节点数据", "/api/listen": "修改面板监听地址 / 端口", "/api/listen/confirm": "确认面板新监听地址", "/api/syslog/cfg": "修改系统日志设置", "/api/syslog/clear": "清空系统日志", "/api/ups": "修改 UPS 设置", "/api/expiry": "修改证书/域名到期检查名单", "/api/docker/cfg": "修改容器管理设置", "/api/nodegeo/ignore": "忽略 / 恢复「节点登记地与名称不符」提示", "/api/devmerge": "合并 / 拆分设备(把多个 MAC / IP 并成一台)", "/api/noise/ignore": "忽略 / 恢复「设备直连失败」自检提示", "/api/submute": "停用 / 恢复订阅「没更新」提醒", "/api/connmon/cfg": "开关「连接明细」采集", "/api/conns/ignore": "忽略 / 恢复某台设备的连接异常提醒"})
 
 
 _ctx = threading.local()

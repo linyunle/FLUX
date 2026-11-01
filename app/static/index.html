@@ -1634,7 +1634,8 @@ function cmSys(sy){const h=sy.hw||{},p=sy.params||{},st=sy.storage||{},c=sy.cfg|
     ["采样频率",`连接明细每 ${p.every} 秒;路由器连接表每 ${p.ct} 秒;历史按 ${p.res} 分钟一条`],["保留期",`历史 ${p.hist} 天 · 事件 ${p.events} 天 · 快照前 ${p.pre} 秒 / 后 ${p.post} 秒 · ${p.snap_rows?"快照含 "+p.snap_rows+" 条连接":"快照只含汇总和 Top(轻量档)"}`],
     ["占用",`历史 ${st.minute_rows??"–"} 行 · 事件 ${st.events??"–"} 个 · 快照 ${st.snaps??"–"} 个(${mb(st.snap_bytes)}) · 实际内容合计约 ${mb(st.est_bytes)}(不含 SQLite 文件里未回收的空闲页)/ 预算 ${c.budget_mb} MB`],
     ["基线",`已为 ${sy.anom?sy.anom.baseline_devs:0} 台设备建立基线 · 判定 ${p.baseline==="lite"?"仅整体基线(轻量)":"按小时基线"}`],["最近一次写历史",sy.last_flush?cmT(sy.last_flush):"尚未"]];
-  return `<details id="cmSysD" ${CM.open?"open":""} style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
+  const ig=(sy.anom&&sy.anom.ignored)||[];if(ig.length)kv.push(["已忽略的提醒",ig.map(x=>`<span class="chip" style="margin:0 6px 4px 0">${esc(x.name)} · ${esc(x.signal_name)} <button data-ign-dev="${esc(x.dev)}" data-ign-sig="${esc(x.signal)}" data-ign-off="1" style="padding:0 6px;font-size:12px" ${ro?"disabled":""}>恢复</button></span>`).join("")]);
+  return `<details id="cmSysD" ${CM.open?"open":""} style="margin-top:12px"><summary class="h3" style="cursor:pointer">系统状态 <span class="sub">档位 / 硬件 / 采样 / 保留 / 资源</span></summary><table><tbody>${kv.map(([k,v])=>`<tr><td class="k" style="white-space:nowrap">${k}</td><td>${k==="已忽略的提醒"?v:esc(v)}</td></tr>`).join("")}</tbody></table>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><label class="sub">档位 <select id="cmTier" ${ro?"disabled":""}><option value="auto">自动</option><option value="high">高性能</option><option value="standard">标准</option><option value="light">轻量</option></select></label>
   <label class="sub">存储预算 <input id="cmBud" type="number" min="20" max="20000" value="${c.budget_mb}" style="width:80px" ${ro?"disabled":""}> MB</label>
   <label class="sub">历史天数 <input id="cmHist" type="number" min="0" max="90" value="${c.hist}" style="width:60px" ${ro?"disabled":""}></label><label class="sub">事件天数 <input id="cmEvd" type="number" min="0" max="365" value="${c.events}" style="width:60px" ${ro?"disabled":""}></label>
@@ -1688,6 +1689,7 @@ function cePaint(d){const g=d.diag||{},sn=d.snapshot,ul=a=>(a&&a.length)?`<ul st
   else snap=sec("现场快照",`<div class="sub">${d.snapshot_pending?"正在记录异常后 180 秒的现场,稍后再打开":"没有保存现场快照(可能因磁盘空间不足、存储预算清理或事件较早)"}</div>`);
   $("#ceBody").innerHTML=`<div style="margin-bottom:6px">${lvChip(d.level)} <b>${esc(d.name)}</b> <span class="sub">${cmT(d.ts_start)} ~ ${d.ts_end?cmT(d.ts_end):"进行中"} · 可信度 ${CONF[g.confidence]||"低"}</span></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"><button id="ceCopy">复制摘要</button><button id="ceTxt">导出诊断 TXT</button><button id="ceJson">导出事件 JSON</button><button id="ceDev">进入设备诊断页</button></div>
+  ${(d.kind==="conn_anom"&&d.evidence&&d.evidence.signals&&document.documentElement.dataset.vro!=="1")?`<div class="sub" style="margin:4px 0 6px">觉得这是这台设备的正常行为?<span id="ceIgn" style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:6px">${d.evidence.signals.slice(0,4).map(x=>`<button data-ign-dev="${esc(d.dev)}" data-ign-sig="${esc(x.id)}">不再提醒「${esc(x.name)}」</button>`).join("")}<button data-ign-dev="${esc(d.dev)}" data-ign-sig="">这台设备一律不提醒</button></span></div><div id="ceIgnMsg" class="sub"></div>`:""}
   ${g.phenomenon?sec("异常现象",`<div>${esc(g.phenomenon)}</div>`):sec("事件",`<div>${esc(d.title)}</div>`)}${sec("关键证据",ul(g.evidence||(d.evidence&&d.evidence.summary?[d.evidence.summary]:[])))}${sec("可能原因",ul(g.causes))}${sec("证据不足项",ul(g.insufficient))}${sec("诊断结论",`<div>${esc(g.conclusion||"这是基于阈值的连接数告警,没有更多判断依据。")}</div>`)}${sec("建议排查方向",ul(g.advice))}${snap}
   <div class="sub" style="margin-top:10px">导出内容只含连接统计、目标域名 / IP 和端口,不含密码、订阅链接或密钥。</div>`;
   const cb=$("#ceChart");if(cb)cmChart(cb,JSON.parse(cb.dataset.r),[{k:"conns",c:"var(--accent)",n:"连接数"},{k:"syn",c:"var(--bad)",n:"正在握手"}],[]);
@@ -1696,6 +1698,10 @@ function cePaint(d){const g=d.diag||{},sn=d.snapshot,ul=a=>(a&&a.length)?`<ul st
   $("#ceJson").onclick=()=>dlBlob("flux-event-"+d.id+"-"+ymd(new Date())+".json",JSON.stringify(d,null,1),"application/json");
   $("#ceDev").onclick=()=>{$("#cem").classList.remove("open");openCD(d.dev)}}
 document.addEventListener("click",e=>{const v=e.target.closest("[data-cmev]");if(v){openCE(+v.dataset.cmev);return}const t=e.target.closest("#cmm [data-cmdev]");if(t)openCD(t.dataset.cmdev)});
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-ign-dev]");if(!b)return;
+  try{await post("/api/conns/ignore",{dev:b.dataset.ignDev,signal:b.dataset.ignSig,on:!b.dataset.ignOff});
+    const m=$("#ceIgnMsg");if(m&&!b.dataset.ignOff)m.textContent="已记下:这台设备"+(b.dataset.ignSig?"这类":"所有")+"连接异常以后不再提醒(可在连接监控中心 → 系统状态 → 已忽略的提醒 里恢复)";
+    if(b.dataset.ignOff)cmLoad()}catch(er){alert(er.message)}});
 $("#cmX").onclick=()=>$("#cmm").classList.remove("open");$("#cdX").onclick=()=>$("#cdm").classList.remove("open");$("#ceX").onclick=()=>$("#cem").classList.remove("open");
 $("#tConn").style.cursor="pointer";$("#tConn").title="点击打开连接监控中心";$("#tConn").onclick=openCM;$("#dvCM").onclick=openCM;
 async function cmBadge(){try{if(document.hidden)return;const o=await get("/api/conns/overview");const m=o.metrics;const s=$("#tConnS");CM.ab=m?m.abnormal:0;CM.sus=m?m.levels.suspect:0;const tc=$("#tConn");const col=CM.ab>0?(CM.sus>0?"var(--bad)":"var(--warn)"):"";tc.style.borderColor=col;s.style.color=col;s.title=CM.ab>0?"有设备连接行为异常,点击查看":"";updConnSub()}catch(e){}}

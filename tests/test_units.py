@@ -1237,7 +1237,9 @@ def test_v052_connanom():
     rows = [[None, now - 10, "", "a.com", "443", "", "HK"]] * 400
     sig, miss, why, conf = connanom.detect("dev1", now, rows, True)
     ids = {s["id"] for s in sig}
-    assert {"sudden_growth", "new_rate", "habit_dev"} <= ids, ids
+    assert {"sudden_growth", "new_rate"} <= ids and "habit_dev" not in ids, ids      # 才冲高几十秒:不算「偏离习惯」
+    feed_ring("dev1", [(400, 5, 5, 0, 0)] * 14, now - 130)                          # 连续 2 分钟以上都高于平时
+    assert "habit_dev" in {x["id"] for x in connanom.detect("dev1", now, rows, True)[0]}
     lv, sc = connanom.grade(sig, conf, True)
     assert lv == "suspect" and sc >= 5
     # 新设备 + 无连接表:不硬下结论
@@ -1337,6 +1339,56 @@ def test_v053_unreplied_and_reopen():
     connhist.resolve("dev", "conn_anom", now + 500)
     e3 = connhist.trigger("dev", "conn_anom", "attention", "t", {}, now + 500 + 1000)   # 超过 15 分钟 → 新事件
     assert e3 != e1
+    con.close()
+
+
+def test_v053_ignore():
+    """v0.53.6:按设备忽略连接异常提醒(整台 / 某类信号)与单个弱信号需持续 3 分钟。"""
+    import os, tempfile, time, importlib, collections
+    from app import config, db, connhist, connanom
+    importlib.reload(connhist); importlib.reload(connanom)
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "i.db"); db.init_db(); con = db.open_db()
+    connhist.STATE.update(tier="high", since=1.0)
+    R = {"dev": 0, "dst": 1, "host": 2, "dport": 3, "proto": 4, "node": 5, "start": 6, "up": 7, "down": 8, "state": 9, "link": 10, "unrep": 11}
+    now = 2_000_000.0
+    rows = [["dev1", "", "9.9.9.9", "443", "tcp", "HK", now - 10, 1, 1, "ESTABLISHED", "已确认", False] for _ in range(450)]
+    ds = {"dev1": {"conns": 450, "tcp": 450, "udp": 0, "new": 400, "closed": 5}}
+    def run(t0, n, dev="dev1"):
+        connhist.RING.clear(); connanom.LEVEL.clear(); connanom.PENDING.clear(); connanom.NOTES.clear(); connanom._streak.clear(); connanom._weak.clear()
+        connanom.STATE["base_at"] = t0
+        for i in range(n):
+            t = t0 + i * 10
+            connhist.RING.setdefault(dev, collections.deque(maxlen=50)).append((int(t), 20 if i < 3 else 450, 20 if i < 3 else 450, 0, 3 if i < 3 else 400, 5, 0, 0))
+            connanom.check(t, ds, {}, rows, R, True, label=lambda k: "设备一")
+    connanom._ign_at[0] = time.time() + 99999
+    run(now, 8)
+    assert connanom.LEVEL["dev1"]["signals"] and connhist.events(con, "dev1", 9999, 10, now + 500)
+    # 忽略整台设备:不再有信号
+    connanom.set_ign(con, "dev1", "", True)
+    assert connanom.IGN == {"dev1|*"}
+    connhist.ACTIVE.clear()
+    run(now + 5000, 8)
+    assert connanom.LEVEL["dev1"]["signals"] == [] and connanom.LEVEL["dev1"]["level"] == "normal"
+    connanom.set_ign(con, "dev1", "", False)
+    # 只忽略某一类信号
+    connanom.set_ign(con, "dev1", "new_rate", True)
+    connhist.ACTIVE.clear(); run(now + 9000, 8)
+    assert "new_rate" not in connanom.LEVEL["dev1"]["signals"] and connanom.LEVEL["dev1"]["signals"]
+    connanom.set_ign(con, "dev1", "new_rate", False); assert connanom.IGN == set()
+    # 单个弱信号(权重 1)不到 3 分钟不开事件,持续满 3 分钟才开
+    connhist.ACTIVE.clear(); connhist.RING.clear(); connanom.LEVEL.clear(); connanom._weak.clear(); connanom._streak.clear()
+    wrows = [["dev2", "", "9.9.9.9", "6881", "tcp", "HK", now + 20000 - 10, 1, 1, "ESTABLISHED", "已确认", False] for _ in range(120)]
+    wds = {"dev2": {"conns": 120, "tcp": 120, "udp": 0, "new": 1, "closed": 1}}
+    for i in range(12):                                   # 0..110 秒
+        t = now + 20000 + i * 10
+        connhist.RING.setdefault("dev2", collections.deque(maxlen=50)).append((int(t), 120, 120, 0, 1, 1, 0, 0))
+        connanom.check(t, wds, {}, wrows, R, True, label=lambda k: "设备二")
+    assert connanom.LEVEL["dev2"]["signals"] == ["port_focus"] and not connhist.events(con, "dev2", 99999, 10, now + 30000)
+    for i in range(12, 24):                               # 到 230 秒
+        t = now + 20000 + i * 10
+        connhist.RING["dev2"].append((int(t), 120, 120, 0, 1, 1, 0, 0))
+        connanom.check(t, wds, {}, wrows, R, True, label=lambda k: "设备二")
+    assert connhist.events(con, "dev2", 99999, 10, now + 30000)
     con.close()
 
 
