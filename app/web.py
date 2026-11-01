@@ -1091,13 +1091,13 @@ def q_conns_overview(con, p):
     itv = max(1, st["interval"])
     lv = connanom.LEVEL
     top = []
-    for k, d in sorted(ds.items(), key=lambda kv: -kv[1]["conns"])[:10]:
+    for k, d in sorted(ds.items(), key=lambda kv: -kv[1]["conns"])[:300]:
         p50, p95, _n, conf, why = connanom.ref(k, now)
         l = lv.get(k) or {}
         top.append({"dev": k, "name": alerts._dev_label(con, k, cache), "conns": d["conns"], "tcp": d["tcp"], "udp": d["udp"], "new": d["new"], "closed": d["closed"],
                     "base_p50": p50, "base_p95": p95, "dev_pct": (round(d["conns"] * 100 / p50) if p50 else None), "conf": l.get("conf") or conf,
                     "level": l.get("level") or "normal", "signals": [connanom.SIG[x][0] for x in l.get("signals", [])]})
-    evs = connhist.events(con, "", 24 * 7, 8)
+    evs = connhist.events(con, "", 24 * 7, 200)
     for e in evs:
         e["name"] = alerts._dev_label(con, e["dev"], cache)
     n1h = con.execute("SELECT COUNT(*) FROM conn_event WHERE ts_start>=?", (int(now) - 3600,)).fetchone()[0]
