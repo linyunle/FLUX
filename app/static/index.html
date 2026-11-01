@@ -678,7 +678,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div id="rtOut"></div></div>
   <div class="card"><h2>策略组<span class="seg" id="grpMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub">点一行 = 只看这个策略组</span><button class="tcb" data-tc="#grpTbl" data-tn="策略组" data-tm="copy" title="把下面这张表复制成文字(表格格式,可直接贴到表格软件)">复制</button><button class="tcb" data-tc="#grpTbl" data-tn="策略组" data-tm="csv" title="下载成 CSV 文件">导出 CSV</button></h2><div class="scroll" id="grpTbl"></div></div>
   <div class="card"><h2>命中规则<span class="seg" id="ruleMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub">点一行 = 只看这条规则</span><button class="tcb" data-tc="#ruleTbl" data-tn="命中规则" data-tm="copy" title="把下面这张表复制成文字(表格格式,可直接贴到表格软件)">复制</button><button class="tcb" data-tc="#ruleTbl" data-tn="命中规则" data-tm="csv" title="下载成 CSV 文件">导出 CSV</button></h2><div class="scroll" id="ruleTbl"></div></div>
-  <div class="card"><h2>规则健康 <span class="sub" id="rhNote"></span></h2><div id="rhBody"></div></div>
+  <div class="card" id="rhCard"><h2>规则健康 <span class="sub" id="rhNote"></span></h2><div id="rhBody"></div></div>
 </section>
 
 <section id="tab-settings" style="display:none">
@@ -1620,7 +1620,7 @@ function cmChart(box,rows,ser,evs){
   let g="";for(let i=0;i<=3;i++){const y=T+ph-ph*i/3;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${Math.round(max*i/3)}</text>`}
   for(let i=0;i<=4;i++){const ts=t0+span*i/4;g+=`<text x="${L+pw*i/4}" y="${H-6}" text-anchor="${i===0?"start":i===4?"end":"middle"}">${cmHM(ts,long)}</text>`}
   (evs||[]).filter(e=>e.ts_start>=t0&&e.ts_start<=t1).forEach(e=>{const x=X(e.ts_start),c=(CLV[e.level]||CLV.attention)[1];g+=`<line x1="${x}" x2="${x}" y1="${T}" y2="${T+ph}" stroke="${c}" stroke-dasharray="4 3"><title>${esc(cmT(e.ts_start)+" "+e.title)}</title></line>`});
-  for(const x of ser){const pts=rows.map(r=>[X(r.ts),Y(r[x.k]||0)]);if(pts.length>1)g+=`<polyline fill="none" stroke="${x.c}" stroke-width="2" stroke-linejoin="round" points="${pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>`;else g+=`<circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="3" fill="${x.c}"/>`}
+  for(const x of ser){const pts=rows.map(r=>[X(r.ts),Y(r[x.k]||0)]);if(pts.length>1)g+=`<polyline fill="none" stroke="${x.c}" stroke-width="${x.d?1.5:2}" ${x.d?'stroke-dasharray="5 4" opacity=".7"':""} stroke-linejoin="round" points="${pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>`;else g+=`<circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="3" fill="${x.c}"/>`}
   const bw=Math.max(3,pw/rows.length);g+=rows.map(r=>`<rect x="${X(r.ts)-bw/2}" y="${T}" width="${bw}" height="${ph}" fill="transparent"><title>${esc(cmT(r.ts)+" "+ser.map(x=>x.n+" "+(r[x.k]||0)).join(" · "))}</title></rect>`).join("");
   box.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="连接趋势">${g}</svg><div class="sub" style="margin-top:2px">${ser.map(x=>`<span style="margin-right:12px"><i style="display:inline-block;width:10px;height:3px;background:${x.c};vertical-align:middle;margin-right:4px"></i>${x.n}</span>`).join("")}${(evs||[]).length?'<span>虚线 = 异常事件开始</span>':""}</div>`}
 /* 总览 */
@@ -1656,15 +1656,24 @@ const CD_M={conns:[[{k:"conns",c:"var(--accent)",n:"连接数"},{k:"tcp",c:"var(
 function openCD(dev){CD.dev=dev;CD.lv="";CD.from=CD.to="";$("#cdTitle").textContent="设备连接诊断 · "+cnName(dev);
   $("#cdBody").innerHTML=`<div id="cdCtl" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="seg" id="cdRange"></span><span class="seg" id="cdMetric"></span>
     <span id="cdCust" style="display:none;gap:6px;align-items:center"><input type="datetime-local" id="cdFrom" aria-label="开始时间"> – <input type="datetime-local" id="cdTo" aria-label="结束时间"><button id="cdApply">应用</button></span>
-    <span class="sp"></span><button id="cdConns">当前连接明细</button><button id="cdCsv">导出 CSV</button></div><div id="cdChart" class="chartbox"></div><div id="cdInfo" class="sub" style="margin:4px 0 8px"></div>
+    <span class="sp"></span><button id="cdConns">当前连接明细</button><button id="cdCsv">导出 CSV</button></div>
+    <div id="cdFlt" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><label class="sub">协议 <select id="cdProto" aria-label="协议"><option value="">全部</option><option value="tcp">只看 TCP</option><option value="udp">只看 UDP</option></select></label>
+    <label class="sub">端口 <input id="cdPort" placeholder="如 443 或 443/udp" style="width:130px" autocomplete="off" aria-label="端口"></label>
+    <label class="sub" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="cdCmp"> 对比昨天同一时段</label></div><div id="cdChart" class="chartbox"></div><div id="cdInfo" class="sub" style="margin:4px 0 8px"></div>
     <div class="h3" style="display:flex;gap:8px;align-items:center">异常事件 <select id="cdLv" aria-label="按级别筛选"><option value="">全部级别</option><option value="suspect">高度可疑</option><option value="attention">需要关注</option><option value="unknown">无法判断</option></select></div><div id="cdEvs"></div>`;
   seg($("#cdRange"),[["5","5 分钟"],["15","15 分钟"],["60","1 小时"],["360","6 小时"],["1440","24 小时"],["c","自定义"]],String(CD.min),k=>{if(k==="c"){CD.min="c";$("#cdCust").style.display="flex";const n=new Date(),p=new Date(n-3600e3),f=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);$("#cdFrom").value=$("#cdFrom").value||f(p);$("#cdTo").value=$("#cdTo").value||f(n);return}CD.min=+k;$("#cdCust").style.display="none";cdLoad()});
   seg($("#cdMetric"),[["conns","连接数"],["flow","新建 / 关闭"],["fail","失败 / 无回应"]],CD.metric,k=>{CD.metric=k;cdChart()});
-  $("#cdApply").onclick=cdLoad;$("#cdLv").onchange=e=>{CD.lv=e.target.value;cdEvs()};$("#cdConns").onclick=()=>openConns(CD.dev);$("#cdCsv").onclick=cdCsv;
+  $("#cdApply").onclick=cdLoad;$("#cdProto").onchange=cdChart;$("#cdCmp").onchange=cdLoad;{let tm=0;$("#cdPort").oninput=()=>{clearTimeout(tm);tm=setTimeout(cdLoad,500)}}
+  $("#cdLv").onchange=e=>{CD.lv=e.target.value;cdEvs()};$("#cdConns").onclick=()=>openConns(CD.dev);$("#cdCsv").onclick=cdCsv;
   $("#cdm").classList.add("open");cdLoad()}
-async function cdLoad(){try{const a={dev:CD.dev};if(CD.min==="c"){const f=Date.parse($("#cdFrom").value)/1000,t=Date.parse($("#cdTo").value)/1000;if(!f||!t||t<=f){$("#cdInfo").textContent="请选择有效的开始和结束时间";return}a.since=Math.floor(f);a.until=Math.floor(t)}else a.minutes=CD.min;
+async function cdLoad(){try{const a={dev:CD.dev};if(CD.min==="c"){const f=Date.parse($("#cdFrom").value)/1000,t=Date.parse($("#cdTo").value)/1000;if(!f||!t||t<=f){$("#cdInfo").textContent="请选择有效的开始和结束时间";return}a.since=Math.floor(f);a.until=Math.floor(t)}else a.minutes=CD.min;if($("#cdCmp").checked)a.compare=1;const pt=($("#cdPort").value||"").trim();if(pt)a.port=pt;
     const [t,e]=await Promise.all([get("/api/conns/trend",a),get("/api/conns/events",{dev:CD.dev,hours:24*30,limit:200})]);CD.rows=t.rows;CD.t=t;CD.evs=e.rows;cdChart();cdEvs()}catch(er){$("#cdInfo").innerHTML=`<span class="msg err">${esc(er.message)}</span>`}}
-function cdChart(){const t=CD.t||{rows:[]};cmChart($("#cdChart"),CD.rows,CD_M[CD.metric][0],CD.evs);
+function cdSer(){const pt=($("#cdPort").value||"").trim(),px=$("#cdProto").value;let base;
+  if(pt)base=[{k:"port_n",c:"var(--accent)",n:`端口 ${pt} 的连接数(只统计该分钟前 3 名端口,近似)`}];
+  else if(CD.metric==="conns")base=px?[{k:px,c:px==="tcp"?"var(--up)":"var(--down)",n:px.toUpperCase()+" 连接数"}]:CD_M.conns[0];
+  else base=CD_M[CD.metric][0];
+  return $("#cdCmp").checked?[...base,...base.map(x=>({k:"p_"+x.k,c:x.c,d:1,n:"昨天 "+x.n}))]:base}
+function cdChart(){const t=CD.t||{rows:[]};cmChart($("#cdChart"),CD.rows,cdSer(),CD.evs);
   $("#cdInfo").textContent=`每个点 = ${t.res_min||1} 分钟${t.step>1?"(点太多,已按 "+t.step+" 个一组合并:连接数取最大值,新建 / 关闭取合计)":""} · 共 ${CD.rows.length} 个点。历史只在面板运行期间记录,没有记录的时段是空白,不代表没有连接。`}
 function cdEvs(){const l=CD.evs.filter(e=>!CD.lv||e.level===CD.lv);$("#cdEvs").innerHTML=l.length?l.map(e=>`<div class="ev click" data-cmev="${e.id}" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="sub">${cmT(e.ts_start)}</span> ${lvChip(e.level)} ${esc(e.title)} <span class="sub">${e.status==="open"?"进行中":"已结束"}</span></div>`).join(""):'<div class="empty">近 30 天没有符合条件的事件</div>'}
 function cdCsv(){const h=["时间","连接数","TCP","UDP","新建","关闭","正在握手","对端无回应"];const rows=CD.rows.map(r=>[new Date(r.ts*1000).toISOString(),r.conns,r.tcp,r.udp,r.new,r.closed,r.syn,r.unrep]);
@@ -2658,7 +2667,7 @@ function nodeText(el){let o="";const walk=n=>{if(n.nodeType===3){o+=n.textConten
   const blk=/^(DIV|H1|H2|H3|P|LI|SECTION|TABLE|THEAD|TBODY)$/.test(tg)||n.classList.contains("find")||n.classList.contains("kvr");
   if(blk)o+="\n";[...n.childNodes].forEach(walk);if(blk)o+="\n"};walk(el);return o.replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim()}
 function cardText(card){const h=card.querySelector("h2"),title=h?nodeText(h).replace(/\n+/g," "):"";const body=nodeText(card).split("\n").slice(1).join("\n").trim();return title+"\n"+body+"\n(FLUX "+($("#ver").textContent||"")+" · "+new Date().toLocaleString()+")"}
-const COPY_CARDS=["#aghCard","#secFindCard","#dnsCard","#lkCard","#cmpCard","#tlCard","#wfCard","#geoCard","#hmCard","#qCard","#lkpCard","#rtTestCard","#appsCard","#alCard","#nsCard","#quotaCard","#provCard"];
+const COPY_CARDS=["#rhCard","#aghCard","#secFindCard","#dnsCard","#lkCard","#cmpCard","#tlCard","#wfCard","#geoCard","#hmCard","#qCard","#lkpCard","#rtTestCard","#appsCard","#alCard","#nsCard","#quotaCard","#provCard"];
 function initCopyBtns(){for(const sel of COPY_CARDS){const c=$(sel),h=c&&c.querySelector("h2");if(!h||h.querySelector(".cpb"))continue;
   const b=document.createElement("button");b.className="cpb";b.textContent="复制详情";b.title="把这张卡片的内容复制成文字,贴给别人就不用截图";b.onclick=e=>{e.stopPropagation();copyBtn(b,()=>cardText(c))};h.appendChild(b)}}
 /* 表格复制 / 导出 CSV:直接按页面上显示的表格取(设备 / 域名 / 策略组 / 命中规则) */

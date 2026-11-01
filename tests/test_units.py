@@ -1392,6 +1392,30 @@ def test_v053_ignore():
     con.close()
 
 
+def test_v054_trend_compare_port():
+    """趋势:昨天同一时段对比、按端口(近似)。"""
+    import os, tempfile, time, json, importlib
+    from app import config, db, connhist
+    importlib.reload(connhist)
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db"); db.init_db(); con = db.open_db()
+    now = float(int(time.time() // 60) * 60)
+    connhist.STATE.update(tier="high", since=1.0)
+    with con:
+        for i in range(1, 30):
+            for day, c in ((0, 10), (1, 40)):
+                ts = int(now) - i * 60 - day * 86400
+                con.execute("INSERT INTO conn_dev_min VALUES(?,?,?,?,?,?,?,?,?,?)", (ts, "a", c, c, 0, 1, 1, 0, 0, json.dumps({"d": [], "p": [["443/tcp", 7], ["80/tcp", 2]], "n": []})))
+    t = connhist.trend(con, "a", 30, now, compare=True, port="443")
+    r = [x for x in t["rows"] if "conns" in x and "p_conns" in x]
+    assert r and all(x["conns"] == 10 and x["p_conns"] == 40 and x["port_n"] == 7 and x["p_port_n"] == 7 for x in r), t["rows"][:2]
+    assert connhist.trend(con, "a", 30, now, port="443/udp")["rows"][0]["port_n"] == 0
+    assert "p_conns" not in connhist.trend(con, "a", 30, now)["rows"][0]
+    assert connhist.trend(con, "", 30, now, port="443")["port"] == ""        # 全网不支持端口
+    t2 = connhist.trend(con, "a", 60 * 24 * 3, now, maxpts=50)               # 点太多:按时间段聚合
+    assert len(t2["rows"]) <= 51 and t2["step"] > 1
+    con.close()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

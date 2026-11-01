@@ -429,8 +429,9 @@ def _write_snap(a):
 
 
 # ---------------------------------------------------------------- 查询
-def trend(con, dev="", minutes=60, now=None, maxpts=240, since=None, until=None):
-    """设备(或全网)连接数趋势。点太多时按时间段聚合:连接数取最大,新增 / 关闭取合计。since / until 为自定义时间范围(秒级时间戳)。"""
+def trend(con, dev="", minutes=60, now=None, maxpts=240, since=None, until=None, compare=False, port=""):
+    """设备(或全网)连接数趋势,按时间段聚合:连接数取最大,新增 / 关闭取合计。since / until 为自定义时间范围(秒级时间戳)。
+    compare=True 时附带「昨天同一时段」(字段加 p_ 前缀);port 只在指定设备上有效,统计该端口在每分钟「前 3 名端口」里的连接数(只是近似)。"""
     now = now or time.time()
     if since:
         until = int(until or now)
@@ -441,17 +442,57 @@ def trend(con, dev="", minutes=60, now=None, maxpts=240, since=None, until=None)
     else:
         minutes = max(5, min(60 * 24 * 30, int(minutes)))
         since, until = int(now) - minutes * 60, int(now) + 60
-    if dev:
-        rows = con.execute("SELECT ts,conns,tcp,udp,new,closed,syn,unrep FROM conn_dev_min WHERE dev=? AND ts>=? AND ts<=? ORDER BY ts", (dev, since, until)).fetchall()
-    else:
-        rows = con.execute("SELECT ts,SUM(conns),SUM(tcp),SUM(udp),SUM(new),SUM(closed),SUM(syn),SUM(unrep) FROM conn_dev_min WHERE ts>=? AND ts<=? GROUP BY ts ORDER BY ts", (since, until)).fetchall()
-    step = max(1, -(-len(rows) // maxpts)) if rows else 1
+    res = params()["res"] * 60
+    npts = max(1, (until - since) // res)
+    step = max(1, -(-npts // maxpts))
+    bsz = step * res
+    port = str(port or "").strip().lower()
+    if not dev:
+        port = ""
+
+    def fetch(a, b):
+        if dev:
+            return con.execute("SELECT ts,conns,tcp,udp,new,closed,syn,unrep,top FROM conn_dev_min WHERE dev=? AND ts>=? AND ts<=? ORDER BY ts", (dev, a, b)).fetchall()
+        return con.execute("SELECT ts,SUM(conns),SUM(tcp),SUM(udp),SUM(new),SUM(closed),SUM(syn),SUM(unrep),'' FROM conn_dev_min WHERE ts>=? AND ts<=? GROUP BY ts ORDER BY ts", (a, b)).fetchall()
+
+    def pn(top):
+        if not port or not top:
+            return 0
+        try:
+            lst = json.loads(top).get("p", [])
+        except ValueError:
+            return 0
+        n = 0
+        for k, c in lst:
+            if k.lower() == port or k.lower().split("/")[0] == port:
+                n += c
+        return n
+
+    def group(rows, shift):
+        g = {}
+        for r in rows:
+            k = (r[0] + shift - since) // bsz
+            a = g.get(k)
+            if a is None:
+                a = g[k] = {"conns": 0, "tcp": 0, "udp": 0, "new": 0, "closed": 0, "syn": 0, "unrep": 0, "port_n": 0}
+            for i, f in ((1, "conns"), (2, "tcp"), (3, "udp"), (6, "syn"), (7, "unrep")):
+                a[f] = max(a[f], r[i] or 0)
+            a["new"] += r[4] or 0
+            a["closed"] += r[5] or 0
+            a["port_n"] = max(a["port_n"], pn(r[8]))
+        return g
+
+    cur = group(fetch(since, until), 0)
+    prev = group(fetch(since - 86400, until - 86400), 86400) if compare else {}
     out = []
-    for i in range(0, len(rows), step):
-        g = rows[i:i + step]
-        out.append({"ts": g[0][0], "conns": max(x[1] for x in g), "tcp": max(x[2] for x in g), "udp": max(x[3] for x in g),
-                    "new": sum(x[4] for x in g), "closed": sum(x[5] for x in g), "syn": max(x[6] for x in g), "unrep": max(x[7] for x in g)})
-    return {"dev": dev, "minutes": minutes, "since": since, "until": until, "res_min": params()["res"], "step": step, "rows": out}
+    for k in sorted(set(cur) | set(prev)):
+        row = {"ts": since + k * bsz}
+        if k in cur:
+            row.update(cur[k])
+        if k in prev:
+            row.update({"p_" + f: v for f, v in prev[k].items()})
+        out.append(row)
+    return {"dev": dev, "minutes": minutes, "since": since, "until": until, "res_min": params()["res"], "step": step, "compare": bool(compare), "port": port, "rows": out}
 
 
 def _ev_row(r):

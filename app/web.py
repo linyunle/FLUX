@@ -1058,7 +1058,8 @@ def q_conns(con, p):
 
 def q_conns_trend(con, p):
     from . import connhist
-    return connhist.trend(con, one(p, "dev"), int(one(p, "minutes", "60") or 60), since=int(one(p, "since", "0") or 0) or None, until=int(one(p, "until", "0") or 0) or None)
+    return connhist.trend(con, one(p, "dev"), int(one(p, "minutes", "60") or 60), since=int(one(p, "since", "0") or 0) or None, until=int(one(p, "until", "0") or 0) or None,
+                           compare=one(p, "compare") == "1", port=one(p, "port"))
 
 
 def q_conns_events(con, p):

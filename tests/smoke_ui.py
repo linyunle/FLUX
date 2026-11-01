@@ -327,6 +327,9 @@ try:
         assert pg.is_visible("#cdFrom"); pg.click("#cdApply"); pg.wait_for_timeout(800)
         pg.click("#cdRange button[data-k='1440']"); pg.wait_for_timeout(800)
         pg.click("#cdMetric button[data-k='fail']"); pg.wait_for_timeout(300)
+        pg.select_option("#cdProto", "tcp"); pg.check("#cdCmp"); pg.fill("#cdPort", "443"); pg.wait_for_timeout(1200)
+        assert "端口 443" in pg.inner_text("#cdChart") or "没有历史数据" in pg.inner_text("#cdChart"), "端口筛选 / 昨天对比能画图"
+        pg.fill("#cdPort", ""); pg.uncheck("#cdCmp"); pg.wait_for_timeout(800)
         with pg.expect_download() as dl: pg.click("#cdCsv")
         assert dl.value.suggested_filename.endswith(".csv")
         pg.click("#cdX")

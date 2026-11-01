@@ -343,6 +343,8 @@ try:
     ov = get("/api/conns/overview")
     ok(set(ov["metrics"]) >= {"devices", "conns", "tcp", "udp", "new_per_s", "abnormal", "events_1h"} and isinstance(ov["top"], list) and isinstance(ov["degraded"], list), "连接监控总览:核心指标 / TOP / 降级提示")
     ok(get("/api/conns/trend?since=1000000&until=1003600")["rows"] == [], "连接历史:自定义时间范围")
+    tr = get("/api/conns/trend?dev=x&minutes=60&compare=1&port=443")
+    ok(tr["compare"] is True and tr["port"] == "443" and isinstance(tr["rows"], list), "连接历史:昨天对比 / 按端口参数")
     c, r = post("/api/conns/ignore", {"dev": "aa:bb:cc", "signal": "habit_dev", "on": True})
     ok(c == 200 and "aa:bb:cc|habit_dev" in r["ignored"], "连接异常:可忽略某台设备的某类提醒")
     c, r = post("/api/conns/ignore", {"dev": "aa:bb:cc", "signal": "", "on": True})
