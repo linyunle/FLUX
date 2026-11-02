@@ -543,8 +543,6 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
     <div class="sysifh"><button id="sysIfT" aria-expanded="true" aria-label="网卡速度" title="展开 / 收起网卡速度">▾</button><span class="sub" id="sysIfN"></span></div>
     <div id="sysIf"></div>
   </div>
-  <div class="card gcard" id="mixCard"><h2>流量总览<span class="seg" id="mixView" role="group" aria-label="视图"></span><span class="seg" id="mixType" role="group" aria-label="类型"></span><span class="seg" id="mixMode" role="group" aria-label="去向"></span><span class="sp"></span><input id="mixQ" type="search" placeholder="搜索 设备 / 节点 / 域名…" aria-label="搜索流量总览" autocomplete="off"><button class="tcb" data-tc="#mixTbl" data-tn="流量总览" data-tm="copy" title="把下面这张表复制成文字">复制</button><button class="tcb" data-tc="#mixTbl" data-tn="流量总览" data-tm="csv" title="导出 CSV">导出 CSV</button></h2>
-    <div class="sub" id="mixHint" style="margin-bottom:6px"></div><div class="scroll lbody" id="mixTbl"></div><div id="mixPager"></div></div>
   <div class="card gcard" id="rtCard">
     <h2>实时速度<span class="seg" id="rtSrc" role="group" aria-label="范围"></span><span class="legend"><span><i style="background:var(--vzd,var(--down))"></i>下行</span><span><i style="background:var(--vzu,var(--up))"></i>上行</span></span><span class="sp"></span><button class="ibtn vz" data-vz title="切换 曲线 / 水波样式"></button><span class="sub" id="rtNote"></span></h2>
     <div class="big"><div><span class="sub">下行</span> <b id="rtDown">–</b></div><div><span class="sub">上行</span> <b id="rtUp">–</b></div><div class="sub" id="rtSub"></div></div>
@@ -1427,57 +1425,9 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
   const k=b.closest(".pager").dataset.k,st=S.pg[k],a=b.dataset.a;
   if(a==="prev")st.p--;else if(a==="next")st.p++;
   else if(a==="pause"){st.pause=!st.pause;st.snap=st.pause?JSON.parse(JSON.stringify(st.cur||[])):null}
-  if(k==="mix"){if(a==="pause")st.snap=st.pause?JSON.parse(JSON.stringify(S.rt||null)):null;paintMix()}else if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else if(k==="qoe")paintQoe();else if(k==="apps")paintApps();else paintPg(k)});
+  if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else if(k==="qoe")paintQoe();else if(k==="apps")paintApps();else paintPg(k)});
 for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
-
-/* ---------- 流量总览:设备 / 节点 / 访问目标合并成一张表 ---------- */
-S.mix={view:"live",type:"all",q:"",sort:{k:"flow",d:-1},per:{dev:[],node:[],host:[]}};S.cm.mix="";S.pg.mix={p:0,pause:false,snap:null};
-const MIXT={dev:"设备",node:"节点",host:"目标"};
-function mixRows(){const m=S.mix,out=[];
-  if(m.view==="live"){const P=S.pg.mix,j=P.pause&&P.snap?P.snap:S.rt;if(!j)return out;
-    for(const r of j.devices||[])out.push({t:"dev",name:r.name||r.key,key:r.key,down:r.down_rate,up:r.up_rate,conns:r.conns,raw:r});
-    for(const r of j.nodes||[])out.push({t:"node",name:r.node,key:r.node,down:r.down_rate,up:r.up_rate,conns:r.conns,raw:r});
-    for(const r of j.hosts||[])out.push({t:"host",name:r.host,key:r.host,down:r.down_rate,up:r.up_rate,conns:r.conns,raw:r})}
-  else{for(const r of m.per.dev)out.push({t:"dev",name:devName(r),key:r.key,down:r.down,up:r.up,conns:null,raw:{key:r.key,name:devName(r)}});
-    for(const r of m.per.node)out.push({t:"node",name:r.key,key:r.key,down:r.down,up:r.up,conns:null,raw:{node:r.key}});
-    for(const r of m.per.host)out.push({t:"host",name:r.key,key:r.key,down:r.down,up:r.up,conns:null,raw:{host:r.key}})}
-  for(const r of out)r.flow=(r.up||0)+(r.down||0);return out}
-function mixFilter(rows){const m=S.mix,q=m.q.trim().toLowerCase();
-  let o=rows.filter(r=>(m.type==="all"||r.t===m.type)&&(!q||(r.name+" "+r.key).toLowerCase().includes(q)));
-  const k=m.sort.k,d=m.sort.d;o.sort((a,b)=>{const x=a[k],y=b[k];if(typeof x==="string"||typeof y==="string")return String(x||"").localeCompare(String(y||""),"zh")*d;return((x==null?-1:x)-(y==null?-1:y))*d});return o}
-function mixTotal(){const m=S.mix,P=S.pg.mix;if(m.view==="live"){const j=P.pause&&P.snap?P.snap:S.rt;if(!j||!j.direct)return null;
-    return{down:j.direct.down+j.proxy.down,up:j.direct.up+j.proxy.up,conns:j.conns.total,sub:`直连 ${j.direct.conns} + 代理 ${j.proxy.conns}`,live:true}}
-  const sum=a=>a.reduce((x,r)=>x+r.down,0),su=a=>a.reduce((x,r)=>x+r.up,0);const a=m.per.dev;
-  return a.length?{down:sum(a),up:su(a),conns:null,sub:"所有设备合计",live:false}:null}
-function paintMix(){const el=$("#mixTbl");if(!el||el.offsetParent===null)return;const m=S.mix;
-  if(m.view==="period"&&S.mixLoading&&!mixRows().length){setH(el,'<span class="sub">加载中…</span>');return}
-  const all=mixFilter(mixRows()),per=crows("mix"),n=Math.max(1,Math.ceil(all.length/per));S.pg.mix.p=Math.max(0,Math.min(S.pg.mix.p,n-1));
-  const page=all.slice(S.pg.mix.p*per,S.pg.mix.p*per+per);m.page=page;
-  const T=mixTotal(),live=m.view==="live",ar=k=>m.sort.k===k?(m.sort.d>0?" ▲":" ▼"):"";
-  const th=(k,l,c)=>`<th class="${c||""}" data-sk="${k}" style="cursor:pointer">${l}${ar(k)}</th>`;
-  let h=`<table><thead><tr>${th("t","类型","hide-s")}${th("name","名称")}${th("down","下行","n")}${th("up","上行","n hide-s")}${th("conns","连接数","n hide-s")}${th("flow",live?"速度合计":"流量","n")}</tr></thead><tbody>`;
-  const f=r=>live?rate(r):fmt(r);
-  if(T&&!m.q.trim()&&m.type==="all")h+=`<tr class="mixtot"><td class="hide-s"><span class="tag">合计</span></td><td class="k"><b>全网合计</b> <span class="sub">${esc(T.sub)}</span></td><td class="n">↓ ${f(T.down)}</td><td class="n hide-s">↑ ${f(T.up)}</td><td class="n hide-s">${T.conns==null?"–":T.conns}</td><td class="n"><b>${f(T.down+T.up)}</b></td></tr>`;
-  h+=page.map((r,i)=>`<tr class="click" data-i="${i}"><td class="hide-s"><span class="tag">${MIXT[r.t]}</span></td><td class="k" title="${esc(r.name)}">${r.t==="host"?`<span class="pv">${esc(r.name)}</span>`:esc(r.name)}</td><td class="n">↓ ${f(r.down)}</td><td class="n hide-s">↑ ${f(r.up)}</td><td class="n hide-s">${r.conns==null?"–":r.conns}</td><td class="n">${f(r.flow)}</td></tr>`).join("");
-  if(!page.length)h+=`<tr><td colspan="6" style="color:var(--muted)">${m.q.trim()?"没有匹配的结果":live?"现在没有明显的流量":"这段时间没有记录"}</td></tr>`;
-  setH(el,h+"</tbody></table>");
-  $("#mixPager").innerHTML=pagerBar("mix",all.length,per,live?!!S.pg.mix.pause:undefined);
-  $("#mixHint").textContent=(live?"此刻的实时速度(每 2 秒刷新)":"所选时间范围内的流量")+" · 点一行看详情 · 点表头排序"+(S.q?` · 顶部搜索「${S.q}」已生效`:"")}
-function loadMix(){const m=S.mix;
-  seg($("#mixView"),[["live","此刻"],["period","时段"]],S.q?"period":m.view,k=>{if(S.q)return;m.view=k;S.pg.mix.pause=false;S.pg.mix.snap=null;S.pg.mix.p=0;loadMix()});
-  seg($("#mixType"),[["all","全部"],["dev","设备"],["node","节点"],["host","目标"]],m.type,k=>{m.type=k;S.pg.mix.p=0;paintMix()});
-  if(S.q)m.view="period";
-  const per=m.view==="period";$("#mixMode").style.display=per?"":"none";
-  if(per)cmSeg("#mixMode","mix",()=>{S.pg.mix.p=0;loadMix()});
-  if(!per){paintMix();return}
-  S.mixLoading=true;let left=3;const done=()=>{if(--left<=0){S.mixLoading=false;paintMix()}};
-  for(const [t,by,lim] of [["dev","client",200],["node","node",100],["host","host",300]])
-    load("mix_"+t,"/api/summary",{...base({mode:S.cm.mix}),by,limit:lim},j=>{m.per[t]=j.rows||[];done()})}
-$("#mixQ").addEventListener("input",e=>{S.mix.q=e.target.value;S.pg.mix.p=0;paintMix()});
-$("#mixTbl").addEventListener("click",e=>{const h=e.target.closest("th[data-sk]");
-  if(h){const k=h.dataset.sk,s=S.mix.sort;if(s.k===k)s.d=-s.d;else{s.k=k;s.d=(k==="name"||k==="t")?1:-1}S.pg.mix.p=0;paintMix();return}
-  const tr=e.target.closest("tr.click");if(!tr)return;const r=(S.mix.page||[])[+tr.dataset.i];if(r)openDetail(r.t,r.raw)});
 /* 点一行弹出的详情 */
 const miniKV=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td class="k" title="${esc(r.key)}">${esc(r.key)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 function updDetailLive(){const m=S.dm;if(!m||!$("#dtl").classList.contains("open")||!S.rt)return;
@@ -1960,7 +1910,7 @@ function loadRealtime(){if(document.hidden)return;
     if(Date.now()-S.scrollAt<1500)return; /* 正在滑动时不重绘,手机上否则页面会跳 */
     paintRt(j);loadSys();
     S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
-    paintMix();
+    for(const k of ["rtdev","rtnode","rthost"])if(!S.pg[k].pause||!S.pg[k].snap)paintPg(k);
     rtList($("#rtSel"),j.devices.filter(d=>S.devs.has(d.key)),r=>r.name||r.key,"这台设备现在没有流量")})}
 setInterval(loadRealtime,2000);
 const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r.nodes.map(n=>`${esc(n.node)} <span class="sub">${Math.round(n.bytes/Math.max(1,r.up+r.down)*100)}%</span>`).join("<br>")};
@@ -1996,17 +1946,16 @@ const DENS={compact:["紧凑",{"--cp":"8px","--cy":"3px","--gap":"8px"}],normal:
 const WIDTHS={n:["窄","900px"],m:["标准","1100px"],w:["宽","1400px"],f:["铺满","none"]};
 const RADS={s:["小",["6px","4px"]],m:["中",["12px","8px"]],l:["大",["18px","12px"]]};
 const FONTS={s:["小","13px"],m:["中","14px"],l:["大","16px"]};
-const CARDS={sys:["#sysCard","路由器状态","rt"],mem:["#memCard","内存使用","rt"],mix:["#mixCard","流量总览(设备 / 节点 / 目标)"],rt:["#rtCard","实时速度","rt"],rtdev:["#rtdevCard","设备流量(实时 / 时段)"],rtnode:["#rtnodeCard","活跃节点"],rthost:["#rthostCard","访问目标(实时 / 时段)"],alertc:["#alertCard","最近告警"],trend:["#trendCard","流量趋势 / 堆叠","trend"],apps:["#appsCard","应用与协议"],qoe:["#qoeCard","网络质量 QoE"]};
-const LEGACY=["rt","rtdev","rtnode","rthost"]; /* 合并进「流量总览」后不再单独显示 */
+const CARDS={sys:["#sysCard","路由器状态","rt"],mem:["#memCard","内存使用","rt"],rt:["#rtCard","实时速度","rt"],rtdev:["#rtdevCard","设备流量(实时 / 时段)"],rtnode:["#rtnodeCard","活跃节点"],rthost:["#rthostCard","访问目标(实时 / 时段)"],alertc:["#alertCard","最近告警"],trend:["#trendCard","流量趋势 / 堆叠","trend"],apps:["#appsCard","应用与协议"],qoe:["#qoeCard","网络质量 QoE"]};
 const LISTS=["rtdev","rtnode","rthost"],ROWS={s:5,m:8,l:12};
 const HROWS=[5,8,10,15,20,30,50,100];
 const rowsOf=k=>k==="hosts"?(HROWS.includes(+TH.cards.rthost.rows)?+TH.cards.rthost.rows:30):(ROWS[(TH.cards[k==="devtop"?"rtdev":k]||{}).h]||8);
 const LCH=[["s","每页 5 行"],["m","每页 8 行"],["l","每页 12 行"]];
 const CW=[[3,"1/4"],[4,"1/3"],[6,"1/2"],[8,"2/3"],[9,"3/4"],[12,"整行"]],CH=[["s","矮"],["m","中"],["l","高"]];
-const DEF_CARDS={sys:{w:12,h:"s"},mem:{w:6,h:"s"},rt:{w:6,h:"s"},mix:{w:12,h:"m",rows:15},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"s",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"s",rows:30},qoe:{w:12,h:"s",rows:50}};
+const DEF_CARDS={sys:{w:12,h:"s"},mem:{w:6,h:"s"},rt:{w:6,h:"s"},rtdev:{w:6,h:"m"},rtnode:{w:6,h:"m"},rthost:{w:12,h:"m",rows:30},alertc:{w:12,h:"s",rows:5},trend:{w:12,h:"m"},apps:{w:12,h:"s",rows:30},qoe:{w:12,h:"s",rows:50}};
 const SHADOWS={off:["无"],s:["小",1],m:["中",1.6],l:["大",2.6]};
 const SIDE_ITEMS=[["speed","实时速度","#scSpeed"],["direct","直连","#scDirect"],["proxy","代理","#scProxy"],["conns","连接数","#scConns"],["status","连接状态","#scStatus"],["theme","主题切换","#btnMode"],["ver","版本号","#ver,#ver2"]];
-const ROWOPT={mix:[10,15,20,30,50,100],alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
+const ROWOPT={alertc:[3,5,8,10,15,20],apps:[5,10,15,20,30,50],qoe:[5,10,20,30,50,100]};
 const crows=k=>{const v=+(TH.cards[k]||{}).rows;return ROWOPT[k].includes(v)?v:DEF_CARDS[k].rows};
 const AUTOHIDE=["sys","mem","rt","rtdev","rtnode"]; /* 只筛一台设备时,这些全局内容自动隐藏 */
 /* ---------- 顶栏自定义快捷方式:最多 8 个,存在外观设置里(随服务器同步、随备份走);只允许 http(s) 链接 ---------- */
@@ -2073,7 +2022,7 @@ function applyTheme(){
   R.style.setProperty("--w",(WIDTHS[TH.width]||WIDTHS.m)[1]);
   const r=(RADS[TH.rad]||RADS.m)[1];R.style.setProperty("--r",r[0]);R.style.setProperty("--rs",r[1]);
   R.style.setProperty("--fs",(FONTS[TH.font]||FONTS.m)[1]);
-  TH.order.forEach((k,i)=>{const el=$(CARDS[k][0]);if(el){el.style.order=i+1;el.style.setProperty("--span",k==="rthost"&&S.q?12:TH.cards[k].w);el.style.minHeight=(BH[TH.cards[k].h]||0)+"px";el.classList.toggle("gone",TH.hide.includes(k)||LEGACY.includes(k))}});
+  TH.order.forEach((k,i)=>{const el=$(CARDS[k][0]);if(el){el.style.order=i+1;el.style.setProperty("--span",k==="rthost"&&S.q?12:TH.cards[k].w);el.style.minHeight=(BH[TH.cards[k].h]||0)+"px";el.classList.toggle("gone",TH.hide.includes(k))}});
   {const dk=mode==="dark",a=dk?.5:.1,m=(SHADOWS[TH.shadow]||SHADOWS.s)[1];
    R.style.setProperty("--sh",TH.shadow==="off"?"none":`0 ${Math.round(2*m)}px ${Math.round(6*m)}px rgba(0,0,0,${(a*Math.min(m,1.8)).toFixed(2)})`);
    R.style.setProperty("--cardbg",TH.op<100?`color-mix(in srgb,var(--surface) ${TH.op}%,transparent)`:"var(--surface)");
@@ -2092,19 +2041,17 @@ function applyTheme(){
 /* 概览里只筛了设备时,隐藏和该设备无关的全局内容,改显示「所选设备此刻」 */
 function autoHide(){const one=S.devs.size>0,q=!!S.q;
   for(const k in CARDS){const el=$(CARDS[k][0]);if(!el)continue;
-    if(LEGACY.includes(k)){el.classList.add("gone");continue}
-    if(k==="mix"){el.classList.toggle("autohide",one&&!q);el.style.setProperty("--span",q?12:TH.cards.mix.w);continue}
     const off=!TH.gl&&TH.glSet.includes(k);   /* 「状态」关掉时,隐藏用户在「状态 ▾」里勾选的卡片 */
     if(k==="rthost"){el.classList.toggle("gone",(TH.hide.includes(k)||off)&&!q);el.classList.remove("autohide");el.style.setProperty("--span",q?12:TH.cards.rthost.w)}   /* 搜索时「访问目标」独占整行,不管卡片宽度设成多少 */
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||off)}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
-function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadMix();loadApps();loadQoe();loadAlertCard()}}}
+function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
 function glPlace(){const q=$("#glPop"),b=$("#viewSeg");if(!q||!b)return;const r=b.getBoundingClientRect(),w=q.offsetWidth||240;q.style.top=Math.round(r.bottom+6)+"px";q.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";q.style.maxHeight=Math.max(160,innerHeight-r.bottom-20)+"px"}
 addEventListener("scroll",glPlace,{passive:true});addEventListener("resize",glPlace);
 function glPop(){let p=$("#glPop");if(p){p.remove();return}
   p=document.createElement("div");p.id="glPop";p.className="glpop";
-  p.innerHTML=`<div class="sub" style="margin-bottom:6px">点「状态」关掉时,隐藏下面勾选的卡片</div>`+Object.keys(CARDS).filter(k=>!LEGACY.includes(k)).map(k=>`<label class="crow"><input type="checkbox" data-gk="${k}" ${TH.glSet.includes(k)?"checked":""}> ${esc(CARDS[k][1])}</label>`).join("")+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="glReset">恢复默认</button></div>`;
+  p.innerHTML=`<div class="sub" style="margin-bottom:6px">点「状态」关掉时,隐藏下面勾选的卡片</div>`+Object.keys(CARDS).map(k=>`<label class="crow"><input type="checkbox" data-gk="${k}" ${TH.glSet.includes(k)?"checked":""}> ${esc(CARDS[k][1])}</label>`).join("")+`<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="glReset">恢复默认</button></div>`;
   document.body.appendChild(p);   /* 挂在 body 上、position:fixed:不被顶部栏的模糊 / 层叠上下文压住,永远在最上层 */
   glPlace();
   p.onclick=e=>e.stopPropagation();
@@ -2162,12 +2109,12 @@ function renderLook(){
   sg("#lkWidth",Object.entries(WIDTHS).map(([k,v])=>[k,v[0]]),TH.width,k=>{TH.width=k;themeChanged(true)});
   sg("#lkRad",Object.entries(RADS).map(([k,v])=>[k,v[0]]),TH.rad,k=>{TH.rad=k;themeChanged()});
   sg("#lkFont",Object.entries(FONTS).map(([k,v])=>[k,v[0]]),TH.font,k=>{TH.font=k;themeChanged(true)});
-  $("#lkCards").innerHTML=TH.order.filter(k=>!LEGACY.includes(k)).map((k,i,A)=>{const c=TH.cards[k],has=CARDS[k][2];
+  $("#lkCards").innerHTML=TH.order.map((k,i)=>{const c=TH.cards[k],has=CARDS[k][2];
     return `<div class="ord"><input type="checkbox" id="lkc_${k}" data-k="${k}" ${TH.hide.includes(k)?"":"checked"} aria-label="显示${CARDS[k][1]}"><label style="cursor:pointer;flex:1" for="lkc_${k}">${CARDS[k][1]}</label><span class="ordc">
     <select data-k="${k}" data-f="w" aria-label="${CARDS[k][1]}宽度" title="宽度">${CW.map(([v,l])=>`<option value="${v}" ${c.w===v?"selected":""}>${l}</option>`).join("")}</select>
     ${k==="rthost"?`<select data-k="${k}" data-f="rows" aria-label="时段视图显示行数" title="时段视图显示行数">${HROWS.map(v=>`<option value="${v}" ${rowsOf("hosts")===v?"selected":""}>时段 ${v} 行</option>`).join("")}</select>`:""}${ROWOPT[k]?`<select data-k="${k}" data-f="rows" aria-label="${CARDS[k][1]}显示行数" title="显示行数">${ROWOPT[k].map(v=>`<option value="${v}" ${crows(k)===v?"selected":""}>显示 ${v} 行</option>`).join("")}</select>`:""}<select data-k="${k}" data-f="h" aria-label="${CARDS[k][1]}高度" title="${LISTS.includes(k)?"此刻视图每页行数":"高度"}">${(LISTS.includes(k)?LCH:CH).map(([v,l])=>`<option value="${v}" ${c.h===v?"selected":""}>${l}</option>`).join("")}</select>
-    <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===A.length-1?"disabled":""} aria-label="下移">↓</button></span></div>`}).join("");
-  {const V=Object.keys(CARDS).filter(k=>!LEGACY.includes(k)),n=V.filter(k=>!TH.hide.includes(k)).length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${V.length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>${VIEWS[TH.view]?` · 当前「${VIEWS[TH.view][0]}」预设,勾选、大小、顺序都只记在这个预设里 · <a href="#" id="lkVDef">恢复该预设默认</a>`:""}`;
+    <button data-k="${k}" data-d="-1" ${i===0?"disabled":""} aria-label="上移">↑</button><button data-k="${k}" data-d="1" ${i===TH.order.length-1?"disabled":""} aria-label="下移">↓</button></span></div>`}).join("");
+  {const n=Object.keys(CARDS).length-TH.hide.length,m=$("#lkCardMsg");m.innerHTML=`概览现在显示 <b>${n} / ${Object.keys(CARDS).length}</b> 张卡片(这些卡片只在「概览」页)。<a href="#" id="lkGoOv">去概览看看</a>${VIEWS[TH.view]?` · 当前「${VIEWS[TH.view][0]}」预设,勾选、大小、顺序都只记在这个预设里 · <a href="#" id="lkVDef">恢复该预设默认</a>`:""}`;
    if($("#lkVDef"))$("#lkVDef").onclick=e=>{e.preventDefault();delete TH.vh[TH.view];TH.order=Object.keys(CARDS);TH.cards=JSON.parse(JSON.stringify(DEF_CARDS));applyView(TH.view)};
    $("#lkGoOv").onclick=e=>{e.preventDefault();S.tab="overview";showTab();refresh()}}
   seg($("#lkTStyle"),TSTYLES,TH.trend.style,k=>{TH.trend.style=k;themeChanged(true)});
@@ -2195,7 +2142,7 @@ $("#lkPriv").onchange=e=>{TH.priv=e.target.checked;saveTheme();applyTheme();rend
 $("#btnPriv").onclick=()=>{TH.priv=!TH.priv;saveTheme();applyTheme();renderChrome();if(S.tab==="settings")renderLook()};
 for(const [id,k] of [["#cVzA","a"],["#cVzB","b"]])$(id).oninput=e=>{TH.viz[k]=e.target.value;saveTheme();applyTheme()};
 $("#cVzClear").onclick=()=>{TH.viz.a=TH.viz.b="";themeChanged(true)};
-$("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k,i=TH.order.indexOf(k);let j=i+ +b.dataset.d;while(j>=0&&j<TH.order.length&&LEGACY.includes(TH.order[j]))j+=+b.dataset.d;if(j<0||j>=TH.order.length)return;
+$("#lkCards").onclick=e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k,i=TH.order.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=TH.order.length)return;
   TH.order.splice(i,1);TH.order.splice(j,0,k);themeChanged()};
 $("#lkCards").onchange=e=>{const c=e.target,k=c.dataset.k;if(!k)return;
   if(c.dataset.f){TH.cards[k][c.dataset.f]=c.dataset.f==="w"||c.dataset.f==="rows"?+c.value:c.value;themeChanged(true);return}
@@ -3181,7 +3128,7 @@ async function status(){try{const s=await get("/api/status");
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
-  if(S.tab==="overview"){loadTrend();loadMix();loadApps();loadQoe();loadAlertCard();loadRealtime()}
+  if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(devPeriod())loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
   else if(S.tab==="nodes"){loadNodes();loadQuota();loadProv()}
   else if(S.tab==="alerts")loadAlerts();
   else if(S.tab==="security")loadSecurity();

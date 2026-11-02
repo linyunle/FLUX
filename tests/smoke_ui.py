@@ -96,10 +96,10 @@ try:
         pg.evaluate("S.tab='overview';showTab()"); pg.wait_for_timeout(500)
         pg.click("#viewSeg button"); pg.wait_for_timeout(600)
         assert pg.evaluate("TH.gl")==False and pg.evaluate("getComputedStyle(document.querySelector('#memCard')||document.body).display")!=None
-        assert pg.evaluate("['sys'].every(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "关掉「状态」后全局卡片没有隐藏"
+        assert pg.evaluate("['sys','mem','rt','rtdev','rtnode'].every(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "关掉「状态」后全局卡片没有隐藏"
         assert pg.evaluate("!document.querySelector(CARDS.trend[0]).classList.contains('autohide')"), "趋势卡片不应被「状态」隐藏"
         # 「状态 ▾」:选择要隐藏哪些卡片(这里去掉「内存使用」,关掉状态后它应该还在)
-        pg.click("#glCfg"); pg.wait_for_timeout(300); assert pg.locator("#glPop").is_visible() and pg.locator("#glPop input").count()==7, "状态下拉没出来"
+        pg.click("#glCfg"); pg.wait_for_timeout(300); assert pg.locator("#glPop").is_visible() and pg.locator("#glPop input").count()==10, "状态下拉没出来"
         pg.uncheck('#glPop input[data-gk="mem"]'); pg.wait_for_timeout(500)
         assert pg.evaluate("TH.gl")==False and pg.evaluate("document.querySelector(CARDS.sys[0]).classList.contains('autohide') && !document.querySelector(CARDS.mem[0]).classList.contains('autohide')"), "取消勾选的卡片仍被隐藏"
         pg.check('#glPop input[data-gk="trend"]'); pg.wait_for_timeout(300)
@@ -107,11 +107,11 @@ try:
         pg.click("#glReset"); pg.wait_for_timeout(300); pg.mouse.click(5,5); pg.wait_for_timeout(200)
         assert pg.evaluate("TH.glSet.join()")=="sys,mem,rt,rtdev,rtnode"
         pg.click("#glBtn"); pg.wait_for_timeout(600)
-        assert pg.evaluate("TH.gl")==True and pg.evaluate("!['sys','mem'].some(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "再点一次没有恢复"
+        assert pg.evaluate("TH.gl")==True and pg.evaluate("!['sys','mem','rt','rtdev','rtnode'].some(k=>document.querySelector(CARDS[k][0]).classList.contains('autohide'))"), "再点一次没有恢复"
         pg.evaluate("openSettings('look')"); pg.wait_for_timeout(600)
         # 手机尺寸:访问目标卡片附近,页面高度/滚动位置不应随实时刷新变化
         pg.set_viewport_size({"width":390,"height":800}); pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(2500)
-        pg.evaluate("document.querySelector('#mixCard').scrollIntoView()"); pg.wait_for_timeout(500)
+        pg.evaluate("document.querySelector('#rthostCard').scrollIntoView()"); pg.wait_for_timeout(500)
         y0=pg.evaluate("[scrollY,document.documentElement.scrollHeight]")
         for _ in range(8):
             pg.wait_for_timeout(1000); assert pg.evaluate("[scrollY,document.documentElement.scrollHeight]")==y0, "手机上页面在实时刷新时跳动"
@@ -268,27 +268,12 @@ try:
         pg.click("#tlCtl [data-k='24']"); pg.wait_for_timeout(500)
         print("PASS 时间线范围 / 动态对比窗口")
         # v0.47.5:搜索时「访问目标」独占整行;设备详情里有「合并设备」
-        pg.evaluate("S.tab='overview';showTab();TH.cards.mix.w=6;applyTheme();autoHide()"); pg.wait_for_timeout(300)
+        pg.evaluate("S.tab='overview';showTab();TH.cards.rthost.w=6;applyTheme();autoHide()"); pg.wait_for_timeout(300)
         pg.fill("#hostQ","a"); pg.wait_for_timeout(1200)
-        assert pg.evaluate("document.querySelector('#mixCard').style.getPropertyValue('--span')")=="12", "搜索时整行"
+        assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="12", "搜索时整行"
         pg.fill("#hostQ",""); pg.wait_for_timeout(1200)
-        assert pg.evaluate("document.querySelector('#mixCard').style.getPropertyValue('--span')")=="6", "清空搜索后恢复设置的宽度"
-        pg.evaluate("TH.cards.mix.w=12;applyTheme()")
-        # v0.55:流量总览(设备 / 节点 / 目标合并成一张表)
-        pg.evaluate("S.tab='overview';showTab();refresh()"); pg.wait_for_timeout(3500)
-        assert pg.locator("#mixCard").is_visible(), "流量总览没显示"
-        assert not pg.evaluate("['#rtCard','#rtdevCard','#rtnodeCard','#rthostCard'].some(s=>document.querySelector(s).offsetParent!==null)"), "旧的四张卡片不应再显示"
-        assert pg.locator("#mixTbl tr.mixtot").count()==1 and "全网合计" in pg.inner_text("#mixTbl"), "没有全网合计行"
-        pg.click("#mixType [data-k='dev']"); pg.wait_for_timeout(300)
-        assert pg.evaluate("[...document.querySelectorAll('#mixTbl tbody tr.click')].every(t=>t.children[0].textContent==='设备')"), "类型筛选无效"
-        pg.click("#mixType [data-k='all']"); pg.wait_for_timeout(200)
-        pg.fill("#mixQ","zzzz_no_such"); pg.wait_for_timeout(300)
-        assert "没有匹配" in pg.inner_text("#mixTbl"), "搜索无结果提示"
-        pg.fill("#mixQ",""); pg.click("#mixView [data-k='period']"); pg.wait_for_timeout(2000)
-        assert pg.evaluate("S.mix.view")=="period" and pg.locator("#mixTbl th").count()==6, "时段视图"
-        pg.click("#mixView [data-k='live']"); pg.wait_for_timeout(800)
-        assert pg.evaluate("document.querySelector('#mixTbl thead th:nth-child(6)').textContent.includes('速度')"), "此刻视图"
-        print("PASS 流量总览合并表")
+        assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="6", "清空搜索后恢复设置的宽度"
+        pg.evaluate("TH.cards.rthost.w=12;applyTheme()")
         pg.evaluate("S.tab='devices';showTab();loadDevices()"); pg.wait_for_timeout(1500)
         if pg.evaluate("(S.devices||[]).length"):
             pg.evaluate("S.dd=S.devices[0].key;loadDevicesTab()"); pg.wait_for_timeout(1500)
