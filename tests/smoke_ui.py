@@ -75,6 +75,8 @@ try:
         assert dl_.value.suggested_filename.startswith("flux-alerts-"), "告警 CSV 文件名"
         pg.evaluate("S.alRows=[{ts:1,level:'warn',kind:'conn_anom',title:'连接行为高度可疑:x',detail:'详情:连接监控中心 → 事件 #7',sent:'',_i:0}]")
         assert pg.evaluate("alEvId(S.alRows[0])")=="7" and "evdl" in pg.evaluate("alertActs(S.alRows[0])"), "连接事件告警应有「下载数据包」"
+        pg.wait_for_timeout(800)
+        assert pg.evaluate("fetch('/api/alerts?kind=audit&limit=100').then(r=>r.json()).then(j=>j.rows.some(r=>r.title.startsWith('下载了文件 flux-alerts-')))"), "浏览器下载应被记录到告警"
         print("PASS 告警复制 / 导出 / 下载数据包")
         pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/tl.png")
         pg.evaluate("openSettings('groups')"); pg.wait_for_timeout(1200); pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/gr.png")

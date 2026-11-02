@@ -1373,7 +1373,40 @@ def p_update(body):
     return update.check(force=True)
 
 
-POST_ROUTES = {"/api/conns/ignore": p_conns_ignore, "/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+_ui_hits = {}
+
+
+def p_audit_ui(body):
+    """浏览器里的「复制」「下载文件」(CSV / TXT / JSON 都是浏览器自己生成的):页面通知一声,服务器记一条。只记动作、页面和文件名,不记内容。管理员和只读账号都记。"""
+    a = str(body.get("a") or "")
+    if a not in ("copy", "download"):
+        return {"ok": False, "error": "参数不对"}
+    ip, role = getattr(_ctx, "ip", ""), getattr(_ctx, "role", "a")
+    now = time.time()
+    hits = [t for t in _ui_hits.get(ip, []) if now - t < 60]
+    if len(hits) >= 30:                       # 防止被刷:同一来源每分钟最多记 30 条
+        return {"ok": True, "skipped": True}
+    hits.append(now)
+    _ui_hits[ip] = hits
+    if len(_ui_hits) > 200:
+        _ui_hits.clear()
+    tab = str(body.get("tab") or "")[:12]
+    where = f"({tab}页)" if tab else ""
+    if a == "copy":
+        n = max(0, min(10_000_000, int(body.get("n") or 0)))
+        title = f"复制了内容{where},约 {n} 字"
+    else:
+        title = f"下载了文件 {str(body.get('name') or '')[:80]}{where}"
+    k = (title, ip)
+    if now - _dl_seen.get(k, 0) < 2:
+        return {"ok": True, "skipped": True}
+    _dl_seen[k] = now
+    ua = getattr(_ctx, "ua", "")
+    _wcon(lambda con: alerts.note(con, "audit", "ui_" + a, title, f"账号:{'管理员' if role == 'a' else '只读'};来自 {ip or '?'}({panellog.short_ua(ua)});只记录动作,不含内容"))
+    return {"ok": True}
+
+
+POST_ROUTES = {"/api/audit/ui": p_audit_ui, "/api/conns/ignore": p_conns_ignore, "/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 
@@ -1494,7 +1527,7 @@ def _viewer_scrub(path, data):
     return data
 
 
-VIEWER_POST_OK = {"/api/logout", "/api/clienterr"}
+VIEWER_POST_OK = {"/api/logout", "/api/clienterr", "/api/audit/ui"}
 VIEWER_EDIT_POST = {"/api/device", "/api/groups/set", "/api/presence/watch"}   # 管理员给只读账号开了「修改设备别名 / 分组 / 关注」才放行
 VIEWER_POST_NOOP = {"/api/ui", "/api/alerts/seen"}     # 外观 / 已读标记:只读账号改了也不写到服务器(否则会覆盖管理员的布局),但不报错
 
@@ -1647,6 +1680,7 @@ class Handler(BaseHTTPRequestHandler):
         _ctx.role = role
         _ctx.ip = self._ip()
         _ctx.sid = auth.cookie_sid(self._cookie())
+        _ctx.ua = self.headers.get("User-Agent", "")
         if role == "v" and u.path in VIEWER_DENY_GET:
             _audit_download(u.path, params, role, _ctx.ip, self.headers.get("User-Agent", ""), denied=True)
             return self._send(403, {"error": "只读账号不能查看这个内容"})
@@ -1845,6 +1879,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         _ctx.role = role
         _ctx.ip = self._ip()
+        _ctx.ua = self.headers.get("User-Agent", "")
         _ctx.server = self.server
         try:
             n = int(self.headers.get("Content-Length") or 0)

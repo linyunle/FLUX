@@ -726,6 +726,10 @@ try:
     ok(rq2(vw, "/api/config", {"api": "http://x:1"})[0] == 403 and rq2(vw, "/api/storage/clean", {"action": "vacuum"})[0] == 403 and rq2(vw, "/api/auth/set", {"old": "viewerpw1", "new": ""})[0] == 403 and rq2(vw, "/api/auth/revoke", {})[0] == 403, "只读账号:不能改设置 / 改密码 / 清理 / 踢人")
     dn_ = [r for r in rq2(adm, "/api/alerts?kind=audit&limit=100")[1]["rows"] if r["title"].startswith("被拒绝:只读账号尝试")]
     ok(any("导出备份" in r["title"] for r in dn_) and any("下载诊断包" in r["title"] for r in dn_) and all(r["level"] == "warn" and "什么都没下载" in r["detail"] for r in dn_), "审计:只读账号被拒绝的下载尝试有记录")
+    ok(rq2(vw, "/api/audit/ui", {"a": "download", "name": "flux-设备-test.csv", "tab": "设备"})[0] == 200 and rq2(vw, "/api/audit/ui", {"a": "copy", "n": 1234, "tab": "概览"})[0] == 200, "审计:只读账号可以上报复制 / 下载动作")
+    ok(rq2(vw, "/api/audit/ui", {"a": "bad"})[1].get("ok") is False, "审计:动作类型校验")
+    ui_ = [r for r in rq2(adm, "/api/alerts?kind=audit&limit=100")[1]["rows"] if r["key"] in ("ui_copy", "ui_download")]
+    ok(any("下载了文件 flux-设备-test.csv" in r["title"] and "只读" in r["detail"] and "不含内容" in r["detail"] for r in ui_) and any("复制了内容(概览页),约 1234 字" in r["title"] for r in ui_), "审计:复制 / 下载动作有记录(账号 / 来源,不含内容)")
     ui0 = rq2(adm, "/api/ui")[1]
     c_, j_, _ = rq2(vw, "/api/ui", {"theme": {"mode": "dark-viewer-test"}})
     ok(c_ == 200 and j_.get("readonly") and rq2(adm, "/api/ui")[1] == ui0, "只读账号:改外观不会写到服务器")
