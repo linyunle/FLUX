@@ -1429,6 +1429,14 @@ def test_v0541_extra_fields():
     assert connmon.R_GEO == 23
 
 
+def test_v0555_snap_brief():
+    from app import diag
+    sn = {"at": {"ts": 1, "rows": [["tcp", "a.com", "443", "n", "CLOSE_WAIT", 5, 10, "已确认"]] * 40}, "pre": [[1, 2]], "post": [], "cols": ["ts"], "row_cols": ["proto"]}
+    b = diag._snap_brief(sn)
+    assert b["top"]["state"] == [["CLOSE_WAIT", 40]] and len(b["rows"]) == 30 and b["rows_total"] == 40 and b["pre"] == [[1, 2]]
+    assert diag._snap_brief(None) is None
+
+
 def test_v0552_scrub_and_report():
     import os, tempfile, time, json, importlib
     from app import config, db, util, insight

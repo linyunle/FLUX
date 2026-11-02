@@ -334,6 +334,21 @@ def _mask_obj(o, mk):
     return o
 
 
+def _snap_brief(sn, keep=30):
+    """事件快照:全部连接的汇总(协议 / 状态 / 目标 / 端口 / 节点 各自前几名)+ 前 keep 行明细 + 事件前后的每分钟连接数。"""
+    if not sn:
+        return None
+    at = sn.get("at") or {}
+    rows = at.get("rows") or []
+    cnt = {k: {} for k in ("proto", "state", "target", "port", "node")}
+    for r in rows:
+        for k, v in (("proto", r[0]), ("state", r[4] or "?"), ("target", r[1] or "(代理解析)"), ("port", f"{r[2]}/{r[0]}"), ("node", r[3])):
+            cnt[k][v] = cnt[k].get(v, 0) + 1
+    top = {k: [[a, n] for a, n in sorted(v.items(), key=lambda kv: -kv[1])[:8]] for k, v in cnt.items()}
+    return {"at": at.get("ts"), "rows_total": len(rows), "top": top, "row_cols": sn.get("row_cols"), "rows": rows[:keep],
+            "series_cols": sn.get("cols"), "pre": sn.get("pre"), "post": sn.get("post")}
+
+
 def conn_center(con, mk, now=None, events_n=60):
     """连接监控中心的诊断内容:运行档位 / 资源依据 / 采样与保留 / 占用、基线、各级别设备数、最近 7 天事件(证据 + 诊断文字)、忽略名单。"""
     from . import connhist, connanom
@@ -347,6 +362,17 @@ def conn_center(con, mk, now=None, events_n=60):
         ev_rows.append({"id": e["id"], "time": time.strftime("%F %T", time.localtime(e["ts_start"])), "minutes": round(max(0, (e["ts_end"] or e["ts_start"]) - e["ts_start"]) / 60, 1),
                         "dev": e["dev"], "name": w.alerts._dev_label(con, e["dev"], w.alerts._dev_names(con)), "kind": e["kind"], "level": e["level"], "title": e["title"],
                         "status": e["status"], "evidence": d.get("evidence"), "diag": d.get("diag"), "snapshot_rows": len(((d.get("snapshot") or {}).get("rows")) or [])})
+    for e in ev_rows[:5]:                       # 最近 5 个事件带现场快照(汇总 + 前 30 行明细)
+        sn = (connhist.event_detail(con, e["id"]) or {}).get("snapshot")
+        e["snapshot"] = _snap_brief(sn)
+    series = []                                  # 连接数最高的 5 台设备,过去 24 小时每 5 分钟一个点
+    for t in ov["top"][:5]:
+        try:
+            tr = connhist.trend(con, t["dev"], 1440, now, maxpts=288)["rows"]
+        except Exception:
+            continue
+        series.append({"dev": t["dev"], "name": t["name"], "cols": ["time", "conns_max", "tcp", "udp", "new", "closed", "syn", "unreplied"],
+                       "rows": [[time.strftime("%m-%d %H:%M", time.localtime(r["ts"])), r.get("conns", 0), r.get("tcp", 0), r.get("udp", 0), r.get("new", 0), r.get("closed", 0), r.get("syn", 0), r.get("unrep", 0)] for r in tr]})
     by_day, by_dev, by_kind = {}, {}, {}
     for e in ev_rows:
         by_day[e["time"][:10]] = by_day.get(e["time"][:10], 0) + 1
@@ -356,7 +382,8 @@ def conn_center(con, mk, now=None, events_n=60):
            "cfg": sy["cfg"], "storage": sy.get("storage"), "last_flush": sy["last_flush"], "err": sy["err"], "storage_note": sy["storage_note"], "snap_skipped": sy["snap_skipped"],
            "baseline_devs": sy["anom"]["baseline_devs"], "anom_checks": sy["anom"]["checks"], "anom_err": sy["anom"]["err"], "ignored": sy["anom"]["ignored"],
            "metrics": ov["metrics"], "degraded": ov["degraded"], "top_devices": ov["top"][:15], "events_7d": len(ev_rows),
-           "events_by_day": by_day, "events_by_device": by_dev, "events_by_kind": by_kind, "events": ev_rows}
+           "events_by_day": by_day, "events_by_device": by_dev, "events_by_kind": by_kind, "events": ev_rows,
+           "device_series_24h": series}
     return _mask_obj(out, mk)
 
 

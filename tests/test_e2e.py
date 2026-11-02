@@ -337,7 +337,7 @@ try:
     ok(c == 200 and r["on"] is True, "连接明细:可重新开启")
     ok("status" in (get("/api/diag")["ext"].get("connections") or {}), "诊断包:带连接明细段(ext.connections)")
     cc = get("/api/diag")["ext"].get("conn_center") or {}
-    ok(cc.get("tier") in ("high", "standard", "light") and "metrics" in cc and isinstance(cc.get("events"), list) and "baseline_devs" in cc, "诊断包:带连接监控中心段(ext.conn_center)")
+    ok(cc.get("tier") in ("high", "standard", "light") and "metrics" in cc and isinstance(cc.get("events"), list) and "baseline_devs" in cc and isinstance(cc.get("device_series_24h"), list) and "error" not in cc, "诊断包:带连接监控中心段(ext.conn_center)")
     sy = get("/api/conns/system")
     ok(sy["tier"] in ("high", "standard", "light") and sy["params"]["hist"] > 0 and "storage" in sy and sy["cfg"]["budget_mb"] == 300, "连接历史:系统状态(档位 / 参数 / 存储)")
     ok(set(sy["anom"]["overview"]) >= {"normal", "attention", "suspect", "unknown"} and isinstance(sy["anom"]["devices"], list), "连接异常:四级统计与设备列表")
