@@ -414,6 +414,10 @@ try:
     ok(dg["flux_diag"] == 1 and dg["masked"] and "s3cret" not in raw and dg["db"]["rows"]["traffic"] and dg["selfcheck"] and dg["log"] is not None and dg["client_errors"], "诊断包:结构完整、没有密钥")
     ok(not __import__("re").search(r"\b192\.168\.\d+\.\d+\b", raw), "诊断包:IP 已打码")
     ok(get("/api/diag?full=1")["masked"] is False, "诊断包:完整版")
+    au = [r for r in get("/api/alerts?kind=audit&limit=100")["rows"] if r["title"].startswith("下载诊断包")]
+    ok(any("完整版" in r["title"] for r in au) and any("打码版" in r["title"] for r in au) and all("账号:" in r["detail"] and "来自" in r["detail"] for r in au), "审计:下载诊断包有记录(版本 / 账号 / 来源)")
+    get("/api/backup?secrets=1")
+    ok(any(r["title"].startswith("导出备份(含密钥") for r in get("/api/alerts?kind=audit&limit=100")["rows"]), "审计:导出备份有记录")
     ok("wan" in get("/api/sys") and "targets" in get("/api/wan") and isinstance(get("/api/wan")["hours"], dict), "宽带质量:接口")
     ar2 = get("/api/alerts/config")["rules"]; ok(all(k in ar2 for k in ("wan_down", "wan_ip", "wan_loss", "sub_stale")), "告警:宽带/订阅规则存在")
     # ---- v0.20.0

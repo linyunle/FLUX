@@ -1435,6 +1435,31 @@ AUDIT.update({"/api/nikkiui": "修改 nikki 面板链接地址", "/api/storage/c
 
 
 _ctx = threading.local()
+_dl_seen = {}
+
+
+def _audit_download(path, params, role, ip, ua):
+    """导出 / 下载带敏感信息的内容时,在告警里记一条:谁(管理员 / 只读)、从哪个 IP、什么浏览器、下了什么。同一来源 3 秒内重复请求只记一次。"""
+    flag = lambda k: one(params, k) in ("1", "true")
+    t = {"/api/diag": lambda: "下载诊断包(" + ("完整版,未打码" if flag("full") else "打码版") + ("、含日志明细" if flag("logs") else "") + ("、域名换成代号" if flag("dom") else "") + ")",
+         "/api/backup": lambda: "导出备份(" + ("含密钥 / 密码" if flag("secrets") else "不含密钥") + ")",
+         "/api/syslog/export": lambda: "导出 / 复制路由器日志",
+         "/api/nklog/export": lambda: "导出 / 复制 nikki 日志",
+         "/api/autobackup/get": lambda: "下载自动备份 " + one(params, "name")[:60]}.get(path)
+    if not t:
+        return
+    now = time.time()
+    try:
+        title = t()
+        k = (title, ip)
+        if now - _dl_seen.get(k, 0) < 3:
+            return
+        _dl_seen[k] = now
+        if len(_dl_seen) > 200:
+            _dl_seen.clear()
+        _wcon(lambda con: alerts.note(con, "audit", "download", title, f"账号:{'管理员' if role == 'a' else '只读'};来自 {ip or '?'}({panellog.short_ua(ua)})"))
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------- HTTP
@@ -1624,6 +1649,7 @@ class Handler(BaseHTTPRequestHandler):
         _ctx.sid = auth.cookie_sid(self._cookie())
         if role == "v" and u.path in VIEWER_DENY_GET:
             return self._send(403, {"error": "只读账号不能查看这个内容"})
+        _audit_download(u.path, params, role, _ctx.ip, self.headers.get("User-Agent", ""))
         if u.path in ("/", "/index.html"):
             self._seen("page")
             with open(os.path.join(STATIC, "index.html"), "rb") as f:
