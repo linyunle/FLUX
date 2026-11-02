@@ -14,6 +14,14 @@ stop = threading.Event()
 MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 
 
+SECRET_RE = re.compile(r"(?i)([?&;](?:token|access_token|key|apikey|api_key|secret|password|passwd|pwd|auth|sign|signature)=)[^&\s\"'\\)\]>]+")
+
+
+def scrub(t):
+    """文本里的 URL 口令(?token=xxx、&key=xxx 等)换成 ***,日志 / 诊断包 / 自检都不该带出订阅链接的 token。"""
+    return SECRET_RE.sub(lambda m: m.group(1) + "***", str(t))
+
+
 def log(*a):
     line = time.strftime("%F %T") + " " + " ".join(str(x) for x in a)
     print(line, flush=True)

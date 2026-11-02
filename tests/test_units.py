@@ -1429,6 +1429,23 @@ def test_v0541_extra_fields():
     assert connmon.R_GEO == 23
 
 
+def test_v0552_scrub_and_report():
+    import os, tempfile, time, json, importlib
+    from app import config, db, util, insight
+    t = util.scrub('Get "http://h:3001/share/sub/X?token=B2-abc&b=1": EOF ?password=p@ss')
+    assert "B2-abc" not in t and "p@ss" not in t and "token=***" in t and "b=1" in t, t
+    d = tempfile.mkdtemp(); config.DATA_DIR = d; config.DB_PATH = os.path.join(d, "t.db"); db.init_db(); con = db.open_db()
+    now = int(time.time())
+    assert insight.conn_summary(con, 7) is None
+    with con:
+        con.execute("INSERT INTO conn_event(ts_start,dev,kind,level,title,evidence) VALUES(?,?,?,?,?,?)", (now - 100, "aa:bb", "conn_anom", "suspect", "t", json.dumps({"signals": ["burst"]})))
+        con.execute("INSERT INTO conn_event(ts_start,dev,kind,level,title,evidence) VALUES(?,?,?,?,?,?)", (now - 8 * 86400, "aa:bb", "conn_many", "attention", "t", "{}"))
+        con.execute("INSERT INTO conn_dev_min(ts,dev,conns) VALUES(?,?,?)", (now - 60, "aa:bb", 463))
+    cs = insight.conn_summary(con, 7)
+    assert cs["events"] == 1 and cs["prev"] == 1 and cs["levels"] == {"suspect": 1} and cs["peaks"][0]["conns"] == 463, cs
+    con.close()
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

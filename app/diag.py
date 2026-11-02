@@ -2,6 +2,7 @@
 自检:对面板自己的运行状态、数据一致性、配置做一遍检查,把「看起来不对劲」的地方列出来(很多 bug 会先在这里露出来)。
 诊断包:版本、配置摘要、节点/订阅状态、最近告警、面板日志、前端报错、自检结果打成一个 JSON;默认把 IP/MAC/设备别名打码,不含任何密码或 Token。"""
 import hashlib
+import json
 import os
 import platform
 import re
@@ -9,7 +10,7 @@ import sys
 import threading
 import time
 
-from . import connmon, tidy, netstat, agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
+from . import util, connmon, tidy, netstat, agh, dnsx, nikkilog, airports, alerts, config, devices, panellog, probe, providers, sysinfo, syslog, ups, expiry, dockerapi, wan, listen
 
 STARTED = time.time()
 MAC = re.compile(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
@@ -323,6 +324,42 @@ def mask_text(t, names=()):
     return t
 
 
+def _mask_obj(o, mk):
+    if isinstance(o, str):
+        return mk(o)
+    if isinstance(o, list):
+        return [_mask_obj(x, mk) for x in o]
+    if isinstance(o, dict):
+        return {k: _mask_obj(v, mk) for k, v in o.items()}
+    return o
+
+
+def conn_center(con, mk, now=None, events_n=60):
+    """连接监控中心的诊断内容:运行档位 / 资源依据 / 采样与保留 / 占用、基线、各级别设备数、最近 7 天事件(证据 + 诊断文字)、忽略名单。"""
+    from . import connhist, connanom
+    now = now or time.time()
+    w = _web()
+    sy = w.q_conns_system(con, {})
+    ov = w.q_conns_overview(con, {})
+    ev_rows = []
+    for e in connhist.events(con, "", 24 * 7, events_n, now):
+        d = connhist.event_detail(con, e["id"]) or e
+        ev_rows.append({"id": e["id"], "time": time.strftime("%F %T", time.localtime(e["ts_start"])), "minutes": round(max(0, (e["ts_end"] or e["ts_start"]) - e["ts_start"]) / 60, 1),
+                        "dev": e["dev"], "name": w.alerts._dev_label(con, e["dev"], w.alerts._dev_names(con)), "kind": e["kind"], "level": e["level"], "title": e["title"],
+                        "status": e["status"], "evidence": d.get("evidence"), "diag": d.get("diag"), "snapshot_rows": len(((d.get("snapshot") or {}).get("rows")) or [])})
+    by_day, by_dev, by_kind = {}, {}, {}
+    for e in ev_rows:
+        by_day[e["time"][:10]] = by_day.get(e["time"][:10], 0) + 1
+        by_dev[e["name"]] = by_dev.get(e["name"], 0) + 1
+        by_kind[e["kind"]] = by_kind.get(e["kind"], 0) + 1
+    out = {"on": ov["on"], "tier": sy["tier"], "tier_name": sy["tier_name"], "forced": sy["forced"], "reasons": sy["reasons"], "hw": sy["hw"], "params": sy["params"],
+           "cfg": sy["cfg"], "storage": sy.get("storage"), "last_flush": sy["last_flush"], "err": sy["err"], "storage_note": sy["storage_note"], "snap_skipped": sy["snap_skipped"],
+           "baseline_devs": sy["anom"]["baseline_devs"], "anom_checks": sy["anom"]["checks"], "anom_err": sy["anom"]["err"], "ignored": sy["anom"]["ignored"],
+           "metrics": ov["metrics"], "degraded": ov["degraded"], "top_devices": ov["top"][:15], "events_7d": len(ev_rows),
+           "events_by_day": by_day, "events_by_device": by_dev, "events_by_kind": by_kind, "events": ev_rows}
+    return _mask_obj(out, mk)
+
+
 def _ext(con, m, full, now, logs=False, dom=False):
     """路由器日志 / UPS / 到期 / 容器 / 监听地址 的详细诊断(默认打码;不含容器日志、环境变量、密码)。"""
     out = {}
@@ -366,6 +403,12 @@ def _ext(con, m, full, now, logs=False, dom=False):
         out["connections"] = connmon.diag((lambda x: mask_domains(m(x), dm3)) if dom else m)
     except Exception as e:
         out["connections"] = {"error": f"{type(e).__name__}: {e}"}
+    # ---- 连接监控中心:档位 / 基线 / 级别 / 最近事件(含证据和诊断文字)/ 忽略名单
+    try:
+        dm4 = domain_masker() if dom else None
+        out["conn_center"] = conn_center(con, (lambda x: mask_domains(m(x), dm4)) if dom else m, now)
+    except Exception as e:
+        out["conn_center"] = {"error": f"{type(e).__name__}: {e}"}
     # ---- nikki 内核 / 插件日志
     try:
         st = nikkilog.status(con)
@@ -497,7 +540,7 @@ def bundle(con, full=False, now=None, logs=False, dom=False):
     now = now or time.time()
     w = _web()
     names = [] if full else _names(con)
-    m = (lambda s: str(s)) if full else (lambda s: mask_text(s, names))
+    m = (lambda s: util.scrub(s)) if full else (lambda s: mask_text(util.scrub(s), names))
     ac = alerts.load_cfg(con)
     a = agh.load_cfg(con)
     q = _kv(con, "quota", {}) or {}
@@ -525,7 +568,8 @@ def bundle(con, full=False, now=None, logs=False, dom=False):
         "flux_diag": 1, "created": time.strftime("%F %T", time.localtime(now)), "masked": not full,
         "version": config.VERSION, "python": sys.version.split()[0], "platform": platform.platform(),
         "process_uptime_sec": int(now - STARTED), "rss_mb": _rss_mb(),
-        "selfcheck": selfcheck(con, now),
+        "selfcheck": [dict(x, title=m(x.get("title", "")), detail=m(x.get("detail", "")), **({"act": {**x["act"], "body": json.loads(m(json.dumps(x["act"].get("body"), ensure_ascii=False)))}} if isinstance(x.get("act"), dict) and x["act"].get("body") is not None else {}))
+                      for x in selfcheck(con, now)],
         "nikki": {"api": cf["api"] if full else mask_text(cf["api"]), "has_secret": bool(cf["secret"]), "status": dict(c.status) if c else None},
         "config": {
             "rules": {k: v for k, v in ac["rules"].items()}, "quiet": ac["quiet"],

@@ -391,6 +391,42 @@ def save_report_cfg(con, body):
     return c
 
 
+def conn_summary(con, days, cache=None, now=None):
+    """周报里的连接监控小结:异常事件数(按级别 / 设备 / 信号)、对比上期、并发连接最高的设备。没有数据返回 None。"""
+    import json as _json
+    from . import connanom
+    now = now or time.time()
+    t1, t0 = int(now - days * 86400), int(now - 2 * days * 86400)
+    try:
+        rows = con.execute("SELECT dev,kind,level,evidence FROM conn_event WHERE ts_start>=?", (t1,)).fetchall()
+        prev = con.execute("SELECT COUNT(*) FROM conn_event WHERE ts_start>=? AND ts_start<?", (t0, t1)).fetchone()[0]
+        peaks = con.execute("SELECT dev, MAX(conns), COUNT(*) FROM conn_dev_min WHERE ts>=? GROUP BY dev ORDER BY MAX(conns) DESC LIMIT 3", (t1,)).fetchall()
+        mins = con.execute("SELECT COUNT(*) FROM conn_dev_min WHERE ts>=?", (t1,)).fetchone()[0]
+    except Exception:
+        return None
+    if not rows and not peaks and not prev:
+        return None
+    cache = cache if cache is not None else alerts._dev_names(con)
+    lv, bd, sg = {}, {}, {}
+    for dev, kind, level, ev in rows:
+        lv[level] = lv.get(level, 0) + 1
+        b = bd.setdefault(dev, {"n": 0, "suspect": 0})
+        b["n"] += 1
+        b["suspect"] += level == "suspect"
+        try:
+            for s in (_json.loads(ev or "{}").get("signals") or []):
+                nm = connanom.SIG[s][0] if s in connanom.SIG else s
+                sg[nm] = sg.get(nm, 0) + 1
+        except (ValueError, AttributeError, TypeError):
+            pass
+        if kind == "conn_many":
+            sg["并发连接数过多"] = sg.get("并发连接数过多", 0) + 1
+    return {"events": len(rows), "prev": prev, "levels": lv, "minutes": mins,
+            "devices": [{"name": alerts._dev_label(con, d, cache), "n": v["n"], "suspect": v["suspect"]} for d, v in sorted(bd.items(), key=lambda kv: -kv[1]["n"])[:3]],
+            "signals": [{"name": k, "n": n} for k, n in sorted(sg.items(), key=lambda kv: -kv[1])[:4]],
+            "peaks": [{"name": alerts._dev_label(con, d, cache), "conns": c} for d, c, _n in peaks]}
+
+
 def report(con, days=7):
     w = _web()
     days = max(1, min(90, days))
@@ -438,7 +474,10 @@ def report(con, days=7):
             "kinds": kinds, "airports": [{"name": a, "bytes": b} for a, b in sorted(ap.items(), key=lambda x: -x[1])[:5]],
             "devices": devs, "domains": doms, "apps": apps, "peak_hour": int(peak[0]) if peak and peak[0] else None,
             "retrans_pct": round(t[1] * 100 / t[0], 2) if t[0] else None, "alerts": al, "bad_nodes": bad, "node_geo": ng,
-            "new_devices": nd, "quota": quota_status(con)}
+            "new_devices": nd, "quota": quota_status(con), "conn": conn_summary(con, days, cache)}
+
+
+LVN = {"attention": "需要关注", "suspect": "高度可疑", "unknown": "无法判断"}
 
 
 def _b(n):
@@ -464,6 +503,17 @@ def report_text(rp):
         L.append(f"TCP 重传率 {rp['retrans_pct']}%")
     if rp["alerts"]:
         L.append("告警:" + "、".join(f"{alerts.KINDS.get(a, a)} {n}" for a, n in rp["alerts"].items()))
+    cs = rp.get("conn")
+    if cs:
+        lv = cs["levels"]
+        trend = f"(上期 {cs['prev']} 个)" if cs["prev"] or cs["events"] else ""
+        L.append(f"连接监控:异常事件 {cs['events']} 个{trend}" + (":" + "、".join(f"{LVN.get(k, k)} {n}" for k, n in lv.items()) if lv else "") + "(只是行为偏离提示,不是入侵判定)")
+        if cs["devices"]:
+            L.append("  事件最多的设备:" + "、".join(f"{x['name']} {x['n']} 次" + (f"(含 {x['suspect']} 次高度可疑)" if x["suspect"] else "") for x in cs["devices"]))
+        if cs["signals"]:
+            L.append("  主要原因:" + "、".join(f"{x['name']} {x['n']}" for x in cs["signals"]))
+        if cs["peaks"]:
+            L.append("  并发连接峰值:" + "、".join(f"{x['name']} {x['conns']}" for x in cs["peaks"]))
     for q in rp["quota"]:
         L.append(f"套餐 {q['airport']}:{q['pct']}%({_b(q['used'])} / {q['gb']:g} GB){';' + quota_when(q) if q['expire'] else ''}")
     for b in rp["bad_nodes"][:3]:

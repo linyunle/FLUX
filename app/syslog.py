@@ -137,6 +137,8 @@ def purge_ignored(con, cfg):
 def _insert(con, rows):
     if not rows:
         return
+    from .util import scrub
+    rows = [(r[0], r[1], r[2], r[3], scrub(r[4])) for r in rows]
     with con:
         con.executemany("INSERT INTO syslog(ts,host,sev,tag,msg) VALUES(?,?,?,?,?)", rows)
 

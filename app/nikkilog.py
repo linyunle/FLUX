@@ -15,6 +15,7 @@ import time
 import urllib.request
 
 from . import config, db
+from . import util
 from .util import log, stop
 
 DEFAULT = {"on": True, "level": "warning", "days": 3, "max_rows": 20000, "dir": "", "ignore": []}
@@ -128,7 +129,7 @@ def parse_app(line):
 
 def _push(cfg, src, ts, lv, msg):
     """入队(带限速和级别 / 忽略过滤);由 run() 统一写库。"""
-    msg = msg.strip()
+    msg = util.scrub(msg.strip())
     if not msg:
         return
     if src == "core" and lv > LEVELS[cfg["level"]]:
@@ -243,6 +244,16 @@ def run():
     con = db.open_db()
     last_cfg = 0.0
     cfg = dict(DEFAULT, dir_eff=default_dir())
+    try:   # 旧版本存下来的日志里可能带订阅链接的 token:启动时清一遍
+        for t, c in (("nklog", "msg"), ("syslog", "msg")):
+            rows = con.execute(f"SELECT rowid,{c} FROM {t} WHERE {c} LIKE '%token=%' OR {c} LIKE '%secret=%' OR {c} LIKE '%key=%' OR {c} LIKE '%password=%'").fetchall()
+            with con:
+                for rid, v in rows:
+                    nv = util.scrub(v)
+                    if nv != v:
+                        con.execute(f"UPDATE {t} SET {c}=? WHERE rowid=?", (nv, rid))
+    except Exception as e:
+        log("日志口令清理失败:", e)
     while not stop.is_set():
         now = time.time()
         if now - last_cfg > 5:
