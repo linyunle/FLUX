@@ -35,7 +35,8 @@ _lock = threading.Lock()
 TCP_CN = {"ESTABLISHED": "已建立", "SYN_SENT": "正在连接", "SYN_RECV": "握手中", "FIN_WAIT": "正在关闭", "CLOSE_WAIT": "对端已关",
           "TIME_WAIT": "已结束", "LAST_ACK": "正在关闭", "CLOSE": "已关闭"}
 # 一行行读取字段的下标:row[i]
-(R_ID, R_DEV, R_SRC, R_SPORT, R_PROTO, R_DST, R_DPORT, R_HOST, R_NODE, R_RULE, R_START, R_UP, R_DOWN, R_KIND, R_DNS, R_STATE, R_LINK, R_UNREP) = range(18)
+(R_ID, R_DEV, R_SRC, R_SPORT, R_PROTO, R_DST, R_DPORT, R_HOST, R_NODE, R_RULE, R_START, R_UP, R_DOWN, R_KIND, R_DNS, R_STATE, R_LINK, R_UNREP,
+ R_PROC, R_CHAIN, R_SNIFF, R_RESOLVED, R_USER, R_GEO) = range(24)
 
 
 RCOL = {"id": R_ID, "dev": R_DEV, "src": R_SRC, "sport": R_SPORT, "proto": R_PROTO, "dst": R_DST, "dport": R_DPORT, "host": R_HOST, "node": R_NODE,
@@ -266,6 +267,26 @@ def feed(conns, col, now, kindf):
         STATE["fast"] = 0
 
 
+def _proc(m):
+    v = str(m.get("process") or "").strip()
+    if not v:
+        v = str(m.get("processPath") or "").rstrip("/").rsplit("/", 1)[-1]
+    return v[:60]
+
+
+def _inuser(m):
+    return str(m.get("inboundUser") or m.get("uid") or "")[:40]
+
+
+def _geo(m):
+    g = m.get("destinationGeoIP")
+    parts = [str(x) for x in g] if isinstance(g, list) else ([str(g)] if g else [])
+    a = str(m.get("destinationIPASN") or "").strip()
+    if a:
+        parts.append(a)
+    return " ".join(parts)[:80]
+
+
 def _build(conns, col, now, kindf):
     press = _mem_pressure()
     from . import connhist
@@ -300,7 +321,9 @@ def _build(conns, col, now, kindf):
         rows.append([cid, (col.neigh.key(src) if col else src), src, str(m.get("sourcePort") or ""), str(m.get("network") or "").lower(),
                      dst, str(m.get("destinationPort") or ""), host, node, ((r + "," + p) if p else r)[:80],
                      _start_ts(cn.get("start")), int(cn.get("upload") or 0), int(cn.get("download") or 0), kindf(node, ptype),
-                     str(m.get("dnsMode") or ""), "", "", False])
+                     str(m.get("dnsMode") or ""), "", "", False,
+                     _proc(m), " → ".join(str(c) for c in reversed(chains))[:160], str(m.get("sniffHost") or "").strip().lower()[:80],
+                     str(m.get("remoteDestination") or "")[:60], _inuser(m), _geo(m)])
     if now - STATE["ct_at"] >= tp["ct"]:
         known = set(srcs)
         if col:
@@ -364,6 +387,7 @@ def _row_out(rw, now, label):
             "age": int(now - rw[R_START]) if rw[R_START] else None, "up": rw[R_UP], "down": rw[R_DOWN], "dns": rw[R_DNS],
             "state": st, "state_cn": ("无回应" if rw[R_UNREP] and rw[R_PROTO] == "tcp" else TCP_CN.get(st, st)) if rw[R_PROTO] == "tcp" and st else ("UDP" if rw[R_PROTO] == "udp" and st else ""),
             "unreplied": rw[R_UNREP], "link": rw[R_LINK],
+            "proc": rw[R_PROC], "chain": rw[R_CHAIN], "sniff": rw[R_SNIFF], "resolved": rw[R_RESOLVED], "user": rw[R_USER], "geo": rw[R_GEO],
             "up_rate": round(RATES.get(rw[R_ID], (0, 0))[0]), "down_rate": round(RATES.get(rw[R_ID], (0, 0))[1])}
 
 

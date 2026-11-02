@@ -476,6 +476,10 @@ html[data-ui=apple] #dataTop{background:var(--ap-glass);-webkit-backdrop-filter:
 /* 没有 JS 时的兜底(正常情况下由 data-mode 覆盖) */
 @media(prefers-color-scheme:dark){html[data-ui=apple]:not([data-mode]){--bg:#1e1e1e;--surface:#2c2c2e;--ink:#f5f5f7;--line:rgba(255,255,255,.10)}}
 @media(prefers-reduced-motion:reduce){html[data-ui=apple] *{transition:none!important}}
+
+#srCard .pgt table{width:auto;min-width:0}#srCard .pgt th,#srCard .pgt td{white-space:nowrap;max-width:380px;overflow:hidden;text-overflow:ellipsis;padding-right:16px}#srCard .pgt td.n,#srCard .pgt th.n{text-align:left}
+.srpop{border:1px solid var(--line);border-radius:var(--rs);padding:10px;margin:6px 0 10px;background:var(--surface)}.srrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}.srrow input[type=text],.srrow input:not([type]){flex:1;max-width:260px}
+.srcols{display:grid;grid-template-columns:1fr 1fr;gap:10px}.srcol{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:var(--rs);margin-bottom:6px}.srcol button{padding:0 6px}
 </style>
 <script>
 try{var t=JSON.parse(localStorage.getItem("nt.theme.v1")||"{}"),m=t.mode||"auto";
@@ -553,7 +557,8 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card gcard" id="rtnodeCard"><h2>活跃节点</h2><div id="rtNode" class="lbody"></div></div>
   <div class="card gcard" id="rthostCard"><h2>访问目标<span class="seg" id="hostView" role="group" aria-label="视图"></span><span class="seg" id="hostMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub" id="hostHint"></span></h2>
     <div id="rtHost" class="lbody"></div><div id="hostsBox" style="display:none"><div class="scroll lbody" id="hostsTbl"></div></div></div>
-  <div class="card gcard gone" id="srCard"><h2>搜索结果详情<span class="sub" id="srHint"></span><span class="sp"></span></h2>
+  <div class="card gcard gone" id="srCard"><h2>搜索结果详情<span class="sub" id="srHint"></span><span class="sp"></span><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="srHideT"> 隐藏连接</label><button id="srCfg" class="ibtn" aria-label="设置表格列" aria-expanded="false" title="设置:隐藏规则 / 自定义表格列">⚙</button></h2>
+    <div id="srPop" class="srpop" style="display:none"></div>
     <div class="h3">实时连接 <span class="sub" id="srLiveN"></span></div><div id="srLive"><span class="sub">加载中…</span></div>
     <div class="h3" style="margin-top:12px">时段明细 <span class="sub" id="srPerN"></span></div><div id="srPer"><span class="sub">加载中…</span></div></div>
   <div class="card gcard" id="alertCard"><h2>最近告警<span class="sp"></span><span class="sub" id="alcNote"></span><button id="alcGo">查看全部</button></h2><div id="alcBody" class="lbody"></div></div>
@@ -1432,19 +1437,55 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
 for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
 
-/* ---------- 搜索结果详情:搜索时列出实时连接和时段明细(可复制 / 导出) ---------- */
+/* ---------- 搜索结果详情:搜索时列出实时连接和时段明细(可复制 / 导出;列可自定义) ---------- */
 const KIND_CN={direct:"直连",proxy:"代理",reject:"拒绝"};
+const SRC_COLS={
+ type:["类型",r=>esc((KIND_CN[r.kind]||"")+" | "+r.proto)],
+ src:["设备 / 源IP",r=>`${esc(r.name)} <span class="sub">${esc(r.src)}${r.sport?":"+esc(r.sport):""}</span>`],
+ host:["主机",r=>`<span class="pv">${esc(r.host||r.dst_ip||"代理解析")}${r.dport?":"+esc(r.dport):""}</span>`],
+ chain:["代理链",(r,c)=>esc(c.full&&r.chain?r.chain:(r.node||"–"))],
+ dl:["下载速度",r=>rate(r.down_rate)],ul:["上传速度",r=>rate(r.up_rate)],
+ down:["下载",r=>fmt(r.down)],up:["上传",r=>fmt(r.up)],age:["连接时间",r=>cnDur(r.age)],
+ remote:["远端地址",r=>esc(r.dst_ip||"–")],rule:["规则",r=>esc(r.rule||"–")],
+ proc:["进程",r=>esc(r.proc||"–")],node:["出站节点",r=>esc(r.node||"–")],sport:["源端口",r=>esc(r.sport||"–")],
+ sniff:["嗅探主机",r=>esc(r.sniff||"–")],resolved:["解析地址",r=>esc(r.resolved||"–")],dnst:["解析类型",r=>esc(r.dns||"–")],
+ geo:["归属信息",r=>esc(r.geo||"–")],user:["入站用户",r=>esc(r.user||"–")]};
+const SRC_DEF=["type","src","host","chain","dl","ul","down","up","age","remote","rule"];
+function srCfg(){let c={};try{c=JSON.parse(localStorage.getItem("flux.sr")||"{}")}catch(e){}
+  c.cols=(Array.isArray(c.cols)?c.cols:SRC_DEF).filter(k=>SRC_COLS[k]);if(!c.cols.length)c.cols=[...SRC_DEF];
+  c.regex=typeof c.regex==="string"?c.regex:"direct|dns-out";c.hide=!!c.hide;c.full=c.full!==false;return c}
+function sxSave(c){try{localStorage.setItem("flux.sr",JSON.stringify(c))}catch(e){}}
+function srPaintLive(){const j=S.srJ;if(!j||!S.q)return;const c=srCfg();$("#srHideT").checked=c.hide;let rows=(j.rows||[]).filter(r=>!S.devs.size||S.devs.has(r.dev));
+  if(c.hide&&c.regex){let re=null;try{re=new RegExp(c.regex,"i")}catch(e){}if(re)rows=rows.filter(r=>!re.test((r.chain||"")+" "+(r.node||"")+" "+(r.rule||"")))}
+  rows.sort((x,y)=>(y.up_rate+y.down_rate)-(x.up_rate+x.down_rate)||(y.up+y.down)-(x.up+x.down));
+  const tr=rows.map(r=>({c:c.cols.map(k=>SRC_COLS[k][1](r,c)),
+    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["嗅探主机",r.sniff||"–"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["解析地址",r.resolved||"–"],["解析类型",r.dns||"–"],["归属信息",r.geo||"–"],["协议",r.proto.toUpperCase()],["进程",r.proc||"–"],["入站用户",r.user||"–"],["代理链",r.chain||r.node||"–"],["出站节点",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
+  const hid=(j.rows||[]).length-rows.length;
+  $("#srLiveN").textContent=j.on===false?"(连接明细采集已关闭)":`共 ${j.matched} 条${hid>0?",已隐藏 "+hid+" 条":""} · 每 5 秒刷新`;
+  $("#srLive").innerHTML=tr.length?pgTbl("srLive",c.cols.map(k=>SRC_COLS[k][0]),tr,{size:20}):'<div class="empty">现在没有匹配的连接</div>'}
+function srPop(){const c=srCfg(),on=c.cols,off=Object.keys(SRC_COLS).filter(k=>!on.includes(k));
+  $("#srPop").innerHTML=`<div class="srrow"><label>隐藏连接正则</label><input id="srRe" value="${esc(c.regex)}" placeholder="direct|dns-out"></div>
+   <div class="srrow"><label>隐藏连接 <span class="sub">(代理链 / 节点 / 规则匹配上就不显示)</span></label><input type="checkbox" id="srHide" ${c.hide?"checked":""}></div>
+   <div class="srrow"><label>完整显示代理链</label><input type="checkbox" id="srFull" ${c.full?"checked":""}></div>
+   <div class="h3">自定义表格列 <span class="sub">已启用 ${on.length} · 可用 ${off.length}</span></div>
+   <div class="srcols"><div>${on.map((k,i)=>`<div class="srcol"><span>${SRC_COLS[k][0]}</span><span><button data-sru="${k}" ${i?"":"disabled"} aria-label="上移">↑</button><button data-srd="${k}" ${i<on.length-1?"":"disabled"} aria-label="下移">↓</button><button data-srx="${k}" ${on.length>1?"":"disabled"} aria-label="关闭这一列">×</button></span></div>`).join("")}</div>
+   <div>${off.map(k=>`<div class="srcol"><span>${SRC_COLS[k][0]}</span><button data-sra="${k}" aria-label="添加这一列">+</button></div>`).join("")||'<span class="sub">没有更多可用的列</span>'}</div></div>
+   <div style="margin-top:8px"><button id="srReset">恢复默认</button></div>`}
+function srChange(fn){const c=srCfg();fn(c);sxSave(c);srPop();srPaintLive()}
+$("#srCfg").onclick=()=>{const p=$("#srPop"),o=p.style.display==="none"||!p.style.display;p.style.display=o?"block":"none";$("#srCfg").setAttribute("aria-expanded",o);if(o)srPop()};
+$("#srHideT").onchange=e=>srChange(c=>{c.hide=e.target.checked});
+$("#srPop").addEventListener("input",e=>{if(e.target.id==="srRe")srChange0(c=>{c.regex=e.target.value})});
+function srChange0(fn){const c=srCfg();fn(c);sxSave(c);srPaintLive()}
+$("#srPop").addEventListener("change",e=>{if(e.target.id==="srHide")srChange(c=>{c.hide=e.target.checked});else if(e.target.id==="srFull")srChange(c=>{c.full=e.target.checked})});
+$("#srPop").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(b.id==="srReset"){srChange(c=>{c.cols=[...SRC_DEF];c.regex="direct|dns-out";c.hide=false;c.full=true});return}
+  srChange(c=>{const k=d.sru||d.srd||d.srx||d.sra,i=c.cols.indexOf(k);
+    if(d.sra)c.cols.push(k);else if(d.srx)c.cols.splice(i,1);else if(d.sru&&i>0)[c.cols[i-1],c.cols[i]]=[c.cols[i],c.cols[i-1]];else if(d.srd&&i<c.cols.length-1)[c.cols[i+1],c.cols[i]]=[c.cols[i],c.cols[i+1]]})});
 async function loadSearch(live){if(!S.q||S.tab!=="overview")return;
-  const hint=`搜索「${S.q}」${S.devs.size?" · 已选 "+S.devs.size+" 台设备":""}`;$("#srHint").textContent=hint;
+  const hint=`搜索「${S.q}」${S.devs.size?" · 已选 "+S.devs.size+" 台设备":""}`;$("#srHint").textContent=hint;$("#srHideT").checked=srCfg().hide;
   try{
     if(live!==2){const a={q:S.q,limit:1000,sort:"traffic"};if(S.devs.size===1)a.dev=[...S.devs][0];
-      const j=await get("/api/conns",a);if(!S.q)return;
-      let rows=(j.rows||[]).filter(r=>!S.devs.size||S.devs.has(r.dev));
-      rows.sort((x,y)=>(y.up_rate+y.down_rate)-(x.up_rate+x.down_rate)||(y.up+y.down)-(x.up+x.down));
-      const tr=rows.map(r=>({c:[esc((KIND_CN[r.kind]||"")+" | "+r.proto),`${esc(r.name)} <span class="sub">${esc(r.src)}${r.sport?":"+esc(r.sport):""}</span>`,`<span class="pv">${esc(r.host||r.dst_ip||"代理解析")}${r.dport?":"+esc(r.dport):""}</span>`,esc(r.node||"–"),rate(r.down_rate),rate(r.up_rate),fmt(r.down),fmt(r.up),cnDur(r.age),esc(r.dst_ip||"–"),esc(r.rule||"–")],
-        dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["协议",r.proto.toUpperCase()],["节点 / 出口",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
-      $("#srLiveN").textContent=j.on===false?"(连接明细采集已关闭)":`共 ${j.matched} 条${j.matched>rows.length?",显示 "+rows.length+" 条":""} · 每 5 秒刷新`;
-      $("#srLive").innerHTML=tr.length?pgTbl("srLive",["类型","设备 / 源IP","主机","代理链","下载速度","上传速度","下载","上传","连接时间","远端地址","规则"],tr,{size:20}):'<div class="empty">现在没有匹配的连接</div>'}
+      const j=await get("/api/conns",a);if(!S.q)return;S.srJ=j;srPaintLive()}
     if(live!==1){const j=await get("/api/trace",{...base({}),cols:"client,host,node,group,rule",limit:100});if(!S.q)return;
       const tr=(j.rows||[]).map(r=>({c:[esc(r.name||r.client||"–"),`<span class="pv">${esc(r.host||"–")}</span>`,esc((KIND_CN[r.kind]||"")+" "+(r.node||"")),esc(r.group||"–"),esc(r.rule||"–"),fmt(r.down),fmt(r.up),fmt(r.up+r.down)]}));
       const d=dates();$("#srPerN").textContent=`${d.from===d.to?d.from:d.from+" ~ "+d.to} · 共 ${j.total?fmt(j.total.up+j.total.down):"0"}`;

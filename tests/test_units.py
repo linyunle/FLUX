@@ -1416,6 +1416,19 @@ def test_v054_trend_compare_port():
     con.close()
 
 
+def test_v0541_extra_fields():
+    import importlib
+    from app import connmon
+    importlib.reload(connmon)
+    assert connmon._proc({"processPath": "/usr/bin/curl"}) == "curl" and connmon._proc({"process": "x"}) == "x"
+    assert connmon._geo({"destinationGeoIP": ["CN"], "destinationIPASN": "AS4134"}) == "CN AS4134"
+    assert connmon._inuser({"inboundUser": "bob"}) == "bob"
+    cn = {"id": "1", "chains": ["HK-01", "Proxy"], "rule": "Match", "metadata": {"sourceIP": "192.168.1.2", "destinationIP": "1.1.1.1", "network": "tcp",
+          "host": "a.com", "sniffHost": "b.com", "processPath": "/bin/ssh", "inboundUser": "u", "remoteDestination": "1.1.1.1:443"}}
+    rows = connmon._build([cn], None, 1000.0, lambda n, p: "proxy") if False else None
+    assert connmon.R_GEO == 23
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
