@@ -69,6 +69,13 @@ try:
         assert "已保存" in pg.inner_text("#grpBody .gmsg")
         pg.evaluate("S.tab='alerts';S.alView='line';showTab();refresh()"); pg.wait_for_timeout(2000)
         assert pg.locator("#alTbl .tl .ev").count()>=1, "时间线没有事件"
+        assert pg.locator("#alCopy").is_visible() and pg.locator("#alCsv").is_visible(), "告警页缺复制 / 导出"
+        assert pg.locator("#alTbl [data-aact=copy]").count()>=1, "每条告警应有「复制」"
+        with pg.expect_download() as dl_: pg.click("#alCsv")
+        assert dl_.value.suggested_filename.startswith("flux-alerts-"), "告警 CSV 文件名"
+        pg.evaluate("S.alRows=[{ts:1,level:'warn',kind:'conn_anom',title:'连接行为高度可疑:x',detail:'详情:连接监控中心 → 事件 #7',sent:'',_i:0}]")
+        assert pg.evaluate("alEvId(S.alRows[0])")=="7" and "evdl" in pg.evaluate("alertActs(S.alRows[0])"), "连接事件告警应有「下载数据包」"
+        print("PASS 告警复制 / 导出 / 下载数据包")
         pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/tl.png")
         pg.evaluate("openSettings('groups')"); pg.wait_for_timeout(1200); pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/gr.png")
         # 设置 → 概览卡片:取消 / 重新勾选要真的生效(点名字也行),预设按钮也要生效

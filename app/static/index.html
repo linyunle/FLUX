@@ -642,7 +642,7 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
 
 <section id="tab-alerts" style="display:none">
   <div class="card" id="alCard">
-    <h2>告警与事件 <span class="seg" id="alView" role="group" aria-label="显示方式"></span><select id="alKind" aria-label="类型" style="padding:3px 6px"></select><span class="sp"></span><span class="sub" id="alStat"></span><button id="alSeen">全部已读</button><button id="alClear">清空记录</button></h2>
+    <h2>告警与事件 <span class="seg" id="alView" role="group" aria-label="显示方式"></span><select id="alKind" aria-label="类型" style="padding:3px 6px"></select><span class="sp"></span><span class="sub" id="alStat"></span><button class="tcb2" id="alCopy" title="把当前列表复制成文字">复制</button><button class="tcb2" id="alCsv" title="导出当前列表">导出 CSV</button><button id="alSeen">全部已读</button><button id="alClear">清空记录</button></h2>
     <div class="sub" id="alHint" style="margin-bottom:6px"></div>
     <div id="alMuted"></div>
     <div class="scroll" id="alTbl"></div>
@@ -2372,7 +2372,17 @@ function alertActs(r){const a=[];
   if(r.kind==="sub_stale"&&nkPanelUrl())a.push(`<a href="${esc(nkPanelUrl())}" target="_blank" rel="noopener" data-aact="nk">在 nikki 里更新订阅 ↗</a>`);
   if(MUTABLE.includes(r.kind)&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="mute" data-k="${esc(r.kind)}">不再提醒这类</a>`);
   if(r.kind==="sys_disk"&&document.documentElement.dataset.vro!=="1")a.push(`<a href="#" data-aact="disk" data-mp="${esc(r.key==="disk"?"":r.key)}">忽略这块盘</a>`);
+  a.push(`<a href="#" data-aact="copy" data-ai="${r._i}">复制</a>`);
+  const ev=alEvId(r);if(ev){a.push(`<a href="#" data-aact="evopen" data-ev="${ev}">查看事件</a>`,`<a href="#" data-aact="evdl" data-ev="${ev}">下载数据包</a>`)}
   return a.length?`<div class="sub alact">${a.join(" · ")}</div>`:""}
+const alEvId=r=>["conn_anom","conn_event","conn_many"].includes(r.kind)?((String(r.title||"")+" "+String(r.detail||"")).match(/事件\s*#(\d+)/)||[])[1]||"":"";
+const alText=r=>`${fmtTs(r.ts)} [${LV[r.level]||r.level}] ${r.title}\n${r.detail||""}${r.sent?"\n推送:"+r.sent:""}`;
+document.addEventListener("click",async e=>{const a=e.target.closest("[data-aact=copy],[data-aact=evopen],[data-aact=evdl]");if(!a)return;e.preventDefault();e.stopPropagation();
+  const k=a.dataset.aact;
+  if(k==="copy"){const r=(S.alRows||[])[+a.dataset.ai];if(r)copyBtn(a,()=>alText(r));return}
+  if(k==="evopen"){openCE(+a.dataset.ev);$("#cem").classList.add("open");return}
+  try{const d=await get("/api/conns/event",{id:a.dataset.ev});if(d.ok===false){alert(d.error||"读取失败");return}
+    dlBlob("flux-diagnosis-"+d.id+"-"+ymd(new Date())+".txt",ceText(d))}catch(er){alert(er.message)}});
 function alertRow(r,seen){return `<tr class="${r.ts>seen&&r.level!=="ok"?"unseen":""} ${["new_device","traffic_spike","conn_many","node_down","node_up","group_policy"].includes(r.kind)?"click":""}" data-k="${esc(r.kind)}" data-key="${esc(r.key)}" data-t="${esc(r.title)}">
   <td class="n" style="white-space:nowrap;text-align:left">${fmtTs(r.ts)}</td><td><span class="lv ${r.level}">${LV[r.level]||r.level}</span></td>
   <td><b>${esc(r.title)}</b><div class="sub">${esc(r.detail)}</div>${alertActs(r)}</td><td class="hide-s sub">${esc(r.sent)}</td></tr>`}
@@ -2401,7 +2411,7 @@ async function loadAlerts(){
   S.alView=S.alView||"list";seg($("#alView"),[["list","列表"],["line","时间线"]],S.alView,k=>{S.alView=k;loadAlerts()});
   load("alerts","/api/alerts",{limit:S.alView==="line"?200:100,kind:S.alKind},j=>{
     const k=$("#alKind");k.innerHTML='<option value="">全部类型</option>'+Object.entries(j.kinds).map(([v,l])=>`<option value="${v}" ${v===S.alKind?"selected":""}>${l}</option>`).join("");
-    ALK=j.kinds;paintMuted();const c=j.counts;$("#alStat").textContent=`最近 24 小时:严重 ${c.bad} · 警告 ${c.warn} · 提示 ${c.info} · 恢复 ${c.ok}`;
+    j.rows.forEach((r,i)=>r._i=i);S.alRows=j.rows;ALK=j.kinds;paintMuted();const c=j.counts;$("#alStat").textContent=`最近 24 小时:严重 ${c.bad} · 警告 ${c.warn} · 提示 ${c.info} · 恢复 ${c.ok}`;
     $("#alHint").innerHTML=j.has_channel?"":'没有配置推送渠道:告警只会记录在这里。<a href="#" id="alGoSet">去设置 → 告警通知</a>';
     const g=$("#alGoSet");if(g)g.onclick=e=>{e.preventDefault();openSettings("alerts")};
     if(S.alView==="line")$("#alTbl").innerHTML=j.rows.length?timelineH(j):'<div class="empty">还没有事件</div>';
@@ -2410,6 +2420,8 @@ async function loadAlerts(){
     if(S.unread){post("/api/alerts/seen",{}).then(()=>{S.unread=0;document.title="FLUX";renderChrome()}).catch(()=>{})}});
   load("albase","/api/alerts/baseline",{},j=>{
     $("#alBase").innerHTML=j.rows.length?`<table><thead><tr><th>设备</th><th class="n">这一小时</th><th class="n">平时同时段</th><th class="n">倍数</th><th class="hide-s">基线依据</th></tr></thead><tbody>${j.rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="n">${fmt(r.now)}</td><td class="n">${r.base?fmt(r.base):"–"}</td><td class="n ${r.ratio==null?"":r.ratio>=5?"bad":r.ratio>=3?"warn":""}">${r.ratio==null?"–":r.ratio+" ×"}</td><td class="hide-s sub">${esc(r.how)}${r.samples?`(${r.samples} 个样本)`:""}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">还没有设备流量记录</div>'})}
+$("#alCopy").onclick=e=>copyBtn(e.target,()=>(S.alRows||[]).map(alText).join("\n\n"));
+$("#alCsv").onclick=()=>{const rows=S.alRows||[];if(!rows.length)return;dlBlob("flux-alerts-"+ymd(new Date())+".csv","\ufeff"+[["时间","级别","类型","标题","内容","推送"],...rows.map(r=>[fmtTs(r.ts),LV[r.level]||r.level,(ALK||{})[r.kind]||r.kind,r.title,r.detail||"",r.sent||""])].map(r=>r.map(csvCell).join(",")).join("\r\n"),"text/csv")};
 $("#alKind").onchange=e=>{S.alKind=e.target.value;loadAlerts()};
 $("#alSeen").onclick=async()=>{try{await post("/api/alerts/seen",{});S.unread=0;renderChrome();loadAlerts()}catch(e){}};
 $("#alClear").onclick=async()=>{if(!confirm("清空全部告警记录?"))return;try{await post("/api/alerts/clear",{});S.unread=0;renderChrome();loadAlerts();loadAlertCard()}catch(e){alert(e.message)}};
