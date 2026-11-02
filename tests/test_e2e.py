@@ -724,6 +724,8 @@ try:
     ok(rq2(vw, "/api/status")[1]["auth"]["role"] == "v" and rq2(vw, "/api/devices")[0] == 200, "只读账号:能看数据")
     ok(rq2(vw, "/api/backup")[0] == 403 and rq2(vw, "/api/diag")[0] == 403 and rq2(vw, "/api/syslog/export")[0] == 403 and rq2(vw, "/api/health")[0] == 403, "只读账号:不能导出备份 / 诊断 / 日志 / 健康详情")
     ok(rq2(vw, "/api/config", {"api": "http://x:1"})[0] == 403 and rq2(vw, "/api/storage/clean", {"action": "vacuum"})[0] == 403 and rq2(vw, "/api/auth/set", {"old": "viewerpw1", "new": ""})[0] == 403 and rq2(vw, "/api/auth/revoke", {})[0] == 403, "只读账号:不能改设置 / 改密码 / 清理 / 踢人")
+    dn_ = [r for r in rq2(adm, "/api/alerts?kind=audit&limit=100")[1]["rows"] if r["title"].startswith("被拒绝:只读账号尝试")]
+    ok(any("导出备份" in r["title"] for r in dn_) and any("下载诊断包" in r["title"] for r in dn_) and all(r["level"] == "warn" and "什么都没下载" in r["detail"] for r in dn_), "审计:只读账号被拒绝的下载尝试有记录")
     ui0 = rq2(adm, "/api/ui")[1]
     c_, j_, _ = rq2(vw, "/api/ui", {"theme": {"mode": "dark-viewer-test"}})
     ok(c_ == 200 and j_.get("readonly") and rq2(adm, "/api/ui")[1] == ui0, "只读账号:改外观不会写到服务器")

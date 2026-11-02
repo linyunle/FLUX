@@ -1438,7 +1438,7 @@ _ctx = threading.local()
 _dl_seen = {}
 
 
-def _audit_download(path, params, role, ip, ua):
+def _audit_download(path, params, role, ip, ua, denied=False):
     """导出 / 下载带敏感信息的内容时,在告警里记一条:谁(管理员 / 只读)、从哪个 IP、什么浏览器、下了什么。同一来源 3 秒内重复请求只记一次。"""
     flag = lambda k: one(params, k) in ("1", "true")
     t = {"/api/diag": lambda: "下载诊断包(" + ("完整版,未打码" if flag("full") else "打码版") + ("、含日志明细" if flag("logs") else "") + ("、域名换成代号" if flag("dom") else "") + ")",
@@ -1450,14 +1450,14 @@ def _audit_download(path, params, role, ip, ua):
         return
     now = time.time()
     try:
-        title = t()
+        title = ("被拒绝:只读账号尝试" if denied else "") + t()
         k = (title, ip)
         if now - _dl_seen.get(k, 0) < 3:
             return
         _dl_seen[k] = now
         if len(_dl_seen) > 200:
             _dl_seen.clear()
-        _wcon(lambda con: alerts.note(con, "audit", "download", title, f"账号:{'管理员' if role == 'a' else '只读'};来自 {ip or '?'}({panellog.short_ua(ua)})"))
+        _wcon(lambda con: alerts.note(con, "audit", "download", title, f"账号:{'管理员' if role == 'a' else '只读'};来自 {ip or '?'}({panellog.short_ua(ua)})" + (";没有放行,什么都没下载" if denied else ""), "warn" if denied else "note"))
     except Exception:
         pass
 
@@ -1648,6 +1648,7 @@ class Handler(BaseHTTPRequestHandler):
         _ctx.ip = self._ip()
         _ctx.sid = auth.cookie_sid(self._cookie())
         if role == "v" and u.path in VIEWER_DENY_GET:
+            _audit_download(u.path, params, role, _ctx.ip, self.headers.get("User-Agent", ""), denied=True)
             return self._send(403, {"error": "只读账号不能查看这个内容"})
         _audit_download(u.path, params, role, _ctx.ip, self.headers.get("User-Agent", ""))
         if u.path in ("/", "/index.html"):
