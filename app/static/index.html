@@ -480,7 +480,7 @@ html[data-ui=apple] #dataTop{background:var(--ap-glass);-webkit-backdrop-filter:
 .srctl{display:flex;gap:10px;align-items:center}
 @media(max-width:820px){#srCard>h2{flex-wrap:wrap}#srCard>h2 .sp{display:none}#srCard>h2 .srctl{flex-basis:100%;justify-content:flex-start}}
 #srCard .pgt table{width:auto;min-width:0}#srCard .pgt th,#srCard .pgt td{white-space:nowrap;max-width:380px;overflow:hidden;text-overflow:ellipsis;padding-right:16px}#srCard .pgt td.n,#srCard .pgt th.n{text-align:left}
-.srpop{border:1px solid var(--line);border-radius:var(--rs);padding:10px;margin:6px 0 10px;background:var(--surface)}.srrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}.srrow input[type=text],.srrow input:not([type]){flex:1;max-width:260px}
+.srpop{padding:4px 0}.srrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}.srrow input[type=text],.srrow input:not([type]){flex:1;max-width:260px}
 .srcols{display:grid;grid-template-columns:1fr 1fr;gap:10px}.srcol{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:var(--rs);margin-bottom:6px}.srcol button{padding:0 6px}
 </style>
 <script>
@@ -560,7 +560,6 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card gcard" id="rthostCard"><h2>访问目标<span class="seg" id="hostView" role="group" aria-label="视图"></span><span class="seg" id="hostMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub" id="hostHint"></span></h2>
     <div id="rtHost" class="lbody"></div><div id="hostsBox" style="display:none"><div class="scroll lbody" id="hostsTbl"></div></div></div>
   <div class="card gcard gone" id="srCard"><h2>搜索结果详情<span class="sub" id="srHint"></span><span class="sp"></span><span class="srctl"><label class="sub" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="srHideT"> 隐藏连接</label><button id="srCfg" aria-expanded="false" title="设置:隐藏规则 / 自定义表格列">设置</button></span></h2>
-    <div id="srPop" class="srpop" style="display:none"></div>
     <div class="h3">实时连接 <span class="sub" id="srLiveN"></span></div><div id="srLive"><span class="sub">加载中…</span></div>
     <div class="h3" style="margin-top:12px">时段明细 <span class="sub" id="srPerN"></span></div><div id="srPer"><span class="sub">加载中…</span></div></div>
   <div class="card gcard" id="alertCard"><h2>最近告警<span class="sp"></span><span class="sub" id="alcNote"></span><button id="alcGo">查看全部</button></h2><div id="alcBody" class="lbody"></div></div>
@@ -1001,6 +1000,7 @@ uci commit dhcp
 <div class="modal" id="cmm"><div class="box" style="max-width:1040px"><h3><span>连接监控中心</span><span class="sp"></span><button id="cmX" aria-label="关闭">✕</button></h3><div id="cmBody"><div class="sub">读取中…</div></div></div></div>
 <div class="modal" id="cdm"><div class="box" style="max-width:1040px"><h3><span id="cdTitle"></span><span class="sp"></span><button id="cdX" aria-label="关闭">✕</button></h3><div id="cdBody"></div></div></div>
 <div class="modal" id="cem"><div class="box" style="max-width:860px"><h3><span id="ceTitle"></span><span class="sp"></span><button id="ceX" aria-label="关闭">✕</button></h3><div id="ceBody"></div></div></div>
+<div class="modal" id="srm"><div class="box" style="max-width:640px"><h3><span>搜索结果详情 · 设置</span><span class="sp"></span><button id="srmX" aria-label="关闭">✕</button></h3><div id="srPop" class="srpop"></div></div></div>
 <div class="modal" id="kvm"><div class="box" style="max-width:620px"><h3><span id="kvTitle"></span><span class="sp"></span><button id="kvCopy">复制详情</button><button id="kvX" aria-label="关闭">✕</button></h3><div id="kvBody"></div></div></div>
 <div class="modal" id="dtl"><div class="box"><h3><span id="dtlTitle"></span><span class="sp"></span><button id="dtlCopy">复制详情</button><button id="dtlX" aria-label="关闭">✕</button></h3><div id="dtlLive"></div><div class="sub" id="dtlRange" style="margin-top:2px"></div><div id="dtlBody"></div><div id="dtlAct" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div></div>
 
@@ -1464,7 +1464,9 @@ function srPaintLive(){const j=S.srJ;if(!j||!S.q)return;const c=srCfg();$("#srHi
     dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["嗅探主机",r.sniff||"–"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["解析地址",r.resolved||"–"],["解析类型",r.dns||"–"],["归属信息",r.geo||"–"],["协议",r.proto.toUpperCase()],["进程",r.proc||"–"],["入站用户",r.user||"–"],["代理链",r.chain||r.node||"–"],["出站节点",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
   const hid=(j.rows||[]).length-rows.length;
   $("#srLiveN").textContent=j.on===false?"(连接明细采集已关闭)":`共 ${j.matched} 条${hid>0?",已隐藏 "+hid+" 条":""} · 每 5 秒刷新`;
-  $("#srLive").innerHTML=tr.length?pgTbl("srLive",c.cols.map(k=>SRC_COLS[k][0]),tr,{size:20}):'<div class="empty">现在没有匹配的连接</div>'}
+  const box=$("#srLive"),sc=box.querySelector(".scroll"),sl=sc?sc.scrollLeft:0;
+  box.innerHTML=tr.length?pgTbl("srLive",c.cols.map(k=>SRC_COLS[k][0]),tr,{size:20}):'<div class="empty">现在没有匹配的连接</div>';
+  const n=box.querySelector(".scroll");if(n&&sl)n.scrollLeft=sl}   /* 每 5 秒重绘一次,保住横向滚动位置 */
 function srPop(){const c=srCfg(),on=c.cols,off=Object.keys(SRC_COLS).filter(k=>!on.includes(k));
   $("#srPop").innerHTML=`<div class="srrow"><label>隐藏连接正则</label><input id="srRe" value="${esc(c.regex)}" placeholder="direct|dns-out"></div>
    <div class="srrow"><label>隐藏连接 <span class="sub">(代理链 / 节点 / 规则匹配上就不显示)</span></label><input type="checkbox" id="srHide" ${c.hide?"checked":""}></div>
@@ -1474,7 +1476,8 @@ function srPop(){const c=srCfg(),on=c.cols,off=Object.keys(SRC_COLS).filter(k=>!
    <div>${off.map(k=>`<div class="srcol"><span>${SRC_COLS[k][0]}</span><button data-sra="${k}" aria-label="添加这一列">+</button></div>`).join("")||'<span class="sub">没有更多可用的列</span>'}</div></div>
    <div style="margin-top:8px"><button id="srReset">恢复默认</button></div>`}
 function srChange(fn){const c=srCfg();fn(c);sxSave(c);srPop();srPaintLive()}
-$("#srCfg").onclick=()=>{const p=$("#srPop"),o=p.style.display==="none"||!p.style.display;p.style.display=o?"block":"none";$("#srCfg").setAttribute("aria-expanded",o);if(o)srPop()};
+$("#srCfg").onclick=()=>{srPop();$("#srm").classList.add("open")};
+$("#srmX").onclick=()=>$("#srm").classList.remove("open");$("#srm").addEventListener("click",e=>{if(e.target.id==="srm")$("#srm").classList.remove("open")});
 $("#srHideT").onchange=e=>srChange(c=>{c.hide=e.target.checked});
 $("#srPop").addEventListener("input",e=>{if(e.target.id==="srRe")srChange0(c=>{c.regex=e.target.value})});
 function srChange0(fn){const c=srCfg();fn(c);sxSave(c);srPaintLive()}
@@ -1491,7 +1494,8 @@ async function loadSearch(live){if(!S.q||S.tab!=="overview")return;
     if(live!==1){const j=await get("/api/trace",{...base({}),cols:"client,host,node,group,rule",limit:100});if(!S.q)return;
       const tr=(j.rows||[]).map(r=>({c:[esc(r.name||r.client||"–"),`<span class="pv">${esc(r.host||"–")}</span>`,esc((KIND_CN[r.kind]||"")+" "+(r.node||"")),esc(r.group||"–"),esc(r.rule||"–"),fmt(r.down),fmt(r.up),fmt(r.up+r.down)]}));
       const d=dates();$("#srPerN").textContent=`${d.from===d.to?d.from:d.from+" ~ "+d.to} · 共 ${j.total?fmt(j.total.up+j.total.down):"0"}`;
-      $("#srPer").innerHTML=tr.length?pgTbl("srPer",["设备","域名","去向","策略组","规则","下行","上行","合计"],tr,{size:20}):'<div class="empty">这段时间没有匹配的记录</div>'}
+      const pb=$("#srPer"),psl=(pb.querySelector(".scroll")||{}).scrollLeft||0;
+      pb.innerHTML=tr.length?pgTbl("srPer",["设备","域名","去向","策略组","规则","下行","上行","合计"],tr,{size:20}):'<div class="empty">这段时间没有匹配的记录</div>';{const n=pb.querySelector(".scroll");if(n&&psl)n.scrollLeft=psl}}
   }catch(e){$("#srLive").innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
 S.srAt=0;
 /* 点一行弹出的详情 */
@@ -2723,7 +2727,7 @@ function pgIn(id){const t=PGT[id];if(!t||!t.rows.length)return"";const n=t.rows.
 function pgCsv(id){const t=PGT[id];if(!t)return"";const q=x=>'"'+String(x).replace(/"/g,'""')+'"';return"\ufeff"+[t.head.map(htmlTxt),...t.rows.map(r=>r.c.map(htmlTxt))].map(r=>r.map(q).join(",")).join("\r\n")}
 function pgText(id){const t=PGT[id];return t?[t.head.map(htmlTxt).join("\t"),...t.rows.map(r=>r.c.map(htmlTxt).join("\t"))].join("\n"):""}
 document.addEventListener("click",e=>{const w=e.target.closest(".pgt");if(!w)return;const id=w.dataset.pg,t=PGT[id];if(!t)return;
-  const pb=e.target.closest("[data-pgp]");if(pb){t.p+=pb.dataset.pgp==="next"?1:-1;w.innerHTML=pgIn(id);return}
+  const pb=e.target.closest("[data-pgp]");if(pb){const sl=(w.querySelector(".scroll")||{}).scrollLeft||0;t.p+=pb.dataset.pgp==="next"?1:-1;w.innerHTML=pgIn(id);const n=w.querySelector(".scroll");if(n)n.scrollLeft=sl;return}
   const vb=e.target.closest("[data-pgv]");if(vb){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([pgCsv(id)],{type:"text/csv;charset=utf-8"}));a.download="flux-"+id+"-"+ymd(new Date())+".csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);return}
   const cb=e.target.closest("[data-pgc]");if(cb){copyBtn(cb,()=>pgText(id));return}
   const tr=e.target.closest("tr[data-pgi]");if(tr){const r=t.rows[+tr.dataset.pgi];if(r&&r.fn){r.fn();return}if(r&&r.dt)openKV(r.dt.title,r.dt.lines,r.dt.note)}});
