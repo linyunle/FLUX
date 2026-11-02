@@ -553,6 +553,9 @@ document.documentElement.dataset.mode=m==="dark"||(m==="auto"&&matchMedia("(pref
   <div class="card gcard" id="rtnodeCard"><h2>活跃节点</h2><div id="rtNode" class="lbody"></div></div>
   <div class="card gcard" id="rthostCard"><h2>访问目标<span class="seg" id="hostView" role="group" aria-label="视图"></span><span class="seg" id="hostMode" role="group" aria-label="去向"></span><span class="sp"></span><span class="sub" id="hostHint"></span></h2>
     <div id="rtHost" class="lbody"></div><div id="hostsBox" style="display:none"><div class="scroll lbody" id="hostsTbl"></div></div></div>
+  <div class="card gcard gone" id="srCard"><h2>搜索结果详情<span class="sub" id="srHint"></span><span class="sp"></span></h2>
+    <div class="h3">实时连接 <span class="sub" id="srLiveN"></span></div><div id="srLive"><span class="sub">加载中…</span></div>
+    <div class="h3" style="margin-top:12px">时段明细 <span class="sub" id="srPerN"></span></div><div id="srPer"><span class="sub">加载中…</span></div></div>
   <div class="card gcard" id="alertCard"><h2>最近告警<span class="sp"></span><span class="sub" id="alcNote"></span><button id="alcGo">查看全部</button></h2><div id="alcBody" class="lbody"></div></div>
   <div class="card gcard" id="trendCard">
     <h2>流量趋势
@@ -1428,6 +1431,26 @@ document.addEventListener("click",e=>{const b=e.target.closest(".pager button[da
   if(k==="devtop")paintDevTop();else if(k==="nscore")paintNs();else if(k==="qoe")paintQoe();else if(k==="apps")paintApps();else paintPg(k)});
 for(const [k,id,kind] of [["rtdev","#rtDev","dev"],["rtnode","#rtNode","node"],["rthost","#rtHost","host"]])$(id).addEventListener("click",e=>{
   if(e.target.closest(".pager"))return;const tr=e.target.closest("tr.click");if(!tr)return;const r=S.pg[k].page[+tr.dataset.i];if(r)openDetail(kind,r)});
+
+/* ---------- 搜索结果详情:搜索时列出实时连接和时段明细(可复制 / 导出) ---------- */
+const KIND_CN={direct:"直连",proxy:"代理",reject:"拒绝"};
+async function loadSearch(live){if(!S.q||S.tab!=="overview")return;
+  const hint=`搜索「${S.q}」${S.devs.size?" · 已选 "+S.devs.size+" 台设备":""}`;$("#srHint").textContent=hint;
+  try{
+    if(live!==2){const a={q:S.q,limit:1000,sort:"traffic"};if(S.devs.size===1)a.dev=[...S.devs][0];
+      const j=await get("/api/conns",a);if(!S.q)return;
+      let rows=(j.rows||[]).filter(r=>!S.devs.size||S.devs.has(r.dev));
+      rows.sort((x,y)=>(y.up_rate+y.down_rate)-(x.up_rate+x.down_rate)||(y.up+y.down)-(x.up+x.down));
+      const tr=rows.map(r=>({c:[esc((KIND_CN[r.kind]||"")+" | "+r.proto),`${esc(r.name)} <span class="sub">${esc(r.src)}${r.sport?":"+esc(r.sport):""}</span>`,`<span class="pv">${esc(r.host||r.dst_ip||"代理解析")}${r.dport?":"+esc(r.dport):""}</span>`,esc(r.node||"–"),rate(r.down_rate),rate(r.up_rate),fmt(r.down),fmt(r.up),cnDur(r.age),esc(r.dst_ip||"–"),esc(r.rule||"–")],
+        dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["协议",r.proto.toUpperCase()],["节点 / 出口",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
+      $("#srLiveN").textContent=j.on===false?"(连接明细采集已关闭)":`共 ${j.matched} 条${j.matched>rows.length?",显示 "+rows.length+" 条":""} · 每 5 秒刷新`;
+      $("#srLive").innerHTML=tr.length?pgTbl("srLive",["类型","设备 / 源IP","主机","代理链","下载速度","上传速度","下载","上传","连接时间","远端地址","规则"],tr,{size:20}):'<div class="empty">现在没有匹配的连接</div>'}
+    if(live!==1){const j=await get("/api/trace",{...base({}),cols:"client,host,node,group,rule",limit:100});if(!S.q)return;
+      const tr=(j.rows||[]).map(r=>({c:[esc(r.name||r.client||"–"),`<span class="pv">${esc(r.host||"–")}</span>`,esc((KIND_CN[r.kind]||"")+" "+(r.node||"")),esc(r.group||"–"),esc(r.rule||"–"),fmt(r.down),fmt(r.up),fmt(r.up+r.down)]}));
+      const d=dates();$("#srPerN").textContent=`${d.from===d.to?d.from:d.from+" ~ "+d.to} · 共 ${j.total?fmt(j.total.up+j.total.down):"0"}`;
+      $("#srPer").innerHTML=tr.length?pgTbl("srPer",["设备","域名","去向","策略组","规则","下行","上行","合计"],tr,{size:20}):'<div class="empty">这段时间没有匹配的记录</div>'}
+  }catch(e){$("#srLive").innerHTML=`<div class="msg err">${esc(e.message)}</div>`}}
+S.srAt=0;
 /* 点一行弹出的详情 */
 const miniKV=rows=>rows.length?`<table><tbody>${rows.map(r=>`<tr><td class="k" title="${esc(r.key)}">${esc(r.key)}</td><td class="n sub">↓ ${fmt(r.down)}</td><td class="n sub">↑ ${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>`:'<span class="sub">没有记录</span>';
 function updDetailLive(){const m=S.dm;if(!m||!$("#dtl").classList.contains("open")||!S.rt)return;
@@ -1909,6 +1932,7 @@ function loadRealtime(){if(document.hidden)return;
     S.rt=j;drawSide(j);$("#tConnV").textContent=j.conns.total;updConnSub();updDetailLive();if(S.tab!=="overview")return;
     if(Date.now()-S.scrollAt<1500)return; /* 正在滑动时不重绘,手机上否则页面会跳 */
     paintRt(j);loadSys();
+    if(S.q&&Date.now()-S.srAt>5000&&!$("#kvm").classList.contains("open")){S.srAt=Date.now();loadSearch(1)}
     S.pg.rtdev.cur=j.devices;S.pg.rtnode.cur=j.nodes;S.pg.rthost.cur=j.hosts||[];
     for(const k of ["rtdev","rtnode","rthost"])if(!S.pg[k].pause||!S.pg[k].snap)paintPg(k);
     rtList($("#rtSel"),j.devices.filter(d=>S.devs.has(d.key)),r=>r.name||r.key,"这台设备现在没有流量")})}
@@ -2044,6 +2068,7 @@ function autoHide(){const one=S.devs.size>0,q=!!S.q;
     const off=!TH.gl&&TH.glSet.includes(k);   /* 「状态」关掉时,隐藏用户在「状态 ▾」里勾选的卡片 */
     if(k==="rthost"){el.classList.toggle("gone",(TH.hide.includes(k)||off)&&!q);el.classList.remove("autohide");el.style.setProperty("--span",q?12:TH.cards.rthost.w)}   /* 搜索时「访问目标」独占整行,不管卡片宽度设成多少 */
     else el.classList.toggle("autohide",q||(one&&AUTOHIDE.includes(k))||off)}
+  {const sr=$("#srCard");sr.classList.toggle("gone",!q);sr.style.order=0;sr.style.setProperty("--span",12)}
   const sel=$("#rtselCard");sel.classList.toggle("gone",!one||q);sel.style.order=0;sel.style.setProperty("--span",12)}
 function themeChanged(redraw){saveTheme();applyTheme();renderLook();if(redraw){drawTrend();loadRealtime();if(S.tab==="overview"){loadHosts();loadDevTop();loadApps();loadQoe();loadAlertCard()}}}
 const viewDef=k=>{const v=VIEWS[k];return v[1]?Object.keys(CARDS).filter(x=>!v[1].includes(x)):[]};
@@ -3128,6 +3153,7 @@ async function status(){try{const s=await get("/api/status");
 
 function refresh(){
   if(S.tab==="overview")loadTiles();
+  if(S.tab==="overview"&&S.q){S.srAt=Date.now();loadSearch()}
   if(S.tab==="overview"){loadTrend();if(hostView()==="period")loadHosts();if(devPeriod())loadDevTop();loadApps();loadQoe();loadAlertCard();loadRealtime()}
   else if(S.tab==="nodes"){loadNodes();loadQuota();loadProv()}
   else if(S.tab==="alerts")loadAlerts();

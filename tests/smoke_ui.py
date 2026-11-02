@@ -271,6 +271,9 @@ try:
         pg.evaluate("S.tab='overview';showTab();TH.cards.rthost.w=6;applyTheme();autoHide()"); pg.wait_for_timeout(300)
         pg.fill("#hostQ","a"); pg.wait_for_timeout(1200)
         assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="12", "搜索时整行"
+        assert pg.locator("#srCard").is_visible() and "实时连接" in pg.inner_text("#srCard") and "时段明细" in pg.inner_text("#srCard"), "搜索结果详情没显示"
+        assert pg.locator("#srCard .pgbar [data-pgc]").count()>=1 and pg.locator("#srCard .pgbar [data-pgv]").count()>=1, "搜索结果详情缺复制 / 导出"
+        print("PASS 搜索结果详情")
         pg.fill("#hostQ",""); pg.wait_for_timeout(1200)
         assert pg.evaluate("document.querySelector('#rthostCard').style.getPropertyValue('--span')")=="6", "清空搜索后恢复设置的宽度"
         pg.evaluate("TH.cards.rthost.w=12;applyTheme()")

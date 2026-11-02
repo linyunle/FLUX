@@ -28,6 +28,8 @@ SNAP = {"at": 0.0, "rows": []}
 DEVSTAT = {}             # 设备 -> {"conns","tcp","udp","new","closed"}(两次刷新之间的变化)
 CT = {"map": {}, "dev": {}, "other": 0}
 _prev = {}               # 上一次的 连接ID -> 设备,用来算新增 / 关闭
+_bytes = {}              # 上一次的 连接ID -> (上行累计, 下行累计),用来算每条连接的速度
+RATES = {}               # 连接ID -> (上行 B/s, 下行 B/s)
 _lock = threading.Lock()
 
 TCP_CN = {"ESTABLISHED": "已建立", "SYN_SENT": "正在连接", "SYN_RECV": "握手中", "FIN_WAIT": "正在关闭", "CLOSE_WAIT": "对端已关",
@@ -330,7 +332,18 @@ def _build(conns, col, now, kindf):
     for cid, dv in _prev.items():
         if cid not in cur:
             ds.setdefault(dv, {"conns": 0, "tcp": 0, "udp": 0, "new": 0, "closed": 0})["closed"] += 1
+    dt = now - SNAP["at"] if SNAP["at"] else 0
+    rates = {}
+    if 0 < dt < 120:
+        for rw in rows:
+            b = _bytes.get(rw[R_ID])
+            if b:
+                rates[rw[R_ID]] = (max(0, rw[R_UP] - b[0]) / dt, max(0, rw[R_DOWN] - b[1]) / dt)
     with _lock:
+        _bytes.clear()
+        _bytes.update({rw[R_ID]: (rw[R_UP], rw[R_DOWN]) for rw in rows})
+        RATES.clear()
+        RATES.update(rates)
         SNAP.update(at=now, rows=rows)
         DEVSTAT.clear()
         DEVSTAT.update(ds)
@@ -350,7 +363,8 @@ def _row_out(rw, now, label):
             "dst_ip": rw[R_DST], "dport": rw[R_DPORT], "host": rw[R_HOST], "node": rw[R_NODE], "rule": rw[R_RULE], "kind": rw[R_KIND],
             "age": int(now - rw[R_START]) if rw[R_START] else None, "up": rw[R_UP], "down": rw[R_DOWN], "dns": rw[R_DNS],
             "state": st, "state_cn": ("无回应" if rw[R_UNREP] and rw[R_PROTO] == "tcp" else TCP_CN.get(st, st)) if rw[R_PROTO] == "tcp" and st else ("UDP" if rw[R_PROTO] == "udp" and st else ""),
-            "unreplied": rw[R_UNREP], "link": rw[R_LINK]}
+            "unreplied": rw[R_UNREP], "link": rw[R_LINK],
+            "up_rate": round(RATES.get(rw[R_ID], (0, 0))[0]), "down_rate": round(RATES.get(rw[R_ID], (0, 0))[1])}
 
 
 def _top(counter, n=8):
