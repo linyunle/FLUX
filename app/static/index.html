@@ -70,7 +70,7 @@ input,select,textarea{background:var(--surface);border:1px solid var(--line);bor
 .footrow{display:flex;gap:6px;align-items:center}.footrow .ddside{flex:1;min-width:0}.footrow .ddside .dd>button{padding:3px 8px;font-size:12px;white-space:nowrap}
 .footrow .scard{flex:1;min-width:0;padding:5px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ddside{display:none!important}
 html[data-vro] .ren{pointer-events:none;cursor:default}html[data-vro] select.grp{pointer-events:none;-webkit-appearance:none;appearance:none;border-color:transparent;background:none;padding-left:0}html[data-vro] .wch{display:none}
-html[data-vnoexp] #domCsv,html[data-vnoexp] .tcb[data-tm=csv]{display:none}html[data-role=v] #dkBody button[data-dk],html[data-role=v] #alClear,html[data-role=v] #alSeen{display:none}.footrow .verrow{flex:none}.footrow #btnMode{padding:3px 8px;white-space:nowrap}
+html[data-vnoexp] #domCsv,html[data-vnoexp] .tcb,html[data-vnoexp] .tcb2,html[data-vnoexp] .cpb,html[data-vnoexp] .pgbar [data-pgc],html[data-vnoexp] .pgbar [data-pgv],html[data-vnoexp] #alCopy,html[data-vnoexp] #alCsv,html[data-vnoexp] [data-aact=copy],html[data-vnoexp] [data-aact=evdl],html[data-vnoexp] #ceCopy,html[data-vnoexp] #ceTxt,html[data-vnoexp] #ceJson,html[data-vnoexp] #cdCsv,html[data-vnoexp] #dtlCopy,html[data-vnoexp] #kvCopy,html[data-vnoexp] #repCopy,html[data-vnoexp] #apExp,html[data-vnoexp] #appExp,html[data-vnoexp] [data-apunk]{display:none!important}html[data-role=v] #dkBody button[data-dk],html[data-role=v] #alClear,html[data-role=v] #alSeen{display:none}.footrow .verrow{flex:none}.footrow #btnMode{padding:3px 8px;white-space:nowrap}
 .side{gap:8px}.navi{padding:7px 12px}
 @media(max-height:900px){.scard .mc{display:none}}
 .side{transition:none}
@@ -854,7 +854,7 @@ uci commit dhcp
     <div class="fld"><label>管理员密码(确认是你本人)</label><input id="vwOld" type="password" autocomplete="current-password"></div>
     <div class="fld"><label>只读密码(至少 6 位)</label><input id="vwNew" type="password" autocomplete="new-password"></div>
     <div class="sub" style="margin:4px 0 4px;font-weight:600">只读账号权限(勾选 = 额外开放,改了立即生效,不需要密码)</div>
-    <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="vpExport"> 导出表格(域名清单等,在浏览器里生成 CSV)</label>
+    <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="vpExport"> 复制和导出(各表格的复制 / 导出 CSV、详情复制、事件诊断 TXT 等;默认关闭)</label>
     <label class="crow sub" style="cursor:pointer"><input type="checkbox" id="vpEdit"> 修改设备别名 / 分组 / 关注设备</label>
     <div class="sub" style="margin:2px 0 6px">备份、诊断包、日志导出、容器日志、所有设置页和其他写操作永远不对只读账号开放。</div>
     <div class="msg" id="vwMsg"></div>
@@ -3111,8 +3111,9 @@ async function loadSyslogSet(){await slRefresh(true)}
 const TABN={overview:"概览",devices:"设备",domains:"域名",rules:"规则",nodes:"节点",alerts:"告警",security:"安全",docker:"容器"};
 function auditUi(a,name,n){try{post("/api/audit/ui",{a,name:String(name||"").slice(0,80),n:n|0,tab:TABN[S.tab]||S.tab||""}).catch(()=>{})}catch(e){}}
 /* 浏览器里生成的下载(CSV / TXT / JSON)统一在点击时通知服务器记一笔;诊断包和备份服务器自己已经记了,这里跳过 */
-{const _ac=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){try{const n=this.download;if(n&&String(this.href).startsWith("blob:")&&!/^flux-(diag|backup)/.test(n))auditUi("download",n,0)}catch(e){}return _ac.apply(this,arguments)}}
-function copyText(t){auditUi("copy","",String(t==null?"":t).length);return new Promise((res,rej)=>{try{if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t).then(res,rej)}catch(e){}
+const noExport=()=>document.documentElement.hasAttribute("data-vnoexp");   /* 只读账号没有「复制和导出」权限 */
+{const _ac=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){try{if(noExport()&&this.download){alert("只读账号没有导出权限");return}const n=this.download;if(n&&String(this.href).startsWith("blob:")&&!/^flux-(diag|backup)/.test(n))auditUi("download",n,0)}catch(e){}return _ac.apply(this,arguments)}}
+function copyText(t){if(noExport())return Promise.reject(new Error("只读账号没有复制 / 导出权限"));auditUi("copy","",String(t==null?"":t).length);return new Promise((res,rej)=>{try{if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t).then(res,rej)}catch(e){}
   const ta=document.createElement("textarea");ta.value=t;ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();
   let ok=false;try{ok=document.execCommand("copy")}catch(e){}ta.remove();ok?res():rej(new Error("浏览器不允许复制,请用「导出」"))})}
 const slQs=(n,dl)=>new URLSearchParams({level:$("#slLv").value,q:$("#slQ").value,n,mask:$("#slMask").checked?"1":"0",...(dl?{dl:1}:{})}).toString()+(TOKEN?"&t="+encodeURIComponent(TOKEN):"");

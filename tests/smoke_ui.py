@@ -77,6 +77,12 @@ try:
         assert pg.evaluate("alEvId(S.alRows[0])")=="7" and "evdl" in pg.evaluate("alertActs(S.alRows[0])"), "连接事件告警应有「下载数据包」"
         pg.wait_for_timeout(800)
         assert pg.evaluate("fetch('/api/alerts?kind=audit&limit=100').then(r=>r.json()).then(j=>j.rows.some(r=>r.title.startsWith('下载了文件 flux-alerts-')))"), "浏览器下载应被记录到告警"
+        pg.evaluate("updAcct({role:'v',enabled:true,perms:{}})"); pg.wait_for_timeout(300)
+        assert not pg.locator("#alCopy").is_visible() and not pg.locator("#alCsv").is_visible() and not pg.locator("#alTbl [data-aact=copy]").first.is_visible(), "只读账号没有导出权限时应隐藏复制 / 导出"
+        assert pg.evaluate("copyText('x').then(()=>'ok',e=>e.message)")=="只读账号没有复制 / 导出权限", "只读账号复制应被拒绝"
+        pg.evaluate("updAcct({role:'v',enabled:true,perms:{export:true}})"); pg.wait_for_timeout(300)
+        assert pg.locator("#alCopy").is_visible() and pg.locator("#alCsv").is_visible(), "开放导出权限后应显示"
+        pg.evaluate("updAcct({role:'a',enabled:false,perms:{}})"); pg.wait_for_timeout(300)
         print("PASS 告警复制 / 导出 / 下载数据包")
         pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/tl.png")
         pg.evaluate("openSettings('groups')"); pg.wait_for_timeout(1200); pg.screenshot(path="/tmp/claude-0/-home-claude/432fa273-cc0c-55f1-bf69-55de48e3f56f/scratchpad/gr.png")
