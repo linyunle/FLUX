@@ -384,7 +384,7 @@ def _row_out(rw, now, label):
     st = rw[R_STATE]
     return {"id": rw[R_ID], "dev": rw[R_DEV], "name": label(rw[R_DEV]), "src": rw[R_SRC], "sport": rw[R_SPORT], "proto": rw[R_PROTO],
             "dst_ip": rw[R_DST], "dport": rw[R_DPORT], "host": rw[R_HOST], "node": rw[R_NODE], "rule": rw[R_RULE], "kind": rw[R_KIND],
-            "age": int(now - rw[R_START]) if rw[R_START] else None, "up": rw[R_UP], "down": rw[R_DOWN], "dns": rw[R_DNS],
+            "age": int(now - rw[R_START]) if rw[R_START] else None, "start": int(rw[R_START] or 0), "up": rw[R_UP], "down": rw[R_DOWN], "dns": rw[R_DNS],
             "state": st, "state_cn": ("无回应" if rw[R_UNREP] and rw[R_PROTO] == "tcp" else TCP_CN.get(st, st)) if rw[R_PROTO] == "tcp" and st else ("UDP" if rw[R_PROTO] == "udp" and st else ""),
             "unreplied": rw[R_UNREP], "link": rw[R_LINK],
             "proc": rw[R_PROC], "chain": rw[R_CHAIN], "sniff": rw[R_SNIFF], "resolved": rw[R_RESOLVED], "user": rw[R_USER], "geo": rw[R_GEO],

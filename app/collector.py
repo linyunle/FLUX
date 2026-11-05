@@ -333,9 +333,10 @@ class Collector:
         try:
             with self.con:
                 self.con.executemany(
-                    "INSERT INTO traffic(day,client,node,grp,rule,host,up,down) VALUES(?,?,?,?,?,?,?,?) "
-                    "ON CONFLICT(day,client,node,grp,rule,host) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",
-                    [(*k, v[0], v[1]) for k, v in buf.items()])
+                    "INSERT INTO traffic(day,client,node,grp,rule,host,up,down,first,last) VALUES(?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(day,client,node,grp,rule,host) DO UPDATE SET up=up+excluded.up, down=down+excluded.down, "
+                    "first=CASE WHEN first=0 THEN excluded.first ELSE MIN(first,excluded.first) END, last=MAX(last,excluded.last)",
+                    [(*k, v[0], v[1], now, now) for k, v in buf.items()])
                 self.con.executemany(
                     "INSERT INTO hourly(hour,client,node,up,down) VALUES(?,?,?,?,?) "
                     "ON CONFLICT(hour,client,node) DO UPDATE SET up=up+excluded.up, down=down+excluded.down",

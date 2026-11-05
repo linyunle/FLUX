@@ -289,9 +289,9 @@ try:
         assert pg.locator("#srCard").is_visible() and "实时连接" in pg.inner_text("#srCard") and "时段明细" in pg.inner_text("#srCard"), "搜索结果详情没显示"
         assert pg.locator("#srCard .pgbar [data-pgc]").count()>=1 and pg.locator("#srCard .pgbar [data-pgv]").count()>=1, "搜索结果详情缺复制 / 导出"
         pg.click("#srCfg"); pg.wait_for_timeout(300)
-        assert pg.locator("#srm.open").count()==1 and pg.locator("#srPop").is_visible() and "已启用 11" in pg.inner_text("#srPop") and "可用 8" in pg.inner_text("#srPop"), "列设置面板"
+        assert pg.locator("#srm.open").count()==1 and pg.locator("#srPop").is_visible() and "已启用 12" in pg.inner_text("#srPop") and "可用 8" in pg.inner_text("#srPop"), "列设置面板"
         pg.click("#srPop [data-sra='proc']"); pg.wait_for_timeout(300)
-        assert pg.evaluate("srCfg().cols.includes('proc')") and "已启用 12" in pg.inner_text("#srPop"), "添加列无效"
+        assert pg.evaluate("srCfg().cols.includes('proc')") and "已启用 13" in pg.inner_text("#srPop"), "添加列无效"
         if pg.locator("#srLive th").count(): assert "进程" in pg.inner_text("#srLive"), "表头没有进程"
         pg.click("#srPop [data-srx='proc']"); pg.click("#srReset"); pg.click("#srmX"); pg.wait_for_timeout(200)
         assert not pg.locator("#srm.open").count(), "设置弹窗没关"

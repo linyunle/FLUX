@@ -811,6 +811,9 @@ uci commit dhcp
       <div class="card sec" id="sec-geo"><h2>GeoIP 数据库</h2>
   <div class="sub" style="margin-bottom:10px">用来统计流量去了哪些国家 / ASN。数据库放在 data/geoip/(名字里带 country / asn 的 .mmdb 文件,DB-IP Lite 或 MaxMind GeoLite2 均可),也可以在这里一键下载(GitHub 上的 GeoLite2 镜像,失败再试 DB-IP Lite)。下载由路由器上的面板发出;路由器直连不通时,在下面设置下载代理。注意:经代理的流量看不到真实目的地,只能看到直连和非 fake-ip 的连接。</div>
   <div id="geoSt"></div>
+  <div class="h3">自动更新</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px"><label class="sub">多久更新一次 <select id="geoAuto" aria-label="自动更新周期"><option value="0">不自动更新</option><option value="1">每天</option><option value="3">每 3 天</option><option value="7">每周</option><option value="14">每 2 周</option><option value="30">每月</option></select></label><span class="sub" id="geoNext"></span></div>
+  <div class="sub" style="margin-bottom:10px">到期后面板自己下载(用下面的下载代理);失败了 6 小时后再试,结果会显示在这里。</div>
   <div class="h3">下载代理</div>
   <div class="sub" style="margin-bottom:6px">路由器直连下载站点失败时,填一个 HTTP 代理(不支持 SOCKS)。nikki 开了认证的话写成 <code>http://用户名:密码@127.0.0.1:7890</code>。只保存在 data 目录,页面不会再显示;留空保存 = 清除。来源依次尝试:GitHub(GeoLite2 镜像)→ DB-IP Lite。</div>
   <div class="fld"><input id="geoProxy" type="password" autocomplete="off" placeholder="http://127.0.0.1:7890"></div>
@@ -1268,15 +1271,16 @@ function renderTrace(j){
   const who=r=>{const hd=hasH?`<span class="pv">${esc(r.host)}</span>`:"",dn=hasH&&j.dns[r.host]?dnsShort(j.dns[r.host]):"";
     if(hasC&&hasH)return `${esc(r.name||r.client)}<div class="sub">${hd}${dn?" → "+dn:""}</div>`;
     if(hasC)return esc(r.name||r.client);return `${hd}${dn?`<div class="sub">→ ${dn}</div>`:""}`};
-  return h+`<table class="trace"><thead><tr>${hasC||hasH?`<th>${hasC&&hasH?"设备 / 域名":hasC?"设备":"域名"}</th>`:""}<th>去向 · 命中规则</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th></tr></thead><tbody>${j.rows.map(r=>
-    `<tr>${hasC||hasH?`<td>${who(r)}</td>`:""}<td>${KT[r.kind]||""} ${esc(r.node||"")}<div class="sub">${esc(r.rule||"–")}${r.group?" · 策略组 "+esc(r.group):""}</div></td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td></tr>`).join("")}</tbody></table>${j.more?`<div class="sub">只显示最大的 ${j.rows.length} 条</div>`:""}`}
+  return h+`<table class="trace"><thead><tr>${hasC||hasH?`<th>${hasC&&hasH?"设备 / 域名":hasC?"设备":"域名"}</th>`:""}<th>去向 · 命中规则</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th><th class="n hide-s">首次 / 最近</th></tr></thead><tbody>${j.rows.map(r=>
+    `<tr>${hasC||hasH?`<td>${who(r)}</td>`:""}<td>${KT[r.kind]||""} ${esc(r.node||"")}<div class="sub">${esc(r.rule||"–")}${r.group?" · 策略组 "+esc(r.group):""}</div></td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td><td class="n hide-s sub" style="white-space:nowrap">${fmtT0(r.first)}<br>${fmtT0(r.last)}</td></tr>`).join("")}</tbody></table>${j.more?`<div class="sub">只显示最大的 ${j.rows.length} 条</div>`:""}`}
 const trace=(o,cols,limit)=>get("/api/trace",{...o,cols:cols.join(","),limit:limit||15}).then(renderTrace);
 const cTotal={h:"合计",n:1,f:(r,sh)=>`${fmt(r.up+r.down)}<div class="share"><i style="width:${sh}%"></i></div>`};
 const cDown={h:"下行",n:1,s:1,f:r=>fmt(r.down)},cUp={h:"上行",n:1,s:1,f:r=>fmt(r.up)};
+const cLast={h:"最近活动",n:1,s:1,f:r=>r.last?fmtTs(r.last):"–"};
 const cKey=(h,pv)=>({h,k:1,f:r=>r.key===""?'<span class="sub">(升级前的数据,没记录这一项)</span>':(pv?`<span class="pv">${esc(r.key)}</span>`:esc(r.key))});
 
 S.ddHostOpen=new Set();S.ddNodeOpen=new Set();S.hostOpen=new Set();S.dtOpen=new Set();S.domOpen=new Set();S.ndDevOpen=new Set();S.ndHostOpen=new Set();S.dtMode="";
-function loadHosts(){cmSeg("#hostMode","host",()=>{S.hostOpen.clear();loadHosts()});load("hosts","/api/summary",{...base({mode:S.cm.host}),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标",1),cDown,cUp,cTotal],S.hostOpen,
+function loadHosts(){cmSeg("#hostMode","host",()=>{S.hostOpen.clear();loadHosts()});load("hosts","/api/summary",{...base({mode:S.cm.host}),by:"host",limit:rowsOf("hosts")},j=>expTable($("#hostsTbl"),j,[cKey("目标",1),cDown,cUp,cTotal,cLast],S.hostOpen,
   r=>trace(base({mode:S.cm.host,host:r.key}),["client","node","group","rule"],20)))}
 S.pg={rtdev:{p:0,pause:false,snap:null,cur:[],page:[]},rtnode:{p:0,pause:false,snap:null,cur:[],page:[]},rthost:{p:0,pause:false,snap:null,cur:[],page:[]},devtop:{p:0}};
 function pagerBar(k,total,per,paused){const n=Math.max(1,Math.ceil(total/per)),p=Math.max(0,Math.min(S.pg[k].p,n-1));
@@ -1447,21 +1451,21 @@ const SRC_COLS={
  host:["主机",r=>`<span class="pv">${esc(r.host||r.dst_ip||"代理解析")}${r.dport?":"+esc(r.dport):""}</span>`],
  chain:["代理链",(r,c)=>esc(c.full&&r.chain?r.chain:(r.node||"–"))],
  dl:["下载速度",r=>rate(r.down_rate)],ul:["上传速度",r=>rate(r.up_rate)],
- down:["下载",r=>fmt(r.down)],up:["上传",r=>fmt(r.up)],age:["连接时间",r=>cnDur(r.age)],
+ down:["下载",r=>fmt(r.down)],up:["上传",r=>fmt(r.up)],age:["连接时间",r=>cnDur(r.age)],start:["建立时间",r=>fmtT0(r.start)],
  remote:["远端地址",r=>esc(r.dst_ip||"–")],rule:["规则",r=>esc(r.rule||"–")],
  proc:["进程",r=>esc(r.proc||"–")],node:["出站节点",r=>esc(r.node||"–")],sport:["源端口",r=>esc(r.sport||"–")],
  sniff:["嗅探主机",r=>esc(r.sniff||"–")],resolved:["解析地址",r=>esc(r.resolved||"–")],dnst:["解析类型",r=>esc(r.dns||"–")],
  geo:["归属信息",r=>esc(r.geo||"–")],user:["入站用户",r=>esc(r.user||"–")]};
-const SRC_DEF=["type","src","host","chain","dl","ul","down","up","age","remote","rule"];
+const SRC_DEF=["type","src","host","chain","dl","ul","down","up","age","start","remote","rule"];
 function srCfg(){let c={};try{c=JSON.parse(localStorage.getItem("flux.sr")||"{}")}catch(e){}
   c.cols=(Array.isArray(c.cols)?c.cols:SRC_DEF).filter(k=>SRC_COLS[k]);if(!c.cols.length)c.cols=[...SRC_DEF];
-  c.regex=typeof c.regex==="string"?c.regex:"direct|dns-out";c.hide=!!c.hide;c.full=c.full!==false;return c}
+  c.regex=typeof c.regex==="string"?c.regex:"direct|dns-out";c.hide=!!c.hide;c.full=c.full!==false;if(!c.v2){c.v2=1;if(!c.cols.includes("start")){const i=c.cols.indexOf("age");c.cols.splice(i>=0?i+1:c.cols.length,0,"start")}}return c}
 function sxSave(c){try{localStorage.setItem("flux.sr",JSON.stringify(c))}catch(e){}}
 function srPaintLive(){const j=S.srJ;if(!j||!S.q)return;const c=srCfg();$("#srHideT").checked=c.hide;let rows=(j.rows||[]).filter(r=>!S.devs.size||S.devs.has(r.dev));
   if(c.hide&&c.regex){let re=null;try{re=new RegExp(c.regex,"i")}catch(e){}if(re)rows=rows.filter(r=>!re.test((r.chain||"")+" "+(r.node||"")+" "+(r.rule||"")))}
   rows.sort((x,y)=>(y.up_rate+y.down_rate)-(x.up_rate+x.down_rate)||(y.up+y.down)-(x.up+x.down));
   const tr=rows.map(r=>({c:c.cols.map(k=>SRC_COLS[k][1](r,c)),
-    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["嗅探主机",r.sniff||"–"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["解析地址",r.resolved||"–"],["解析类型",r.dns||"–"],["归属信息",r.geo||"–"],["协议",r.proto.toUpperCase()],["进程",r.proc||"–"],["入站用户",r.user||"–"],["代理链",r.chain||r.node||"–"],["出站节点",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
+    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["建立时间",fmtT0(r.start)],["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["嗅探主机",r.sniff||"–"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["解析地址",r.resolved||"–"],["解析类型",r.dns||"–"],["归属信息",r.geo||"–"],["协议",r.proto.toUpperCase()],["进程",r.proc||"–"],["入站用户",r.user||"–"],["代理链",r.chain||r.node||"–"],["出站节点",(r.node||"–")+(r.kind?"("+(KIND_CN[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["下载 / 上传速度",rate(r.down_rate)+" / "+rate(r.up_rate)],["累计 下行 / 上行",fmt(r.down)+" / "+fmt(r.up)],["已持续",cnDur(r.age)]]}}));
   const hid=(j.rows||[]).length-rows.length;
   $("#srLiveN").textContent=j.on===false?"(连接明细采集已关闭)":`共 ${j.matched} 条${hid>0?",已隐藏 "+hid+" 条":""} · 每 5 秒刷新`;
   const box=$("#srLive"),sc=box.querySelector(".scroll"),sl=sc?sc.scrollLeft:0;
@@ -1549,7 +1553,7 @@ function devTabRows(){
 
   rowsTable($("#devTbl"),j,[
     {h:"设备",f:r=>`<button class="ren" data-k="${esc(r.key)}" data-n="${esc(r.name)}" style="border:0;background:none;padding:0;text-align:left;cursor:pointer">${r.name?esc(r.name):'<span class="warn">未命名</span>'} ✎</button> ${grpSel(r.key)} ${presTag(r.key)}${S.newDev[r.key]?` <span class="lv info" title="首次出现 ${fmtTs(S.newDev[r.key].first)}">新 · ${agoTs(S.newDev[r.key].first)}</span>`:""}<div class="sub">${esc(ipTxt(r.ips,""))} ${r.is_mac?esc(r.key):""}</div>`},
-    {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal],
+    {h:"当前",n:1,s:1,f:r=>r.live?`${r.live.conns} 连接 ↓${fmt(r.live.down_rate)}/s ↑${fmt(r.live.up_rate)}/s`:"–"},cDown,cUp,cTotal,cLast],
     r=>{S.dd=r.key;loadDevicesTab()});
   $("#devTbl").querySelectorAll("select.grp").forEach(sel=>{sel.onclick=e=>e.stopPropagation();sel.onchange=async e=>{e.stopPropagation();let v=sel.value;
     if(v==="__new__"){v=(prompt("新分组名(最多 20 个字)")||"").trim();if(!v){loadDevicesTab();return}}
@@ -1614,10 +1618,10 @@ function loadDetail(){
     $("#ddLegend").innerHTML=`<span><i style="background:${c.down}"></i>下行(收)</span><span><i style="background:${c.up}"></i>上行(发)</span>`;
     drawChart($("#ddChart"),t.rows,[{k:"down",c:c.down},{k:"up",c:c.up}],TH.trend.style,200,t.lab,tipUD)}).catch(e=>console.warn(e));
   const lim={...o,limit:15};
-  load("dd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ddHosts"),j,[cKey("目标",1),cDown,cUp,cTotal],S.ddHostOpen,r=>trace({...o,host:r.key},["node","group","rule"],12)));
-  load("dd_n","/api/summary",{...lim,by:"node"},j=>expTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal],S.ddNodeOpen,r=>trace({...o,node:r.key},["host","node","group","rule"],15)));
-  load("dd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ddGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
-  load("dd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ddRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
+  load("dd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ddHosts"),j,[cKey("目标",1),cDown,cUp,cTotal,cLast],S.ddHostOpen,r=>trace({...o,host:r.key},["node","group","rule"],12)));
+  load("dd_n","/api/summary",{...lim,by:"node"},j=>expTable($("#ddNodes"),j,[cKey("节点"),cDown,cUp,cTotal,cLast],S.ddNodeOpen,r=>trace({...o,node:r.key},["host","node","group","rule"],15)));
+  load("dd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ddGroups"),j,[cKey("策略组"),cDown,cUp,cTotal,cLast]));
+  load("dd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ddRules"),j,[cKey("规则"),cDown,cUp,cTotal,cLast]))}
 
 /* ---- 连接明细:此刻每条连接的 协议 / 目标 / 端口 / 状态 / 节点(nikki /connections + conntrack,只读) ---- */
 const CN={dev:"",proto:"",state:"",q:"",node:"",sort:"age",auto:false,t:0,j:null};
@@ -1658,7 +1662,7 @@ function cnPaint(j){const el=$("#cnRes"),s=j.summary,st=j.status,ro=document.doc
     +j.devices.slice(0,10).map(d=>`<tr class="click" data-cndev="${esc(d.key)}"><td class="k">${esc(d.name)}</td><td class="n">${d.conns}</td><td class="n">${d.tcp}</td><td class="n">${d.udp}</td><td class="n">${d.new}</td><td class="n">${d.closed}</td><td class="n">${d.syn_sent||0}</td><td class="n">${d.unreplied||0}</td></tr>`).join("")+"</tbody></table></div>":"";
   const glob=!CN.dev;
   const rows=j.rows.map(r=>({c:[...(glob?[esc(r.name)]:[]),r.proto.toUpperCase(),cnTarget(r),esc(r.dport||"?"),esc(r.state_cn||(st.ct_ok===false?"未知":"–")),esc(r.node),cnDur(r.age),fmt(r.up+r.down),esc(r.link)],
-    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["协议 / 端口",r.proto.toUpperCase()+" / "+(r.dport||"?")],
+    dt:{title:(r.host||r.dst_ip||"代理解析")+":"+(r.dport||"?"),lines:[["建立时间",fmtT0(r.start)],["设备",r.name],["来源",r.src+(r.sport?":"+r.sport:"")],["目标域名",r.host||"未知"],["目标 IP",r.dst_ip||"代理解析,路由器看不到"],["协议 / 端口",r.proto.toUpperCase()+" / "+(r.dport||"?")],
       ["连接状态",(r.state_cn||"未知")+(r.state?"("+r.state+")":"")+(r.unreplied?" · 对端没有回应":"")],["节点 / 出口",r.node+(r.kind?"("+({direct:"直连",proxy:"代理",reject:"拒绝"}[r.kind]||r.kind)+")":"")],["命中规则",r.rule||"未知"],["域名解析方式",r.dns||"未知"],
       ["已持续",cnDur(r.age)],["上行 / 下行",fmt(r.up)+" / "+fmt(r.down)],["关联状态",r.link+":"+(CN_LINK[r.link]||"")]],note:"持续时间来自 nikki 的建立时间;状态来自 conntrack,UDP 没有连接状态。"}}));
   const head=[...(glob?["设备"]:[]),"协议","目标","端口","状态","节点","持续","流量","关联"];
@@ -1825,10 +1829,10 @@ function loadDomains(){$("#domMerge").checked=S.merge;
     if(!j.rows.length){$("#domTbl").innerHTML='<div class="empty">这个范围内没有数据</div>';return}
     const one=S.devs.size===1;
     const ncol=6+(one?0:1);
-    $("#domTbl").innerHTML=`<table><thead><tr><th>域名</th>${one?"":'<th class="hide-s">设备</th>'}<th>去向</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th><th class="n hide-s">最近</th></tr></thead><tbody>${j.rows.map((r,i)=>`<tr class="click" data-i="${i}">
+    $("#domTbl").innerHTML=`<table><thead><tr><th>域名</th>${one?"":'<th class="hide-s">设备</th>'}<th>去向</th><th class="n hide-s">下行</th><th class="n hide-s">上行</th><th class="n">合计</th><th class="n hide-s">首次 / 最近</th></tr></thead><tbody>${j.rows.map((r,i)=>`<tr class="click" data-i="${i}">
       <td class="k" title="${esc(r.key)}"><span class="pv">${esc(r.key)}</span>${r.subs>1?` <span class="sub">+${r.subs} 个子域名</span>`:""}</td>
       ${one?"":`<td class="hide-s" style="max-width:240px">${devCell(r)}</td>`}
-      <td>${direction(r)}</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td><td class="n hide-s">${fmtDay(r.last)}</td></tr>`).join("")}</tbody></table>`;
+      <td>${direction(r)}</td><td class="n hide-s">${fmt(r.down)}</td><td class="n hide-s">${fmt(r.up)}</td><td class="n">${fmt(r.up+r.down)}</td><td class="n hide-s sub" style="white-space:nowrap">${r.last_ts?fmtTs(r.first_ts)+"<br>"+fmtTs(r.last_ts):fmtDay(r.last)}</td></tr>`).join("")}</tbody></table>`;
     const ld=r=>trace(base(S.merge?{dom:r.key}:{host:r.key}),S.merge&&r.subs>1?["client","host","node","group","rule"]:["client","node","group","rule"],25);
     $("#domTbl").querySelector("tbody").onclick=e=>{const tr=e.target.closest("tr");if(!tr||tr.dataset.i===undefined)return;const r=j.rows[+tr.dataset.i];
       if(S.domOpen.has(r.key))S.domOpen.delete(r.key);else S.domOpen.add(r.key);$("#domTbl").querySelectorAll("tr.sel").forEach(t=>t.classList.remove("sel"));paintExp($("#domTbl"),j.rows,S.domOpen,ld,ncol)};
@@ -1988,8 +1992,8 @@ const nodeCol={h:"实际走的节点",s:1,f:r=>!r.nodes||!r.nodes.length?"–":r
 function loadRules(){
   loadRuleHealth();
   cmSeg("#grpMode","grp",()=>loadRules());cmSeg("#ruleMode","rule",()=>loadRules());
-  load("grp","/api/summary",{...base({mode:S.cm.grp}),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
-  load("rule","/api/summary",{...base({mode:S.cm.rule}),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
+  load("grp","/api/summary",{...base({mode:S.cm.grp}),by:"group",limit:50},j=>rowsTable($("#grpTbl"),j,[cKey("策略组"),nodeCol,cDown,cUp,cTotal,cLast],r=>{S.group=S.group===r.key?"":r.key;renderChrome();refresh()}));
+  load("rule","/api/summary",{...base({mode:S.cm.rule}),by:"rule",limit:80},j=>rowsTable($("#ruleTbl"),j,[cKey("规则"),nodeCol,cDown,cUp,cTotal,cLast],r=>{S.rule=S.rule===r.key?"":r.key;renderChrome();refresh()}))}
 
 /* ---------- 外观:主题 / 颜色 / 排版(只存在这个浏览器里) ---------- */
 const PRESETS={
@@ -2347,12 +2351,12 @@ function loadNodeDetail(){
     $("#ndLegend").innerHTML=`<span><i style="background:${c.down}"></i>下行(收)</span><span><i style="background:${c.up}"></i>上行(发)</span>`;
     drawChart($("#ndChart"),t.rows,[{k:"down",c:c.down},{k:"up",c:c.up}],TH.trend.style,200,t.lab,tipUD)}).catch(e=>console.warn(e));
   const lim={...o,limit:20};
-  load("nd_d","/api/summary",{...lim,by:"client"},j=>expTable($("#ndDevs"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal],S.ndDevOpen,
+  load("nd_d","/api/summary",{...lim,by:"client"},j=>expTable($("#ndDevs"),j,[{h:"设备",k:1,f:r=>esc(devName(r))},cDown,cUp,cTotal,cLast],S.ndDevOpen,
     r=>trace({...o,dev:r.key},["host","node","group","rule"],15)));
-  load("nd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ndHosts"),j,[cKey("目标",1),cDown,cUp,cTotal],S.ndHostOpen,
+  load("nd_h","/api/summary",{...lim,by:"host"},j=>expTable($("#ndHosts"),j,[cKey("目标",1),cDown,cUp,cTotal,cLast],S.ndHostOpen,
     r=>trace({...o,host:r.key},["client","node","group","rule"],20)));
-  load("nd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ndGroups"),j,[cKey("策略组"),cDown,cUp,cTotal]));
-  load("nd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ndRules"),j,[cKey("规则"),cDown,cUp,cTotal]))}
+  load("nd_g","/api/summary",{...lim,by:"group"},j=>rowsTable($("#ndGroups"),j,[cKey("策略组"),cDown,cUp,cTotal,cLast]));
+  load("nd_r","/api/summary",{...lim,by:"rule"},j=>rowsTable($("#ndRules"),j,[cKey("规则"),cDown,cUp,cTotal,cLast]))}
 $("#ndBack").onclick=()=>{S.nd="";loadNodes()};
 $("#ndFilter").onclick=()=>{S.node=S.nd;S.tab="overview";showTab();refresh()};
 $("#nodeQ").oninput=drawNodes;
@@ -2362,7 +2366,8 @@ $("#apSave").onclick=async()=>{const m=$("#apMsg");m.className="msg";try{const j
 
 /* ---------- 告警 ---------- */
 const LV={bad:"严重",warn:"警告",info:"提示",ok:"恢复",note:"记录"};
-const fmtTs=t=>{const d=new Date(t*1000);return pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())};
+const fmtTs=t=>{const d=new Date(t*1000);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds())};
+const fmtT0=t=>t?fmtTs(t):"–";
 let NKAPI="",NKUI={host:"",port:"",path:""};
 function nkPanelUrl(){try{const u=new URL(NKAPI),h=NKUI.host||location.hostname,p=NKUI.port||u.port,pa=NKUI.path||"/ui/";return location.protocol+"//"+(h.includes(":")&&!h.startsWith("[")?"["+h+"]":h)+(p?":"+p:"")+pa}catch(e){return""}}
 function nuFill(){$("#nuHost").value=NKUI.host;$("#nuPort").value=NKUI.port;$("#nuPath").value=NKUI.path;$("#nuPrev").textContent="当前链接:"+(nkPanelUrl()||"(未读到 nikki API 端口)");$("#nuMsg").textContent=""}
@@ -3019,9 +3024,18 @@ $("#aghSave").onclick=async()=>{const m=$("#aghMsg");m.className="msg";try{await
 /* 设置:GeoIP */
 async function loadGeoSet(){const j=await get("/api/geo/status");paintGeoSet(j);if(j.download.running)setTimeout(()=>S.set==="geo"&&loadGeoSet(),2000)}
 function paintGeoSet(j){const f=(n,k)=>j[k]?`${n}:${esc(j[k].file)}(${j[k].built} · ${fmt(j[k].size)})`:`${n}:未安装`;
-  $("#geoSt").innerHTML=`<div>${f("国家库","country")}</div><div>${f("ASN 库","asn")}</div><div class="sub">目录 ${esc(j.dir)} · 下载代理:${j.proxy?esc(j.proxy):"未设置"}${j.download.msg?" · 下载:"+esc(j.download.msg):""}</div>`;$("#geoDl").disabled=!!j.download.running}
+  const a=j.auto||{},dt=t=>t?fmtTs(t):"–",dl=j.download||{};
+  $("#geoSt").innerHTML=`<div>${f("国家库","country")}</div><div>${f("ASN 库","asn")}</div><div class="sub">目录 ${esc(j.dir)} · 下载代理:${j.proxy?esc(j.proxy):"未设置"}</div>`;$("#geoDl").disabled=!!dl.running;
+  $("#geoAuto").value=String(a.days||0);
+  $("#geoNext").textContent=a.days?`上次成功 ${dt(a.last_ok)} · 下次自动更新 ${dt(a.next)}`:(a.last_ok?`上次成功更新 ${dt(a.last_ok)}`:"");
+  const m=$("#geoMsg");   /* 下载状态:下载中 / 完成 / 失败,不再一直停在「已开始下载」 */
+  if(dl.running){m.className="msg";m.textContent="下载中:"+(dl.msg||"…")}
+  else if(a.last_fail&&a.last_fail>(a.last_ok||0)){m.className="msg err";m.textContent=`${dt(a.last_fail)} ${a.last_auto?"自动更新":"下载"}失败:${(a.last_err||dl.msg||"").replace(/^失败:/,"")}`}
+  else if(a.last_ok){m.className="msg ok";m.textContent=`${dt(a.last_ok)} ${a.last_auto?"自动更新":"下载"}完成`}
+  else m.textContent=""}
+$("#geoAuto").onchange=async e=>{const m=$("#geoMsg");try{const r=await post("/api/geo/auto",{days:+e.target.value});if(r.ok===false)throw new Error(r.error);paintGeoSet(r.status);m.className="msg ok";m.textContent=+e.target.value?`已设置:每 ${e.target.value} 天自动更新`:"已关闭自动更新"}catch(er){m.className="msg err";m.textContent=er.message}};
 $("#geoPxSave").onclick=async()=>{const m=$("#geoMsg");m.className="msg";try{const r=await post("/api/geo/proxy",{proxy:$("#geoProxy").value});$("#geoProxy").value="";m.className="msg ok";m.textContent=r.proxy?"已保存代理:"+r.proxy:"已清除代理";paintGeoSet(r)}catch(e){m.className="msg err";m.textContent=e.message}};
-$("#geoDl").onclick=async()=>{const m=$("#geoMsg");m.className="msg";try{const r=await post("/api/geo/download",{});m.textContent=r.started?"已开始下载,稍等…":"正在下载中";paintGeoSet(r.status);setTimeout(()=>S.set==="geo"&&loadGeoSet(),1500)}catch(e){m.className="msg err";m.textContent=e.message}};
+$("#geoDl").onclick=async()=>{const m=$("#geoMsg");m.className="msg";try{const r=await post("/api/geo/download",{});paintGeoSet(r.status);setTimeout(()=>S.set==="geo"&&loadGeoSet(),1500)}catch(e){m.className="msg err";m.textContent=e.message}};
 /* 设置:套餐 */
 let QC={};
 async function loadQuotaSet(){const j=await get("/api/quota");QC=JSON.parse(JSON.stringify(j.cfg));window.QAP=j.airports;renderQuotaSet();$("#quotaMsg").textContent=""}

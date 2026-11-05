@@ -218,7 +218,7 @@ def q_summary(p):
     args = [d1, d2] + fa
     con = ro()
     try:
-        rows = con.execute(f"SELECT {expr} k, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY k "
+        rows = con.execute(f"SELECT {expr} k, SUM(up), SUM(down), MIN(CASE WHEN first>0 THEN first END), MAX(last) FROM traffic WHERE {where} GROUP BY k "
                            f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", (*args, limit)).fetchall()
         tot = con.execute(f"SELECT COALESCE(SUM(up),0), COALESCE(SUM(down),0) FROM traffic WHERE {where}", args).fetchone()
         n_all = con.execute(f"SELECT COUNT(DISTINCT {expr}) FROM traffic WHERE {where}", args).fetchone()[0]
@@ -235,8 +235,8 @@ def q_summary(p):
         con.close()
     lv = live()
     out = []
-    for key, up, down in rows:
-        r = {"key": key, "up": up, "down": down}
+    for key, up, down, tfirst, tlast in rows:
+        r = {"key": key, "up": up, "down": down, "first": tfirst or 0, "last": tlast or 0}
         if by == "client":
             ips = macips.get(key, [] if is_mac(key) else [key])
             r.update(name=devices.NAMES.label(key, ips, stored), ips=ips[:8], is_mac=is_mac(key),
@@ -267,7 +267,7 @@ def q_trace(p):
     sel = ", ".join(TR_COLS[c] for c in cols)
     con = ro()
     try:
-        rows = con.execute(f"SELECT {sel}, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY {sel} "
+        rows = con.execute(f"SELECT {sel}, SUM(up), SUM(down), MIN(CASE WHEN first>0 THEN first END), MAX(last) FROM traffic WHERE {where} GROUP BY {sel} "
                            f"ORDER BY SUM(up)+SUM(down) DESC LIMIT ?", (*args, limit + 1)).fetchall()
         by_node = con.execute(f"SELECT node, SUM(up), SUM(down) FROM traffic WHERE {where} GROUP BY node", args).fetchall()
         if "host" in cols:
@@ -292,8 +292,9 @@ def q_trace(p):
     more = len(rows) > limit
     out = []
     for r in rows[:limit]:
-        o = dict(zip(cols, r[:-2]))
-        o["up"], o["down"] = r[-2], r[-1]
+        o = dict(zip(cols, r[:-4]))
+        o["up"], o["down"] = r[-4], r[-3]
+        o["first"], o["last"] = r[-2] or 0, r[-1] or 0
         if "client" in o:
             ips = macips.get(o["client"], [] if is_mac(o["client"]) else [o["client"]])
             o["name"] = devices.NAMES.label(o["client"], ips, stored) or next((i for i in ips if ":" not in i), "") or o["client"]
@@ -613,7 +614,8 @@ def q_domains(p):
     try:
         rows = con.execute(
             f"SELECT host, {DEVX} k, SUM(up), SUM(down), COUNT(DISTINCT day), MAX(day), "
-            f"SUM(CASE WHEN node IN {_in(d)} THEN up+down ELSE 0 END) "
+            f"SUM(CASE WHEN node IN {_in(d)} THEN up+down ELSE 0 END), "
+            f"MIN(CASE WHEN first>0 THEN first END), MAX(last) "
             f"FROM traffic WHERE {where} GROUP BY host, k LIMIT 200000", list(d) + [d1, d2] + fa).fetchall()
         macips = devices.ips_by_dev(con)
         stored = devices.stored_names(con)
@@ -628,9 +630,12 @@ def q_domains(p):
         return label_cache[k]
 
     agg = {}
-    for host, k, up, down, days, last, direct in rows:
+    for host, k, up, down, days, last, direct, t1, t2 in rows:
         key = reg_domain(host) if merge else host
-        a = agg.setdefault(key, {"key": key, "up": 0, "down": 0, "direct": 0, "days": 0, "last": "", "devs": {}, "subs": set()})
+        a = agg.setdefault(key, {"key": key, "up": 0, "down": 0, "direct": 0, "days": 0, "last": "", "devs": {}, "subs": set(), "t1": 0, "t2": 0})
+        if t1 and (not a["t1"] or t1 < a["t1"]):
+            a["t1"] = t1
+        a["t2"] = max(a["t2"], t2 or 0)
         a["up"] += up
         a["down"] += down
         a["direct"] += direct
@@ -643,7 +648,7 @@ def q_domains(p):
     for a in sorted(agg.values(), key=lambda a: -(a["up"] + a["down"]))[:limit]:
         top = sorted(a["devs"].items(), key=lambda kv: -kv[1])
         out.append({"key": a["key"], "up": a["up"], "down": a["down"], "direct": a["direct"], "days": a["days"],
-                    "last": a["last"], "ndev": len(top), "subs": len(a["subs"]),
+                    "last": a["last"], "first_ts": a["t1"], "last_ts": a["t2"], "ndev": len(top), "subs": len(a["subs"]),
                     "devs": [{"key": k, "name": label(k), "bytes": b} for k, b in top[:3]]})
     return 200, {"from": d1, "to": d2, "merge": merge, "count": len(agg), "rows": out}
 
@@ -1193,6 +1198,14 @@ def p_geo_proxy(body):
     return geo.status()
 
 
+def p_geo_auto(body):
+    try:
+        geo.auto_set(body.get("days"))
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "status": geo.status()}
+
+
 def p_geo_dl(body):
     return {"started": geo.start_download(), "status": geo.status()}
 
@@ -1218,7 +1231,7 @@ def p_group_policy(body):
 AUDIT = {"/api/alerts/config": "修改告警规则 / 推送渠道", "/api/agh/config": "修改 AdGuard 连接", "/api/quota": "修改订阅额度",
          "/api/report/config": "修改周报设置", "/api/apps/rules": "修改应用特征库规则", "/api/airports/rules": "修改订阅归类规则",
          "/api/groups/policy": "修改分组白名单", "/api/restore": "从备份恢复设置", "/api/config": "修改 nikki 连接",
-         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/retention": "修改数据保留天数", "/api/probe": "修改节点探测设置"}
+         "/api/geo/proxy": "修改 GeoIP 下载代理", "/api/geo/auto": "修改 GeoIP 数据库自动更新周期", "/api/retention": "修改数据保留天数", "/api/probe": "修改节点探测设置"}
 
 
 def _audit(path, body):
@@ -1406,7 +1419,7 @@ def p_audit_ui(body):
     return {"ok": True}
 
 
-POST_ROUTES = {"/api/audit/ui": p_audit_ui, "/api/conns/ignore": p_conns_ignore, "/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
+POST_ROUTES = {"/api/audit/ui": p_audit_ui, "/api/geo/auto": p_geo_auto, "/api/conns/ignore": p_conns_ignore, "/api/connmon/cfg": p_connmon_cfg, "/api/noise/ignore": p_noise_ignore, "/api/submute": p_submute, "/api/diag/compare": p_diag_compare, "/api/devmerge": p_devmerge, "/api/nodegeo/ignore": p_nodegeo_ignore, "/api/clienterr": lambda body: panellog.add_client_error(body.get("msg"), body.get("src"), body.get("ua")) or {"ok": True}, "/api/presence/watch": lambda body: _wcon(lambda con: presence.set_watch(con, body.get("key"), bool(body.get("on")))), "/api/probe": lambda body: _wcon(lambda con: probe.save_cfg(con, body)), "/api/groups/set": p_group_set, "/api/groups/policy": p_group_policy, "/api/ui": p_ui, "/api/restore": p_restore, "/api/geo/proxy": p_geo_proxy, "/api/retention": p_retention, "/api/agh/config": p_agh_cfg, "/api/agh/test": p_agh_test, "/api/geo/download": p_geo_dl, "/api/quota": p_quota, "/api/report/config": p_report_cfg, "/api/report/send": p_report_send, "/api/alerts/config": p_alert_cfg, "/api/alerts/test": p_alert_test, "/api/alerts/seen": p_alert_seen, "/api/alerts/clear": p_alert_clear, "/api/apps/rules": p_apprules, "/api/config": p_config, "/api/device": p_device, "/api/airports/rules": p_airport_rules,
                "/api/devices/import": p_import, "/api/update/check": p_update}
 
 

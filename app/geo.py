@@ -5,6 +5,7 @@
 """
 import gzip
 import ipaddress
+import json
 import os
 import socket
 import struct
@@ -14,7 +15,7 @@ import urllib.parse
 import urllib.request
 
 from . import config
-from .util import log
+from .util import log, stop
 
 MARK = b"\xab\xcd\xefMaxMind.com"
 BASE = os.environ.get("GEO_BASE", "https://download.db-ip.com/free")
@@ -199,8 +200,97 @@ def load():
                     log("读取 GeoIP 库失败", p, e)
 
 
+AUTO_DAYS = (0, 1, 3, 7, 14, 30)      # 0 = 不自动更新
+RETRY_SEC = 6 * 3600                  # 自动更新失败后过多久再试
+
+
+def _state_path():
+    return os.path.join(config.DATA_DIR, "geo_auto.json")
+
+
+def _state():
+    try:
+        with open(_state_path(), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _state_save(**kw):
+    d = _state()
+    d.update(kw)
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(_state_path(), "w", encoding="utf-8") as f:
+            json.dump(d, f)
+    except OSError as e:
+        log("GeoIP 状态保存失败", e)
+
+
+def auto_days():
+    d = _state().get("days", 0)
+    return d if d in AUTO_DAYS else 0
+
+
+def auto_set(days):
+    days = int(days or 0)
+    if days not in AUTO_DAYS:
+        raise ValueError("更新周期只能是:关闭 / 1 / 3 / 7 / 14 / 30 天")
+    _state_save(days=days)
+    return days
+
+
+def _last_ok():
+    t = _state().get("ok_at")
+    if t:
+        return int(t)
+    best = 0       # 没记录过(手动放进去的库):用库文件的修改时间
+    for kind in ("country", "asn"):
+        p = _find(kind)
+        if p:
+            try:
+                best = max(best, int(os.path.getmtime(p)))
+            except OSError:
+                pass
+    return best
+
+
+def next_auto(now=None):
+    """下一次自动更新的时间戳;没开自动更新返回 None。"""
+    now = now or time.time()
+    d = auto_days()
+    if not d:
+        return None
+    st = _state()
+    due = _last_ok() + d * 86400
+    if st.get("fail_at") and st["fail_at"] > _last_ok():
+        due = max(due, st["fail_at"] + RETRY_SEC)
+    return int(max(due, now))
+
+
+def auto_run():
+    """后台线程:每 10 分钟看一次,到期就自动下载(失败后 6 小时再试)。"""
+    while not stop.is_set():
+        try:
+            d = auto_days()
+            if d and not DL["running"]:
+                now = time.time()
+                st = _state()
+                due = _last_ok() + d * 86400
+                if now >= due and not (st.get("fail_at", 0) > _last_ok() and now - st["fail_at"] < RETRY_SEC):
+                    log(f"GeoIP 数据库到期,自动更新(每 {d} 天)")
+                    start_download(auto=True)
+        except Exception as e:
+            log("GeoIP 自动更新出错", e)
+        stop.wait(600)
+
+
 def status():
-    out = {"dir": dir_(), "download": dict(DL), "proxy": proxy_hint()}
+    st = _state()
+    out = {"dir": dir_(), "download": dict(DL), "proxy": proxy_hint(),
+           "auto": {"days": auto_days(), "last_ok": _last_ok() or None, "last_fail": st.get("fail_at") or None, "last_err": st.get("err") or "", "last_auto": bool(st.get("auto")),
+                    "next": next_auto()}}
     for kind in ("country", "asn"):
         m = _db[kind]
         out[kind] = ({"file": os.path.basename(m.path), "built": time.strftime("%Y-%m-%d", time.gmtime(m.meta.get("build_epoch", 0))),
@@ -320,6 +410,7 @@ def _download():
                 raise RuntimeError(errs[0])
         load()
         DL["msg"] = "完成"
+        _state_save(ok_at=int(time.time()), fail_at=0, err="", auto=bool(DL.get("auto")))
     except Exception as e:
         msg = f"失败:{e}"
         p = proxy_get()
@@ -329,14 +420,15 @@ def _download():
                 if secret:
                     msg = msg.replace(secret, "***")
         DL["msg"] = msg[:160]
+        _state_save(fail_at=int(time.time()), err=msg[:160], auto=bool(DL.get("auto")))
         log("GeoIP 下载失败", e)
     DL["running"] = False
     DL["at"] = int(time.time())
 
 
-def start_download():
+def start_download(auto=False):
     if DL["running"]:
         return False
-    DL.update(running=True, msg="开始下载…")
+    DL.update(running=True, msg="开始下载…", auto=auto)
     threading.Thread(target=_download, name="geo-dl", daemon=True).start()
     return True

@@ -1454,6 +1454,32 @@ def test_v0552_scrub_and_report():
     con.close()
 
 
+def test_v05511_geo_auto_and_first_last():
+    import tempfile, sqlite3
+    from app import geo, config, db
+    d = tempfile.mkdtemp()
+    config.DATA_DIR = d
+    assert geo.auto_days() == 0
+    geo.auto_set(7)
+    assert geo.auto_days() == 7
+    try:
+        geo.auto_set(5)
+        assert False
+    except Exception:
+        pass
+    assert geo.status()["auto"]["days"] == 7
+    geo._state_save(ok_at=1000)
+    assert geo.next_auto(now=2000) == 1000 + 7 * 86400
+    geo.auto_set(0)
+    assert not geo.next_auto(now=2000)
+    # 旧库升级:缺 first/last 列时自动补上
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE traffic(day TEXT, client TEXT, node TEXT, grp TEXT, rule TEXT, host TEXT, up INTEGER, down INTEGER, PRIMARY KEY(day,client,node,grp,rule,host)) WITHOUT ROWID")
+    db._ensure_cols(con)
+    cols = [r[1] for r in con.execute("PRAGMA table_info(traffic)")]
+    assert "first" in cols and "last" in cols, cols
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

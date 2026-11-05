@@ -30,6 +30,7 @@ def main():
     threading.Thread(target=nikkilog.run, name="nklog", daemon=True).start()
     threading.Thread(target=dnsx.run, name="dnsprobe", daemon=True).start()
     threading.Thread(target=wallpaper.run, name="wallpaper", daemon=True).start()
+    threading.Thread(target=geo.auto_run, name="geo-auto", daemon=True).start()
     cf = config.get()
     log(f"采集开始 {config.VERSION}  API={cf['api']}({cf['source']})  页面 :{config.LISTEN_PORT}"
         f"{'  (需要 ?t=token)' if config.PAGE_TOKEN else ''}")

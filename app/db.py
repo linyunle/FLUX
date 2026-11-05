@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS traffic(
   day TEXT NOT NULL, client TEXT NOT NULL, node TEXT NOT NULL, grp TEXT NOT NULL,
   rule TEXT NOT NULL, host TEXT NOT NULL,
   up INTEGER NOT NULL DEFAULT 0, down INTEGER NOT NULL DEFAULT 0,
+  first INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(day, client, node, grp, rule, host)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS hourly(
@@ -124,7 +125,7 @@ CREATE TABLE IF NOT EXISTS conn_snap(
   event_id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, size INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL
 );
 """
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def open_db(readonly=False):
@@ -137,10 +138,20 @@ def open_db(readonly=False):
     return con
 
 
+def _ensure_cols(con):
+    """v4:traffic 加「首次 / 最近活动时间」(unix 秒,升级前的旧记录为 0 = 没有记录)。"""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(traffic)")}
+    for c in ("first", "last"):
+        if c not in cols:
+            con.execute(f"ALTER TABLE traffic ADD COLUMN {c} INTEGER NOT NULL DEFAULT 0")
+    con.commit()
+
+
 def migrate(con):
     ver = con.execute("PRAGMA user_version").fetchone()[0]
     if ver >= SCHEMA_VERSION:
         con.executescript(SCHEMA)
+        _ensure_cols(con)
         return
     if ver < 2:
         has_v1 = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='traffic'").fetchone()
@@ -160,6 +171,7 @@ def migrate(con):
             log("迁移完成,旧数据已保留(规则/策略组列为空)")
     else:
         con.executescript(SCHEMA)
+    _ensure_cols(con)
     con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     con.commit()
 
