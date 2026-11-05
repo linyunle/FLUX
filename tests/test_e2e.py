@@ -766,7 +766,7 @@ try:
     ok(rq2(vw, "/api/device", {"dev": mac_, "name": "只读改名"})[0] == 200 and rq2(vw, "/api/groups/set", {"dev": mac_, "group": "测试组"})[0] == 200, "只读权限:开放后可以改设备别名 / 分组")
     ok(rq2(vw, "/api/groups/policy", {"group": "测试组", "on": True, "allow": "x.com"})[0] == 403 and rq2(vw, "/api/devices/import", {"text": "1.1.1.1 a"})[0] == 403 and rq2(vw, "/api/config", {"api": "http://x:1"})[0] == 403, "只读权限:开放编辑也不包含分组白名单 / 导入 / 连接设置")
     ok(rq2(vw, "/api/status")[1]["auth"]["perms"]["export"] is True, "只读权限:前端能读到自己的权限")
-    c_, b_ = rq2(adm, "/api/geo/auto", {"days": 7}); ok(c_ == 200 and b_["status"]["auto"]["days"] == 7, "GeoIP 自动更新:管理员可设周期")
+    r_ = rq2(adm, "/api/geo/auto", {"days": 7}); ok(r_[0] == 200 and r_[1]["status"]["auto"]["days"] == 7, "GeoIP 自动更新:管理员可设周期")
     ok(rq2(adm, "/api/geo/auto", {"days": 5})[1].get("ok") is False or rq2(adm, "/api/geo/auto", {"days": 5})[0] != 200, "GeoIP 自动更新:非法周期被拒")
     ok(rq2(vw, "/api/geo/auto", {"days": 0})[0] in (401, 403), "GeoIP 自动更新:只读账号不能改")
     rq2(adm, "/api/geo/auto", {"days": 0})
