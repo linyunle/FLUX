@@ -21,6 +21,7 @@ _clear = {}        # dev -> 开始恢复正常的时间
 _weak = {}         # dev -> 只有单个弱信号(权重 1)开始持续的时间
 _emit = {}         # dev -> 上次写事件的 (level, 时间)
 _todo = []         # 待重算基线的设备
+_burst = {}        # dev -> 只有暴增类信号、且够「高度可疑」的开始时间
 IGN = set()        # 用户选择忽略的 "设备|信号id"("设备|*" = 这台设备一律不提醒)
 _ign_at = [0.0]
 COMMON_PORTS = {"80", "443", "53", "853", "8080", "8443"}
@@ -31,7 +32,10 @@ SIG = {
     "proto_drift": ("TCP / UDP 比例偏离平时", 1), "many_ips": ("目标 IP 数量异常多", 2), "many_domains": ("目标域名数量异常多", 1),
     "port_focus": ("端口高度集中", 1), "new_targets": ("出现平时没有的目标", 1), "failures": ("握手失败 / 无回应连接多", 2),
     "node_anom": ("无回应连接集中在某个节点", 1), "habit_dev": ("明显偏离这台设备平时的习惯", 1),
+    "leak": ("疑似连接泄漏(已降级)", 0), "one_service": ("集中访问单一服务(已降级)", 0),
 }
+BURST = {"sudden_growth", "new_rate", "close_rate", "short_conns"}   # 瞬时暴增类信号:手机开应用就会出现
+BURST_HOLD = 120   # 只有暴增类信号时,要持续这么多秒才算「高度可疑」并推送
 CAUSE = {
     "sudden_growth": "某个应用刚启动或批量发起连接(下载、同步、扫描)",
     "sustained_high": "BT / PT 下载、持续同步、监控类应用,或设备异常",
@@ -47,6 +51,8 @@ CAUSE = {
     "failures": "目标不可达、被防火墙或节点丢弃、节点故障",
     "node_anom": "该节点出口异常或线路故障,导致握手无回应",
     "habit_dev": "与这台设备同一时段的历史相比明显偏高",
+    "leak": "程序没有关闭已结束的连接(大量连接停在「对端已关」),常见于下载器、网盘 / 同步客户端、浏览器扩展",
+    "one_service": "几乎所有连接都去同一个常见端口的同一个服务:云同步、遥测、摄像头 / 智能设备上报都会这样",
 }
 ADVICE = {
     "sudden_growth": "在设备上查看刚启动的程序;对照「连接明细」里数量最多的目标",
@@ -63,6 +69,8 @@ ADVICE = {
     "failures": "按「状态」筛选「无回应 / 正在连接」,查看目标和节点;必要时切换节点对比",
     "node_anom": "到节点页看该节点延迟和丢包,尝试切换节点",
     "habit_dev": "对比该设备平时同一时段的连接趋势",
+    "leak": "重启该设备上疑似的程序后看连接数是否回落;不回落再按「持续时间」排序找最久的连接",
+    "one_service": "确认这个服务是否你认识的;是的话可以在事件里「忽略这一项」",
 }
 
 
@@ -135,6 +143,11 @@ def ref(dev, now):
     return a[1], a[2], a[3], "medium" if b["days"] >= 1 else "low", f"对比这台设备整体历史({a[0]} 个分钟样本)"
 
 
+def x_common(rows):
+    c = sum(1 for x in rows if x[4] in COMMON_PORTS)
+    return c / max(1, len(rows)) >= 0.8
+
+
 def detect(dev, now, rows, ct_ok):
     """返回 (signals, insufficient, 基线说明, 可信度)。rows = 这台设备的当前连接明细。"""
     r = list(connhist.RING.get(dev, ()))
@@ -147,13 +160,13 @@ def detect(dev, now, rows, ct_ok):
     span = max(1, cur[0] - r[0][0])
     prior = [x for x in r if cur[0] - x[0] >= 20 and cur[0] - x[0] <= 90]
     hi = max(150, 1.5 * p95 + 20) if p95 is not None else 400
-    new_hi = max(150, 3 * (new95 or 0) / max(1, connhist.params()["res"])) if p95 is not None else 600
+    new_hi = max(250, 3 * (new95 or 0) / max(1, connhist.params()["res"])) if p95 is not None else 600
 
     def add(i, ev):
         sig.append({"id": i, "name": SIG[i][0], "weight": SIG[i][1], "evidence": ev})
     if prior:
         pm = min(x[1] for x in prior)
-        if conns >= 3 * max(pm, 10) and conns - pm >= 100:
+        if conns >= 3 * max(pm, 10) and conns - pm >= 150:
             add("sudden_growth", f"连接数从约 {pm} 升到 {conns}(不到 90 秒内)")
     five = [x for x in r if cur[0] - x[0] <= 300]
     if len(five) >= 3 and cur[0] - five[0][0] >= 240 and all(x[1] >= hi for x in five):
@@ -165,7 +178,7 @@ def detect(dev, now, rows, ct_ok):
         add("new_rate", f"最近 1 分钟新建 {new_pm} 个连接(门槛 {int(new_hi)})")
     if close_pm >= new_hi:
         add("close_rate", f"最近 1 分钟关闭 {close_pm} 个连接(门槛 {int(new_hi)})")
-    if new_pm >= max(120, new_hi * 0.6) and conns < new_pm / 2:
+    if new_pm >= max(150, new_hi * 0.6) and conns < new_pm / 2:
         add("short_conns", f"1 分钟新建 {new_pm} 个但当前只剩 {conns} 个:大量连接很快结束")
     if rows:
         old = sum(1 for x in rows if x[1] and now - x[1] > 3600)
@@ -184,6 +197,18 @@ def detect(dev, now, rows, ct_ok):
             pt, pn = max(pc.items(), key=lambda y: y[1])
             if pt and pt not in COMMON_PORTS and pn / len(rows) >= 0.8:
                 add("port_focus", f"{int(pn * 100 / len(rows))}% 的连接都去往非常见端口 {pt}")
+            cw = sum(1 for x in rows if x[5] in ("CLOSE_WAIT", "对端已关"))
+            tcp_n = sum(1 for x in rows if x[4] and x[5] != "UDP") or len(rows)
+            if cw >= 100 and cw / tcp_n >= 0.6:
+                add("leak", f"{cw} 个连接停在「对端已关」,占 {int(cw * 100 / tcp_n)}%:对方已经关了,本机程序没有释放")
+            hs = {}
+            for x in rows:
+                if x[3]:
+                    hs[x[3]] = hs.get(x[3], 0) + 1
+            if hs and len(rows) >= 100 and x_common(rows):
+                top2 = sum(sorted(hs.values(), reverse=True)[:2])
+                if top2 / len(rows) >= 0.8:
+                    add("one_service", f"{int(top2 * 100 / len(rows))}% 的连接只去往 {min(len(hs), 2)} 个域名的常见端口(80 / 443)")
             b = BASE.get(dev)
             if b and b["hosts"] and conf != "low":
                 hc = {}
@@ -232,6 +257,8 @@ def grade(sig, conf, ct_ok):
     score = sum(s["weight"] for s in sig)
     if score == 0:
         return "normal", 0
+    if any(s.get("id") in ("leak", "one_service") for s in sig):
+        return "attention", score      # 连接泄漏 / 单一服务集中:只提醒观察,不判「高度可疑」、不推送
     if conf == "low" and not ct_ok and score < 5:
         return "unknown", score
     if score >= 5 or (score >= 4 and conf != "low"):
@@ -310,6 +337,12 @@ def check(now, dstat, ct_dev, rows, rcol, ct_ok, label=None):
             else:
                 sig = [x for x in sig if f"{dev}|{x['id']}" not in IGN]
             level, score = grade(sig, conf, ct_ok)
+            if level == "suspect" and sig and all(x["id"] in BURST for x in sig):
+                # 手机 / 电视盒打开应用的暴增通常 2~3 分钟就回落;持续够久才升级并推送
+                if now - _burst.setdefault(dev, now) < BURST_HOLD:
+                    level = "attention"
+            else:
+                _burst.pop(dev, None)
             LEVEL[dev] = {"level": level, "conf": conf, "score": score, "signals": [s["id"] for s in sig], "at": int(now), "why": why}
             if level == "normal":
                 _weak.pop(dev, None)

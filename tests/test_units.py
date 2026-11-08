@@ -725,18 +725,19 @@ def test_v036():
     assert "hour" in cols and "up" in cols and "down" in cols and "client" in cols, cols
     ins = lambda hour, up, down: con.execute(f"INSERT INTO hourly({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
                                               [{"hour": hour, "client": "aa:bb:cc:00:00:09", "up": up, "down": down}.get(c, 0 if c in ("up", "down", "conns") else "x") for c in cols])
+    HH = time.strftime("%H"); H = int(HH)      # 用当前小时:窗口按小时截断,固定写 20 点会在 20 点之后的时刻少算一天
     for k in range(1, 22):
         d = today - datetime.timedelta(days=k)
-        ins(d.strftime("%Y-%m-%d") + " 20", 0, 50e9 if k == 7 else 1e9)
+        ins(d.strftime("%Y-%m-%d") + " " + HH, 0, 50e9 if k == 7 else 1e9)
     con.commit()
     wd = (today - datetime.timedelta(days=7)).weekday()
     ha = insight.heatmap(con, None, 21, "avg"); hm = insight.heatmap(con, None, 21, "median")
-    assert ha["cells"][wd][20] > 10e9 and hm["cells"][wd][20] <= 2e9 and hm["stat"] == "median", (ha["cells"][wd][20], hm["cells"][wd][20])
+    assert ha["cells"][wd][H] > 10e9 and hm["cells"][wd][H] <= 2e9 and hm["stat"] == "median", (ha["cells"][wd][H], hm["cells"][wd][H])
     hw = insight.heatmap(con, None, 21, "avg", None, "wk")
     assert len(hw["cells"]) == 2 and hw["labels"] == ["周一到周五", "周六、周日"] and sum(hw["samples"]) == 21 and hw["peak"]["label"] in hw["labels"], hw["samples"]
     assert ha["samples"][wd] == 3 and insight.heatmap(con, None, 99)["days"] == 21
     dv = insight.heatmap(con, None, 21, "avg", (today - datetime.timedelta(days=7)).isoformat())
-    assert dv["hours"][20]["down"] == 50e9 and dv["peak"]["hour"] == 20 and len(dv["hours"]) == 24 and dv["hours"][20]["top"], dv["peak"]
+    assert dv["hours"][H]["down"] == 50e9 and dv["peak"]["hour"] == H and len(dv["hours"]) == 24 and dv["hours"][H]["top"], dv["peak"]
     try: insight.heatmap(con, None, 21, "avg", "bad"); assert False
     except ValueError: pass
     config.DATA_DIR = tempfile.mkdtemp()
@@ -1234,7 +1235,7 @@ def test_v052_connanom():
     assert sig == [] and connanom.grade(sig, conf, True)[0] == "normal"
     # 突增 + 持续高 + 偏离习惯
     feed_ring("dev1", [(20, 3, 3, 0, 0)] * 3 + [(400, 300, 5, 0, 0)] * 3, now - 60)
-    rows = [[None, now - 10, "", "a.com", "443", "", "HK"]] * 400
+    rows = [[None, now - 10, "", "h%d.com" % (i % 20), "443", "", "HK"] for i in range(400)]
     sig, miss, why, conf = connanom.detect("dev1", now, rows, True)
     ids = {s["id"] for s in sig}
     assert {"sudden_growth", "new_rate"} <= ids and "habit_dev" not in ids, ids      # 才冲高几十秒:不算「偏离习惯」
@@ -1242,6 +1243,14 @@ def test_v052_connanom():
     assert "habit_dev" in {x["id"] for x in connanom.detect("dev1", now, rows, True)[0]}
     lv, sc = connanom.grade(sig, conf, True)
     assert lv == "suspect" and sc >= 5
+    # v0.55.13:连接泄漏(大量对端已关)/ 集中访问单一服务 → 最多「需要关注」,不判高度可疑
+    lk = [[None, now - 10, "", "a.com" if i % 2 else "b.com", "80", "CLOSE_WAIT", "直连"] for i in range(400)]
+    sg = connanom.detect("dev1", now, lk, True)[0]
+    assert {"leak", "one_service"} <= {x["id"] for x in sg}, sg
+    assert connanom.grade(sg + [{"id": "sudden_growth", "weight": 5}], "high", True)[0] == "attention"
+    assert connanom.grade([{"id": "sudden_growth", "weight": 5}], "high", True)[0] == "suspect"
+    # 暴增类信号要持续 BURST_HOLD 秒才升级:先 attention
+    assert connanom.BURST_HOLD == 120 and "sudden_growth" in connanom.BURST and "sustained_high" not in connanom.BURST
     # 新设备 + 无连接表:不硬下结论
     feed_ring("newdev", [(20, 3, 3, 0, 0)] * 3 + [(450, 3, 3, 0, 0)] * 3, now - 60)
     sig, miss, why, conf = connanom.detect("newdev", now, [[None, now - 10, "", "x.com", "443", "", "HK"]] * 450, False)
