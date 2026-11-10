@@ -16,7 +16,7 @@ SYSFS = os.environ.get("SYS_SYSFS", "/sys")
 # (时间戳, CPU%, 内存已用, 连接跟踪数, 最高温度, 总下行B/s, 总上行B/s)
 SERIES = collections.deque(maxlen=600)
 STATE = {"at": 0, "cpu": None, "load": None, "ncpu": os.cpu_count() or 1, "mem": None, "uptime": 0, "temps": [],
-         "ct": None, "ifaces": [], "disk": None, "disks": []}
+         "ct": None, "ifaces": [], "disk": None, "disks": [], "hdd": []}
 _lock = threading.Lock()
 _last = {"cpu": None, "net": None, "t": 0.0}
 SKIP_IF = ("lo", "veth", "docker", "br-", "ifb", "bonding_masters")
@@ -60,6 +60,40 @@ def _temps():
             except Exception:
                 continue
     return [t for t in out if -40 < t["c"] < 150]
+
+
+def _hdd_temps():
+    """硬盘温度:NVMe 的 hwmon 名叫 nvme,SATA / USB 盘装了 kmod-hwmon-drivetemp 后叫 drivetemp。
+    单独放一个列表,不混进 CPU 传感器,免得影响「温度」卡片和温度告警。"""
+    out = []
+    for d in sorted(glob.glob(SYSFS + "/class/hwmon/hwmon*")):
+        try:
+            nm = _rd(d + "/name").strip()
+        except OSError:
+            continue
+        if nm not in ("nvme", "drivetemp"):
+            continue
+        model = ""
+        try:
+            model = _rd(d + "/device/model").strip()
+        except OSError:
+            pass
+        best = None
+        for p in sorted(glob.glob(d + "/temp*_input")):
+            try:
+                v = round(int(_rd(p).strip()) / 1000, 1)
+                lab = ""
+                try:
+                    lab = _rd(p.replace("_input", "_label")).strip()
+                except OSError:
+                    pass
+            except Exception:
+                continue
+            if -40 < v < 150 and (best is None or lab == "Composite"):
+                best = v
+        if best is not None:
+            out.append({"name": (nm + " " + model).strip() if model else nm + " " + os.path.basename(d), "c": best})
+    return out
 
 
 def _ct():
@@ -221,7 +255,7 @@ def sample():
         disk, disks = STATE["disk"], STATE["disks"]
     with _lock:
         STATE.update(at=int(now), cpu=cpu if cpu is not None else STATE["cpu"], load=load, mem={"used": used, "total": total} if total else None,
-                     uptime=up, temps=temps, ct=ct, ifaces=ifs, disk=disk, disks=disks)
+                     uptime=up, temps=temps, hdd=_hdd_temps(), ct=ct, ifaces=ifs, disk=disk, disks=disks)
         if cpu is not None:
             SERIES.append((now, cpu, used, ct["n"] if ct else 0, max((t["c"] for t in temps), default=0),
                            sum(i["down"] for i in ifs), sum(i["up"] for i in ifs)))

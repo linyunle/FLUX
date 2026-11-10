@@ -1489,6 +1489,21 @@ def test_v05511_geo_auto_and_first_last():
     assert "first" in cols and "last" in cols, cols
 
 
+def test_v05514_hdd_temps():
+    import tempfile
+    from app import sysinfo
+    d = tempfile.mkdtemp(); old = sysinfo.SYSFS
+    try:
+        for n, nm, v in (("hwmon0", "acpitz", "27800"), ("hwmon1", "nvme", "38850")):
+            os.makedirs(d + "/class/hwmon/" + n)
+            open(d + "/class/hwmon/" + n + "/name", "w").write(nm + "\n"); open(d + "/class/hwmon/" + n + "/temp1_input", "w").write(v + "\n")
+        sysinfo.SYSFS = d
+        h = sysinfo._hdd_temps()
+        assert len(h) == 1 and h[0]["c"] == 38.9 and h[0]["name"].startswith("nvme"), h
+    finally:
+        sysinfo.SYSFS = old
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
